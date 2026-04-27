@@ -385,7 +385,8 @@
     }
 
     @media (max-width: 768px) {
-      html, body { overflow: auto; height: auto; }
+      html { height: 100%; overflow-y: scroll; -webkit-overflow-scrolling: touch; }
+      body { min-height: 100%; overflow-y: visible; }
       .split { display: block; height: auto; }
       .half-top, .half-btm { height: auto; min-height: 50vh; overflow: visible; }
     }

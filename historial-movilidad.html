@@ -332,7 +332,8 @@
     }
 
     @media (max-width: 768px) {
-      html, body { overflow: auto; height: auto; }
+      html { height: 100%; overflow-y: scroll; -webkit-overflow-scrolling: touch; }
+      body { min-height: 100%; overflow-y: visible; }
       .page { height: auto; min-height: 100vh; }
       .topbar { padding: 10px 12px; }
       .bus-table { font-size: 13px; }

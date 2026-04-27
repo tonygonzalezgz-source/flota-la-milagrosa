@@ -553,7 +553,8 @@
     .half-btm::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
 
     @media (max-width: 768px) {
-      html, body { overflow: auto; height: auto; }
+      html { height: 100%; overflow-y: scroll; -webkit-overflow-scrolling: touch; }
+      body { min-height: 100%; overflow-y: visible; }
       .split-wrap { display: block; height: auto; }
       .half-top, .half-btm { height: auto; min-height: 50vh; overflow: visible; }
     }
