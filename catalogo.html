@@ -1,0 +1,1417 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>La Milagrosa — Catálogo</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg:       #f4f4f6;
+      --white:    #ffffff;
+      --border:   #e5e5eb;
+      --border2:  #d0d0d8;
+      --txt:      #111;
+      --txt2:     #555;
+      --txt3:     #888;
+      --primary:  #6366f1;
+      --primary2: rgba(99,102,241,.12);
+      --red:      #ef4444;
+      --red2:     rgba(239,68,68,.1);
+      --green:    #22c55e;
+      --green2:   rgba(34,197,94,.1);
+      --yellow:   #f59e0b;
+      --yellow2:  rgba(245,158,11,.1);
+      --radius:   12px;
+      --radius-s: 8px;
+      --shadow:   0 1px 4px rgba(0,0,0,.07);
+      --shadow-m: 0 4px 20px rgba(0,0,0,.12);
+    }
+
+    html, body {
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--txt);
+    }
+
+    /* ── PAGE LAYOUT ── */
+    .page {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── PAGE HEADER ── */
+    .page-header {
+      background: var(--white);
+      border-bottom: 1px solid var(--border);
+      padding: 20px 28px 0;
+    }
+
+    .page-header-top {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .page-title { font-size: 22px; font-weight: 700; letter-spacing: -.5px; }
+    .page-sub   { font-size: 13px; color: var(--txt3); margin-top: 2px; }
+
+    /* ── TABS ── */
+    .tabs {
+      display: flex;
+      gap: 0;
+    }
+
+    .tab {
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      padding: 10px 18px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--txt3);
+      cursor: pointer;
+      transition: all .15s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+
+    .tab:hover { color: var(--txt); }
+
+    .tab.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+      font-weight: 600;
+    }
+
+    /* ── PANEL ── */
+    .panel {
+      flex: 1;
+      padding: 24px 28px;
+    }
+
+    .panel.hidden { display: none; }
+
+    /* ── SECTION HEADER ── */
+    .sec-header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .sec-title { font-size: 16px; font-weight: 700; }
+    .sec-sub   { font-size: 12px; color: var(--txt3); margin-top: 2px; }
+
+    /* ── BUTTONS ── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border-radius: var(--radius-s);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      transition: all .15s;
+    }
+
+    .btn-primary {
+      background: var(--txt);
+      color: #fff;
+    }
+    .btn-primary:hover { background: #333; }
+
+    .btn-outline {
+      background: var(--white);
+      color: var(--txt);
+      border: 1px solid var(--border2);
+    }
+    .btn-outline:hover { background: var(--bg); }
+
+    .btn-danger {
+      background: var(--red2);
+      color: var(--red);
+    }
+    .btn-danger:hover { background: rgba(239,68,68,.18); }
+
+    .btn-sm {
+      padding: 5px 10px;
+      font-size: 12px;
+      border-radius: 6px;
+    }
+
+    .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+    /* ── TABLE ── */
+    .table-wrap {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    thead th {
+      background: #f9f9fb;
+      border-bottom: 1px solid var(--border);
+      padding: 10px 16px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      color: var(--txt3);
+    }
+
+    tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background .1s;
+    }
+
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: #fafafa; }
+
+    tbody td {
+      padding: 12px 16px;
+      font-size: 13px;
+      color: var(--txt);
+    }
+
+    .td-actions {
+      display: flex;
+      gap: 6px;
+      justify-content: flex-end;
+    }
+
+    .icon-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--txt3);
+      padding: 4px 6px;
+      border-radius: 6px;
+      transition: all .13s;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .icon-btn:hover { background: var(--bg); color: var(--txt); }
+    .icon-btn.del:hover { background: var(--red2); color: var(--red); }
+
+    /* ── BADGES ── */
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .badge-a        { background: #e0e7ff; color: #4338ca; }
+    .badge-b        { background: #fce7f3; color: #be185d; }
+    .badge-activo   { background: var(--green2); color: #15803d; }
+    .badge-inactivo { background: #f3f4f6; color: #6b7280; }
+    .badge-alerta   { background: var(--red2); color: var(--red); }
+    .badge-revision { background: var(--yellow2); color: #b45309; }
+
+    .color-dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+
+    /* ── EMPTY STATE ── */
+    .empty-state {
+      text-align: center;
+      padding: 48px 16px;
+      color: var(--txt3);
+    }
+
+    .empty-state svg { margin-bottom: 12px; opacity: .4; }
+    .empty-state p   { font-size: 13px; }
+
+    /* ── PLACAS GRID ── */
+    .placas-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 12px;
+    }
+
+    .placa-card {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      box-shadow: var(--shadow);
+    }
+
+    .placa-card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    .placa-bus-num {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -1px;
+      color: var(--txt);
+    }
+
+    .placa-modelo { font-size: 11px; color: var(--txt3); margin-bottom: 10px; }
+
+    .placa-input-row {
+      display: flex;
+      gap: 6px;
+    }
+
+    .placa-input {
+      flex: 1;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-size: 13px;
+      font-family: 'Courier New', monospace;
+      font-weight: 600;
+      text-transform: uppercase;
+      color: var(--txt);
+      background: var(--bg);
+      transition: border-color .15s;
+    }
+
+    .placa-input:focus { outline: none; border-color: var(--primary); background: var(--white); }
+
+    /* ── COLOR PICKER ── */
+    .color-picker-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .color-opt {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      cursor: pointer;
+      border: 2.5px solid transparent;
+      transition: transform .12s, border-color .12s;
+      flex-shrink: 0;
+    }
+
+    .color-opt:hover { transform: scale(1.15); }
+    .color-opt.selected { border-color: var(--txt); transform: scale(1.15); }
+
+    /* ── TARIFAS ── */
+    .tarifa-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 16px;
+    }
+
+    .tarifa-card {
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .tarifa-tipo  { font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--txt3); font-weight: 600; }
+    .tarifa-label { font-size: 15px; font-weight: 700; }
+    .tarifa-valor { font-size: 28px; font-weight: 800; letter-spacing: -1px; color: var(--primary); }
+    .tarifa-valor span { font-size: 14px; font-weight: 500; color: var(--txt3); }
+
+    /* ── MODAL ── */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      animation: fadeIn .18s ease;
+    }
+
+    .modal-overlay.hidden { display: none; }
+
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    .modal {
+      background: var(--white);
+      border-radius: 16px;
+      width: 100%;
+      max-width: 480px;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: var(--shadow-m);
+      animation: slideUp .2s cubic-bezier(.22,1,.36,1);
+    }
+
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(20px) scale(.97); }
+      to   { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 24px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .modal-header h3 { font-size: 16px; font-weight: 700; }
+
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 22px;
+      color: var(--txt3);
+      cursor: pointer;
+      line-height: 1;
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background .13s;
+    }
+
+    .modal-close:hover { background: var(--bg); color: var(--txt); }
+
+    .modal-body {
+      padding: 20px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .field.full { grid-column: 1 / -1; }
+
+    label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--txt2);
+    }
+
+    input[type="text"],
+    input[type="number"],
+    input[type="email"],
+    input[type="tel"],
+    select,
+    textarea {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-s);
+      padding: 8px 12px;
+      font-size: 13px;
+      font-family: inherit;
+      color: var(--txt);
+      background: var(--white);
+      transition: border-color .15s, box-shadow .15s;
+      width: 100%;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--primary2);
+    }
+
+    textarea { resize: vertical; min-height: 70px; }
+
+    input[type="color"] {
+      width: 44px;
+      height: 36px;
+      padding: 2px 4px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-s);
+      cursor: pointer;
+    }
+
+    .color-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .modal-footer {
+      padding: 14px 24px 20px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      border-top: 1px solid var(--border);
+    }
+
+    /* ── TOAST ── */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #111;
+      color: #fff;
+      padding: 10px 20px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 500;
+      z-index: 2000;
+      box-shadow: 0 4px 20px rgba(0,0,0,.3);
+      animation: toastIn .25s ease;
+      white-space: nowrap;
+    }
+
+    .toast.hidden { display: none; }
+    .toast.error  { background: var(--red); }
+    .toast.warn   { background: var(--yellow); color: #111; }
+
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+      to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+    }
+
+    /* ── LOADING ── */
+    .loading-row td {
+      text-align: center;
+      padding: 32px;
+      color: var(--txt3);
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="page">
+
+  <!-- PAGE HEADER -->
+  <div class="page-header">
+    <div class="page-header-top">
+      <div>
+        <div class="page-title">Catálogo</div>
+        <div class="page-sub">Administra buses, propietarios, tarifas y rutas de la flota</div>
+      </div>
+    </div>
+
+    <!-- TABS -->
+    <div class="tabs">
+      <button class="tab active" onclick="showTab('buses')">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="2"/><path d="M16 8h4l3 5v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+        Buses
+      </button>
+      <button class="tab" onclick="showTab('propietarios')">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+        Propietarios
+      </button>
+      <button class="tab" onclick="showTab('tarifas')">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        Tarifas
+      </button>
+      <button class="tab" onclick="showTab('rutas')">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+        Rutas
+      </button>
+      <button class="tab" onclick="showTab('placas')">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="10" rx="2"/><path d="M7 12h.01M12 12h.01M17 12h.01"/></svg>
+        Placas
+      </button>
+      <button class="tab" onclick="showTab('usuarios')">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Acceso Propietarios
+      </button>
+    </div>
+  </div>
+
+  <!-- ── TAB: BUSES ── -->
+  <div id="panel-buses" class="panel">
+    <div class="sec-header">
+      <div>
+        <div class="sec-title">Buses</div>
+        <div class="sec-sub">Crea, edita o elimina los buses de la flota</div>
+      </div>
+      <button class="btn btn-primary" onclick="openModal('bus')">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Nuevo Bus
+      </button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Placa</th>
+            <th>Modelo</th>
+            <th>Grupo</th>
+            <th>Estado</th>
+            <th>Km</th>
+            <th>Propietario</th>
+            <th style="text-align:right">Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-buses">
+          <tr class="loading-row"><td colspan="8">Cargando…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── TAB: PROPIETARIOS ── -->
+  <div id="panel-propietarios" class="panel hidden">
+    <div class="sec-header">
+      <div>
+        <div class="sec-title">Propietarios</div>
+        <div class="sec-sub">Gestiona los dueños de los buses</div>
+      </div>
+      <button class="btn btn-primary" onclick="openModal('propietario')">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Nuevo Propietario
+      </button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Nombre</th>
+            <th>Cédula</th>
+            <th>Teléfono</th>
+            <th>Email</th>
+            <th>Buses</th>
+            <th style="text-align:right">Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-propietarios">
+          <tr class="loading-row"><td colspan="6">Cargando…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── TAB: TARIFAS ── -->
+  <div id="panel-tarifas" class="panel hidden">
+    <div class="sec-header">
+      <div>
+        <div class="sec-title">Tarifas de Pasajeros</div>
+        <div class="sec-sub">Modifica los valores de las tarifas vigentes</div>
+      </div>
+    </div>
+    <div class="tarifa-cards" id="tarifa-cards">
+      <p style="color:var(--txt3);font-size:13px;">Cargando…</p>
+    </div>
+  </div>
+
+  <!-- ── TAB: RUTAS ── -->
+  <div id="panel-rutas" class="panel hidden">
+    <div class="sec-header">
+      <div>
+        <div class="sec-title">Rutas</div>
+        <div class="sec-sub">Agrega o modifica las rutas de la flota</div>
+      </div>
+      <button class="btn btn-primary" onclick="openModal('ruta')">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Nueva Ruta
+      </button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Nombre</th>
+            <th>Descripción</th>
+            <th>Grupo</th>
+            <th>Color</th>
+            <th>Estado</th>
+            <th style="text-align:right">Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-rutas">
+          <tr class="loading-row"><td colspan="6">Cargando…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── TAB: USUARIOS PROPIETARIO ── -->
+  <div id="panel-usuarios" class="panel hidden">
+    <div class="sec-header">
+      <div>
+        <div class="sec-title">Acceso Propietarios</div>
+        <div class="sec-sub">Crea cuentas de acceso y asigna buses específicos a cada propietario</div>
+      </div>
+      <button class="btn btn-primary" onclick="openModal('usuario')">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Nueva Cuenta
+      </button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Usuario</th>
+            <th>Nombre</th>
+            <th>Rol</th>
+            <th>Buses Asignados</th>
+            <th>Estado</th>
+            <th style="text-align:right">Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-usuarios">
+          <tr class="loading-row"><td colspan="6">Cargando…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── TAB: PLACAS ── -->
+  <div id="panel-placas" class="panel hidden">
+    <div class="sec-header">
+      <div>
+        <div class="sec-title">Placas de Vehículos</div>
+        <div class="sec-sub">Modifica o asigna placas rápidamente</div>
+      </div>
+    </div>
+    <div class="placas-grid" id="placas-grid">
+      <p style="color:var(--txt3);font-size:13px;">Cargando…</p>
+    </div>
+  </div>
+
+</div><!-- /page -->
+
+<!-- ── MODAL ── -->
+<div id="modal-overlay" class="modal-overlay hidden" onclick="handleOverlayClick(event)">
+  <div class="modal" id="modal-box">
+    <div class="modal-header">
+      <h3 id="modal-title">—</h3>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" id="btn-save" onclick="saveModal()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── TOAST ── -->
+<div class="toast hidden" id="toast"></div>
+
+<script>
+  const API = (window.location.port === '3030') ? 'http://localhost:8001' : window.location.origin;
+
+  let buses = [], propietarios = [], tarifas = [], rutas = [], usuarios = [];
+  let modalType = null, modalId = null;
+  let currentTab = 'buses';
+  let busAssignUserId = null;
+
+  /* ─── INIT ─── */
+  document.addEventListener('DOMContentLoaded', loadAll);
+
+  async function loadAll() {
+    try {
+      const [b, p, t, r, u] = await Promise.all([
+        apiFetch('/api/buses'),
+        apiFetch('/api/propietarios'),
+        apiFetch('/api/tarifas'),
+        apiFetch('/api/rutas/all'),
+        apiFetch('/api/admin/usuarios'),
+      ]);
+      buses        = b;
+      propietarios = p;
+      tarifas      = t;
+      rutas        = r;
+      usuarios     = u;
+      renderAll();
+    } catch (e) {
+      showToast('Error al conectar con el servidor', 'error');
+    }
+  }
+
+  async function apiFetch(path, opts = {}) {
+    const res = await fetch(API + path, opts);
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Error del servidor');
+    return json;
+  }
+
+  /* ─── TABS ─── */
+  function showTab(tab) {
+    currentTab = tab;
+    document.querySelectorAll('.tab').forEach((el, i) => {
+      const ids = ['buses', 'propietarios', 'tarifas', 'rutas', 'placas', 'usuarios'];
+      el.classList.toggle('active', ids[i] === tab);
+    });
+    document.querySelectorAll('.panel').forEach(el => el.classList.add('hidden'));
+    document.getElementById('panel-' + tab).classList.remove('hidden');
+  }
+
+  /* ─── RENDER ALL ─── */
+  function renderAll() {
+    renderBuses();
+    renderPropietarios();
+    renderTarifas();
+    renderRutas();
+    renderPlacas();
+    renderUsuarios();
+  }
+
+  /* ─── RENDER: USUARIOS PROPIETARIO ─── */
+  function renderUsuarios() {
+    const tbody = document.getElementById('tbody-usuarios');
+    if (!tbody) return;
+    const lista = usuarios.filter(u => u.rol === 'Propietario');
+    if (!lista.length) {
+      tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><p>No hay cuentas de propietario registradas</p></div></td></tr>`;
+      return;
+    }
+    tbody.innerHTML = lista.map(u => `<tr>
+      <td>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="width:32px;height:32px;border-radius:50%;background:${u.color};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0">${u.iniciales}</div>
+          <div>
+            <div style="font-weight:600;font-size:13px">${u.username}</div>
+          </div>
+        </div>
+      </td>
+      <td>${u.nombre}</td>
+      <td><span class="badge" style="background:#e0e7ff;color:#4338ca">${u.rol}</span></td>
+      <td>
+        <span class="badge badge-a">${u.buses_count} bus${u.buses_count !== 1 ? 'es' : ''}</span>
+        <button class="btn btn-outline btn-sm" onclick="openBusAssign(${u.id},'${u.nombre.replace(/'/g,"\\'")}')">
+          <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          Asignar
+        </button>
+      </td>
+      <td><span class="badge badge-${u.activo ? 'activo' : 'inactivo'}">${u.activo ? 'Activo' : 'Inactivo'}</span></td>
+      <td><div class="td-actions">
+        <button class="icon-btn" onclick="openModal('usuario', ${u.id})" title="Editar">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </button>
+        <button class="icon-btn del" onclick="deleteItem('usuario', ${u.id})" title="Desactivar">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+        </button>
+      </div></td>
+    </tr>`).join('');
+  }
+
+  /* ─── RENDER: BUSES ─── */
+  function renderBuses() {
+    const tbody = document.getElementById('tbody-buses');
+    if (!buses.length) {
+      tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><p>No hay buses registrados</p></div></td></tr>`;
+      return;
+    }
+    tbody.innerHTML = buses.map(b => {
+      const prop = propietarios.find(p => p.id === b.propietario_id);
+      const estadoClass = { activo: 'activo', inactivo: 'inactivo', alerta: 'alerta', revision: 'revision' }[b.estado] || 'inactivo';
+      return `<tr>
+        <td><strong>${b.numero}</strong></td>
+        <td>${b.placa || '<span style="color:var(--txt3)">—</span>'}</td>
+        <td>${b.modelo || '<span style="color:var(--txt3)">—</span>'}</td>
+        <td><span class="badge badge-${(b.grupo||'A').toLowerCase()}">${b.grupo}</span></td>
+        <td><span class="badge badge-${estadoClass}">${capitalizar(b.estado)}</span></td>
+        <td>${(b.km_actuales||0).toLocaleString()} km</td>
+        <td>${prop ? prop.nombre : '<span style="color:var(--txt3)">—</span>'}</td>
+        <td><div class="td-actions">
+          <button class="icon-btn" onclick="openModal('bus', ${b.id})" title="Editar">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button class="icon-btn del" onclick="deleteItem('bus', ${b.id})" title="Eliminar">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+          </button>
+        </div></td>
+      </tr>`;
+    }).join('');
+  }
+
+  /* ─── RENDER: PROPIETARIOS ─── */
+  function renderPropietarios() {
+    const tbody = document.getElementById('tbody-propietarios');
+    if (!propietarios.length) {
+      tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><p>No hay propietarios registrados</p></div></td></tr>`;
+      return;
+    }
+    tbody.innerHTML = propietarios.map(p => `<tr>
+      <td><strong>${p.nombre}</strong></td>
+      <td>${p.cedula || '<span style="color:var(--txt3)">—</span>'}</td>
+      <td>${p.telefono || '<span style="color:var(--txt3)">—</span>'}</td>
+      <td>${p.email || '<span style="color:var(--txt3)">—</span>'}</td>
+      <td><span class="badge badge-a">${p.buses_count} bus${p.buses_count !== 1 ? 'es' : ''}</span></td>
+      <td><div class="td-actions">
+        <button class="icon-btn" onclick="openModal('propietario', ${p.id})" title="Editar">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </button>
+        <button class="icon-btn del" onclick="deleteItem('propietario', ${p.id})" title="Eliminar">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+        </button>
+      </div></td>
+    </tr>`).join('');
+  }
+
+  /* ─── RENDER: TARIFAS ─── */
+  function renderTarifas() {
+    const container = document.getElementById('tarifa-cards');
+    if (!tarifas.length) {
+      container.innerHTML = `<p style="color:var(--txt3);font-size:13px;">No hay tarifas registradas</p>`;
+      return;
+    }
+    container.innerHTML = tarifas.map(t => `
+      <div class="tarifa-card">
+        <div class="tarifa-tipo">${t.tipo}</div>
+        <div class="tarifa-label">${t.label}</div>
+        <div class="tarifa-valor">$${Math.round(t.valor).toLocaleString('es-CO')} <span>COP</span></div>
+        <button class="btn btn-outline btn-sm" onclick="openModal('tarifa', ${t.id})" style="margin-top:4px;">
+          <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          Editar tarifa
+        </button>
+      </div>
+    `).join('');
+  }
+
+  /* ─── RENDER: RUTAS ─── */
+  function renderRutas() {
+    const tbody = document.getElementById('tbody-rutas');
+    if (!rutas.length) {
+      tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><p>No hay rutas registradas</p></div></td></tr>`;
+      return;
+    }
+    tbody.innerHTML = rutas.map(r => `<tr>
+      <td><strong>${r.nombre}</strong></td>
+      <td style="color:var(--txt2)">${r.descripcion || '<span style="color:var(--txt3)">—</span>'}</td>
+      <td><span class="badge badge-${(r.grupo||'A').toLowerCase()}">${r.grupo}</span></td>
+      <td><span class="color-dot" style="background:${r.color||'#6366f1'}"></span>${r.color||'—'}</td>
+      <td><span class="badge badge-${r.activa ? 'activo' : 'inactivo'}">${r.activa ? 'Activa' : 'Inactiva'}</span></td>
+      <td><div class="td-actions">
+        <button class="icon-btn" onclick="openModal('ruta', ${r.id})" title="Editar">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </button>
+        <button class="icon-btn del" onclick="deleteItem('ruta', ${r.id})" title="Eliminar">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+        </button>
+      </div></td>
+    </tr>`).join('');
+  }
+
+  /* ─── RENDER: PLACAS ─── */
+  function renderPlacas() {
+    const grid = document.getElementById('placas-grid');
+    if (!buses.length) {
+      grid.innerHTML = `<p style="color:var(--txt3);font-size:13px;">No hay buses registrados</p>`;
+      return;
+    }
+    grid.innerHTML = buses.map(b => `
+      <div class="placa-card">
+        <div class="placa-card-top">
+          <div class="placa-bus-num">Bus ${b.numero}</div>
+          <span class="badge badge-${(b.grupo||'A').toLowerCase()}">${b.grupo}</span>
+        </div>
+        <div class="placa-modelo">${b.modelo || 'Modelo no especificado'}</div>
+        <div class="placa-input-row">
+          <input class="placa-input" id="placa-${b.id}" type="text"
+                 value="${b.placa || ''}" placeholder="ABC-1234"
+                 maxlength="10" />
+          <button class="btn btn-primary btn-sm" onclick="savePlaca(${b.id})">Guardar</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  /* ─── MODAL: ABRIR ─── */
+  function openModal(type, id = null) {
+    modalType = type;
+    modalId   = id;
+
+    const overlay = document.getElementById('modal-overlay');
+    const title   = document.getElementById('modal-title');
+    const body    = document.getElementById('modal-body');
+
+    const data = id ? getData(type, id) : null;
+
+    title.textContent = modalTitles(type, id);
+    body.innerHTML    = modalForm(type, data);
+    overlay.classList.remove('hidden');
+  }
+
+  function modalTitles(type, id) {
+    const map = {
+      bus:         id ? 'Editar Bus'               : 'Nuevo Bus',
+      propietario: id ? 'Editar Propietario'        : 'Nuevo Propietario',
+      tarifa:      'Editar Tarifa',
+      ruta:        id ? 'Editar Ruta'              : 'Nueva Ruta',
+      usuario:     id ? 'Editar Cuenta Propietario' : 'Nueva Cuenta Propietario',
+    };
+    return map[type] || 'Formulario';
+  }
+
+  function getData(type, id) {
+    if (type === 'bus')         return buses.find(x => x.id === id);
+    if (type === 'propietario') return propietarios.find(x => x.id === id);
+    if (type === 'tarifa')      return tarifas.find(x => x.id === id);
+    if (type === 'ruta')        return rutas.find(x => x.id === id);
+    if (type === 'usuario')     return usuarios.find(x => x.id === id);
+    return null;
+  }
+
+  function modalForm(type, d) {
+    if (type === 'bus') {
+      const propOpts = propietarios.map(p =>
+        `<option value="${p.id}" ${d && d.propietario_id === p.id ? 'selected' : ''}>${p.nombre}</option>`
+      ).join('');
+      return `
+        <div class="form-row">
+          <div class="field">
+            <label>Número de Bus *</label>
+            <input type="number" id="f-numero" value="${d ? d.numero : ''}" placeholder="1" min="1" required />
+          </div>
+          <div class="field">
+            <label>Placa</label>
+            <input type="text" id="f-placa" value="${d ? (d.placa||'') : ''}" placeholder="ABC-1234" maxlength="10" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label>Modelo</label>
+            <input type="text" id="f-modelo" value="${d ? (d.modelo||'') : ''}" placeholder="Ej: Mercedes Benz O500" />
+          </div>
+          <div class="field">
+            <label>Grupo</label>
+            <select id="f-grupo">
+              <option value="A" ${d && d.grupo === 'A' ? 'selected' : ''}>Grupo A</option>
+              <option value="B" ${d && d.grupo === 'B' ? 'selected' : ''}>Grupo B</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label>Estado</label>
+            <select id="f-estado">
+              <option value="activo"   ${d && d.estado === 'activo'   ? 'selected' : ''}>Activo</option>
+              <option value="alerta"   ${d && d.estado === 'alerta'   ? 'selected' : ''}>Alerta</option>
+              <option value="revision" ${d && d.estado === 'revision' ? 'selected' : ''}>En Revisión</option>
+              <option value="inactivo" ${d && d.estado === 'inactivo' ? 'selected' : ''}>Inactivo</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Km Actuales</label>
+            <input type="number" id="f-km" value="${d ? (d.km_actuales||0) : 0}" min="0" />
+          </div>
+        </div>
+        <div class="field full">
+          <label>Propietario</label>
+          <select id="f-propietario">
+            <option value="">— Sin asignar —</option>
+            ${propOpts}
+          </select>
+        </div>
+      `;
+    }
+
+    if (type === 'propietario') {
+      return `
+        <div class="field full">
+          <label>Nombre completo *</label>
+          <input type="text" id="f-nombre" value="${d ? d.nombre : ''}" placeholder="Ej: Juan Pérez" required />
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label>Cédula</label>
+            <input type="text" id="f-cedula" value="${d ? (d.cedula||'') : ''}" placeholder="0000000000" />
+          </div>
+          <div class="field">
+            <label>Teléfono</label>
+            <input type="tel" id="f-telefono" value="${d ? (d.telefono||'') : ''}" placeholder="+593 999 999 999" />
+          </div>
+        </div>
+        <div class="field full">
+          <label>Correo electrónico</label>
+          <input type="email" id="f-email" value="${d ? (d.email||'') : ''}" placeholder="correo@ejemplo.com" />
+        </div>
+      `;
+    }
+
+    if (type === 'tarifa') {
+      return `
+        <div class="field full">
+          <label>Tipo</label>
+          <input type="text" value="${d ? d.tipo : ''}" disabled style="opacity:.5;cursor:not-allowed;" />
+        </div>
+        <div class="field full">
+          <label>Descripción</label>
+          <input type="text" id="f-label" value="${d ? d.label : ''}" placeholder="Ej: Pasajero Normal" required />
+        </div>
+        <div class="field full">
+          <label>Valor (COP)</label>
+          <input type="number" id="f-valor" value="${d ? d.valor : 0}" step="1" min="0" placeholder="3200" required />
+        </div>
+      `;
+    }
+
+    if (type === 'ruta') {
+      return `
+        <div class="field full">
+          <label>Nombre de la ruta *</label>
+          <input type="text" id="f-nombre" value="${d ? d.nombre : ''}" placeholder="Ej: Centro - Terminal" required />
+        </div>
+        <div class="field full">
+          <label>Descripción</label>
+          <textarea id="f-descripcion" placeholder="Descripción opcional de la ruta">${d ? (d.descripcion||'') : ''}</textarea>
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label>Grupo</label>
+            <select id="f-grupo">
+              <option value="A" ${d && d.grupo === 'A' ? 'selected' : ''}>Grupo A</option>
+              <option value="B" ${d && d.grupo === 'B' ? 'selected' : ''}>Grupo B</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Color</label>
+            <div class="color-row">
+              <input type="color" id="f-color" value="${d ? (d.color||'#6366f1') : '#6366f1'}" />
+              <span style="font-size:12px;color:var(--txt3)">Color de la ruta</span>
+            </div>
+          </div>
+        </div>
+        <div class="field full">
+          <label>Estado</label>
+          <select id="f-activa">
+            <option value="1" ${!d || d.activa ? 'selected' : ''}>Activa</option>
+            <option value="0" ${d && !d.activa ? 'selected' : ''}>Inactiva</option>
+          </select>
+        </div>
+      `;
+    }
+
+    if (type === 'usuario') {
+      const colores = ['#f59e0b','#6366f1','#22c55e','#ef4444','#3b82f6','#ec4899','#14b8a6','#8b5cf6'];
+      const colorOpts = colores.map(c =>
+        `<div class="color-opt ${d && d.color === c ? 'selected' : ''}" style="background:${c}" data-color="${c}" onclick="selectColor(this)"></div>`
+      ).join('');
+      return `
+        <div class="form-row">
+          <div class="field">
+            <label>Nombre completo *</label>
+            <input type="text" id="f-nombre" value="${d ? d.nombre : ''}" placeholder="Ej: Carlos Noriega" oninput="autoIniciales()" required />
+          </div>
+          <div class="field">
+            <label>Usuario (login) *</label>
+            <input type="text" id="f-username" value="${d ? d.username : ''}" placeholder="Ej: carlos.n" autocomplete="off" required />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label>${d ? 'Nueva contraseña (dejar vacío = sin cambio)' : 'Contraseña *'}</label>
+            <input type="password" id="f-password" placeholder="${d ? '••••••••' : 'Mínimo 6 caracteres'}" autocomplete="new-password" />
+          </div>
+          <div class="field">
+            <label>Iniciales (avatar)</label>
+            <input type="text" id="f-iniciales" value="${d ? d.iniciales : ''}" placeholder="CN" maxlength="3" style="text-transform:uppercase" />
+          </div>
+        </div>
+        <div class="field full">
+          <label>Color del avatar</label>
+          <div class="color-picker-row">${colorOpts}<input type="hidden" id="f-color" value="${d ? (d.color || '#f59e0b') : '#f59e0b'}" /></div>
+        </div>
+      `;
+    }
+
+    return '<p>Tipo desconocido</p>';
+  }
+
+  /* ─── MODAL: CERRAR ─── */
+  function closeModal() {
+    document.getElementById('modal-overlay').classList.add('hidden');
+    document.getElementById('btn-save').textContent = 'Guardar';
+    document.getElementById('btn-save').onclick = saveModal;
+    modalType = null;
+    modalId   = null;
+    busAssignUserId = null;
+  }
+
+  function handleOverlayClick(e) {
+    if (e.target === document.getElementById('modal-overlay')) closeModal();
+  }
+
+  /* ─── MODAL: GUARDAR ─── */
+  async function saveModal() {
+    const btn = document.getElementById('btn-save');
+    btn.disabled    = true;
+    btn.textContent = 'Guardando…';
+
+    try {
+      let body, url, method;
+
+      if (modalType === 'bus') {
+        const propVal = document.getElementById('f-propietario').value;
+        body   = {
+          numero:        parseInt(document.getElementById('f-numero').value),
+          placa:         document.getElementById('f-placa').value.trim().toUpperCase(),
+          modelo:        document.getElementById('f-modelo').value.trim(),
+          grupo:         document.getElementById('f-grupo').value,
+          estado:        document.getElementById('f-estado').value,
+          km_actuales:   parseInt(document.getElementById('f-km').value) || 0,
+          propietario_id: propVal ? parseInt(propVal) : null,
+        };
+        if (!body.numero) { showToast('El número de bus es requerido', 'error'); return; }
+        url    = modalId ? `/api/buses/${modalId}` : '/api/buses';
+        method = modalId ? 'PUT' : 'POST';
+      }
+
+      else if (modalType === 'propietario') {
+        const nombre = document.getElementById('f-nombre').value.trim();
+        if (!nombre) { showToast('El nombre es requerido', 'error'); return; }
+        body   = {
+          nombre,
+          cedula:   document.getElementById('f-cedula').value.trim(),
+          telefono: document.getElementById('f-telefono').value.trim(),
+          email:    document.getElementById('f-email').value.trim(),
+        };
+        url    = modalId ? `/api/propietarios/${modalId}` : '/api/propietarios';
+        method = modalId ? 'PUT' : 'POST';
+      }
+
+      else if (modalType === 'tarifa') {
+        const label = document.getElementById('f-label').value.trim();
+        const valor = parseFloat(document.getElementById('f-valor').value);
+        if (!label || isNaN(valor)) { showToast('Completa todos los campos', 'error'); return; }
+        body   = { label, valor };
+        url    = `/api/tarifas/${modalId}`;
+        method = 'PUT';
+      }
+
+      else if (modalType === 'ruta') {
+        const nombre = document.getElementById('f-nombre').value.trim();
+        if (!nombre) { showToast('El nombre de la ruta es requerido', 'error'); return; }
+        body   = {
+          nombre,
+          descripcion: document.getElementById('f-descripcion').value.trim(),
+          grupo:       document.getElementById('f-grupo').value,
+          color:       document.getElementById('f-color').value,
+          activa:      parseInt(document.getElementById('f-activa').value),
+        };
+        url    = modalId ? `/api/rutas/${modalId}` : '/api/rutas';
+        method = modalId ? 'PUT' : 'POST';
+      }
+
+      else if (modalType === 'usuario') {
+        const nombre   = document.getElementById('f-nombre').value.trim();
+        const username = document.getElementById('f-username').value.trim();
+        const password = document.getElementById('f-password').value;
+        const iniciales = document.getElementById('f-iniciales').value.trim().toUpperCase() || nombre.slice(0,2).toUpperCase();
+        const color    = document.getElementById('f-color').value;
+        if (!nombre || !username) { showToast('Nombre y usuario son requeridos', 'error'); return; }
+        if (!modalId && !password) { showToast('La contraseña es requerida', 'error'); return; }
+        body   = { nombre, username, iniciales, color, rol: 'Propietario' };
+        if (password) body.password = password;
+        url    = modalId ? `/api/admin/usuarios/${modalId}` : '/api/admin/usuarios';
+        method = modalId ? 'PUT' : 'POST';
+      }
+
+      await apiFetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(body),
+      });
+
+      closeModal();
+      await loadAll();
+      notifyParent(modalType);
+      showToast('Guardado correctamente');
+
+    } catch (e) {
+      showToast(e.message, 'error');
+    } finally {
+      btn.disabled    = false;
+      btn.textContent = 'Guardar';
+    }
+  }
+
+  /* ─── DELETE ─── */
+  async function deleteItem(type, id) {
+    const labels = { bus: 'bus', propietario: 'propietario', ruta: 'ruta', usuario: 'cuenta de acceso' };
+    if (!confirm(`¿Seguro que deseas eliminar este ${labels[type]}?`)) return;
+
+    try {
+      const urls = {
+        bus:         `/api/buses/${id}`,
+        propietario: `/api/propietarios/${id}`,
+        ruta:        `/api/rutas/${id}`,
+        usuario:     `/api/admin/usuarios/${id}`,
+      };
+      const result = await apiFetch(urls[type], { method: 'DELETE' });
+      await loadAll();
+      notifyParent(type);
+      showToast(result.warning || 'Eliminado correctamente', result.warning ? 'warn' : '');
+    } catch (e) {
+      showToast(e.message, 'error');
+    }
+  }
+
+  /* ─── ASIGNACIÓN DE BUSES ─── */
+  async function openBusAssign(uid, nombre) {
+    busAssignUserId = uid;
+    let assigned = [];
+    try { assigned = await apiFetch(`/api/admin/usuarios/${uid}/buses`); } catch (_) {}
+    const assignedIds = new Set(assigned.map(b => b.id));
+
+    const byGroup = { A: buses.filter(b => b.grupo === 'A'), B: buses.filter(b => b.grupo === 'B') };
+    const renderGroup = (grp, list) => `
+      <div style="margin-bottom:14px">
+        <div style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Grupo ${grp}</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px">
+          ${list.map(b => `
+            <label style="display:flex;align-items:center;gap:7px;padding:7px 10px;border:1.5px solid ${assignedIds.has(b.id) ? 'var(--primary)' : 'var(--border)'};border-radius:8px;cursor:pointer;font-size:12px;background:${assignedIds.has(b.id) ? 'var(--primary2)' : 'var(--white)'};transition:all .12s" class="bus-check-label">
+              <input type="checkbox" value="${b.id}" ${assignedIds.has(b.id) ? 'checked' : ''} onchange="toggleBusLabel(this)" style="accent-color:var(--primary);width:14px;height:14px" />
+              <span style="font-weight:600">Bus ${b.numero}</span>
+              ${b.placa ? `<span style="color:var(--txt3);font-size:10px">${b.placa}</span>` : ''}
+            </label>`).join('')}
+        </div>
+      </div>`;
+
+    document.getElementById('modal-title').textContent = `Buses de ${nombre}`;
+    document.getElementById('modal-body').innerHTML = `
+      <p style="font-size:12px;color:var(--txt3);margin-bottom:16px">Selecciona los buses que podrá visualizar esta cuenta.</p>
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <button class="btn btn-outline btn-sm" onclick="selectAllBuses(true)">Seleccionar todos</button>
+        <button class="btn btn-outline btn-sm" onclick="selectAllBuses(false)">Limpiar selección</button>
+      </div>
+      <div style="max-height:380px;overflow-y:auto;padding-right:4px">
+        ${renderGroup('A', byGroup.A)}
+        ${renderGroup('B', byGroup.B)}
+      </div>`;
+    document.getElementById('btn-save').textContent = 'Guardar Asignación';
+    document.getElementById('btn-save').onclick = saveBusAssign;
+    document.getElementById('modal-overlay').classList.remove('hidden');
+    modalType = 'bus-assign';
+  }
+
+  function toggleBusLabel(cb) {
+    const label = cb.closest('label');
+    label.style.borderColor = cb.checked ? 'var(--primary)' : 'var(--border)';
+    label.style.background  = cb.checked ? 'var(--primary2)' : 'var(--white)';
+  }
+
+  function selectAllBuses(checked) {
+    document.querySelectorAll('#modal-body input[type=checkbox]').forEach(cb => {
+      cb.checked = checked;
+      toggleBusLabel(cb);
+    });
+  }
+
+  async function saveBusAssign() {
+    const btn = document.getElementById('btn-save');
+    btn.disabled = true; btn.textContent = 'Guardando…';
+    const bus_ids = [...document.querySelectorAll('#modal-body input[type=checkbox]:checked')].map(cb => parseInt(cb.value));
+    try {
+      await apiFetch(`/api/admin/usuarios/${busAssignUserId}/buses`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bus_ids }),
+      });
+      closeModal();
+      await loadAll();
+      showToast(`${bus_ids.length} bus${bus_ids.length !== 1 ? 'es' : ''} asignado${bus_ids.length !== 1 ? 's' : ''} correctamente`);
+    } catch (e) {
+      showToast(e.message, 'error');
+    } finally {
+      btn.disabled = false; btn.textContent = 'Guardar';
+      document.getElementById('btn-save').onclick = saveModal;
+    }
+  }
+
+  /* ─── HELPERS FORM USUARIO ─── */
+  function autoIniciales() {
+    const nombre = document.getElementById('f-nombre')?.value || '';
+    const partes = nombre.trim().split(/\s+/);
+    const ini = partes.length >= 2
+      ? (partes[0][0] + partes[1][0]).toUpperCase()
+      : nombre.slice(0, 2).toUpperCase();
+    const campo = document.getElementById('f-iniciales');
+    if (campo && !campo._manual) campo.value = ini;
+  }
+
+  function selectColor(el) {
+    document.querySelectorAll('.color-opt').forEach(o => o.classList.remove('selected'));
+    el.classList.add('selected');
+    document.getElementById('f-color').value = el.dataset.color;
+  }
+
+  /* ─── GUARDAR PLACA RÁPIDO ─── */
+  async function savePlaca(busId) {
+    const input = document.getElementById(`placa-${busId}`);
+    const placa = input.value.trim().toUpperCase();
+
+    try {
+      await apiFetch(`/api/buses/${busId}`, {
+        method:  'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ placa }),
+      });
+      const bus = buses.find(b => b.id === busId);
+      if (bus) bus.placa = placa;
+      input.value = placa;
+      notifyParent('bus');
+      showToast('Placa actualizada');
+    } catch (e) {
+      showToast(e.message, 'error');
+    }
+  }
+
+  /* ─── NOTIFICAR AL PADRE (index.html) ─── */
+  function notifyParent(entity) {
+    try {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: 'CATALOG_UPDATED', entity }, '*');
+      }
+    } catch (_) {}
+  }
+
+  /* ─── TOAST ─── */
+  let toastTimer;
+  function showToast(msg, type = '') {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className   = 'toast' + (type ? ' ' + type : '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.add('hidden'), 3200);
+  }
+
+  /* ─── UTILS ─── */
+  function capitalizar(s) {
+    if (!s) return '—';
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+</script>
+</body>
+</html>

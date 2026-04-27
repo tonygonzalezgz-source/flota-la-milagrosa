@@ -1,0 +1,1729 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>La Milagrosa — Mis Buses</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f4f4f6;
+      color: #111;
+      min-height: 100vh;
+    }
+
+    /* ─── NAVBAR ─── */
+    .navbar {
+      background: #111;
+      display: flex;
+      align-items: center;
+      padding: 0 28px;
+      height: 60px;
+      gap: 0;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .navbar-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-right: 40px;
+      text-decoration: none;
+    }
+
+    .logo-icon {
+      width: 34px;
+      height: 34px;
+      background: #fff;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .logo-icon svg { width: 20px; height: 20px; }
+
+    .navbar-logo span {
+      color: #fff;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.3px;
+    }
+
+    .navbar-nav {
+      display: flex;
+      gap: 4px;
+      flex: 1;
+    }
+
+    .navbar-nav a {
+      color: #aaa;
+      text-decoration: none;
+      font-size: 14px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      transition: all 0.18s;
+    }
+
+    .navbar-nav a:hover { color: #fff; }
+    .navbar-nav a.active {
+      background: #fff;
+      color: #111;
+      font-weight: 500;
+    }
+
+    .navbar-right {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .nav-icon-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #aaa;
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s;
+      position: relative;
+    }
+
+    .nav-icon-btn:hover { background: #222; color: #fff; }
+
+    .notif-dot {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      width: 7px;
+      height: 7px;
+      background: #f87171;
+      border-radius: 50%;
+      border: 1.5px solid #111;
+    }
+
+    .user-profile {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 10px;
+      transition: background 0.15s;
+    }
+
+    .user-profile:hover { background: #222; }
+
+    .user-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .user-info { line-height: 1.2; }
+    .user-info .uname { color: #fff; font-size: 13px; font-weight: 500; }
+    .user-info .urole { color: #777; font-size: 11px; }
+
+    /* ─── MAIN LAYOUT ─── */
+    .main {
+      padding: 28px 32px;
+      max-width: 1300px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+    }
+
+    /* ─── HEADER ROW ─── */
+    .header-row {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+    }
+
+    .greeting-small { font-size: 14px; color: #888; margin-bottom: 2px; }
+    .greeting-big {
+      font-size: 30px;
+      font-weight: 700;
+      letter-spacing: -0.8px;
+      color: #111;
+    }
+
+    .owner-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: #fef3c7;
+      color: #b45309;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 20px;
+      margin-left: 12px;
+      vertical-align: middle;
+      letter-spacing: 0.3px;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .btn-outline {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border: 1.5px solid #ddd;
+      border-radius: 20px;
+      background: #fff;
+      font-size: 13px;
+      cursor: pointer;
+      color: #333;
+      font-weight: 500;
+      transition: border-color 0.15s;
+    }
+
+    .btn-outline:hover { border-color: #aaa; }
+
+    /* ─── KPI CARDS ─── */
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+    }
+
+    .kpi-card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 18px 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+
+    .kpi-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .kpi-icon.amber { background: #fef3c7; }
+    .kpi-icon.green { background: #dcfce7; }
+    .kpi-icon.red   { background: #fee2e2; }
+    .kpi-icon.blue  { background: #dbeafe; }
+
+    .kpi-body { flex: 1; }
+
+    .kpi-value {
+      font-size: 26px;
+      font-weight: 700;
+      color: #111;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      line-height: 1;
+      margin-bottom: 3px;
+    }
+
+    .kpi-badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: 6px;
+    }
+
+    .kpi-badge.up   { color: #16a34a; background: #dcfce7; }
+    .kpi-badge.down { color: #dc2626; background: #fee2e2; }
+    .kpi-badge.warn { color: #d97706; background: #fef3c7; }
+
+    .kpi-label { font-size: 12px; color: #888; }
+
+    /* ─── SECTION LABEL ─── */
+    .section-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 2px;
+    }
+
+    .section-sub {
+      font-size: 11px;
+      color: #aaa;
+    }
+
+    /* ─── BUS GRID ─── */
+    .bus-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+      gap: 16px;
+    }
+
+    .bus-card {
+      background: #fff;
+      border-radius: 18px;
+      padding: 0;
+      box-shadow: 0 1px 4px rgba(0,0,0,.07);
+      overflow: hidden;
+      transition: box-shadow 0.18s, transform 0.18s;
+      cursor: default;
+    }
+
+    .bus-card:hover {
+      box-shadow: 0 6px 20px rgba(0,0,0,.10);
+      transform: translateY(-2px);
+    }
+
+    .bus-card-header {
+      padding: 16px 18px 12px;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      border-bottom: 1px solid #f2f2f2;
+    }
+
+    .bus-icon-wrap {
+      width: 46px;
+      height: 46px;
+      border-radius: 12px;
+      background: #f8f8f8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      position: relative;
+    }
+
+    .bus-status-dot {
+      position: absolute;
+      bottom: 2px;
+      right: 2px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      border: 2px solid #fff;
+    }
+
+    .bus-status-dot.active  { background: #22c55e; }
+    .bus-status-dot.warning { background: #f59e0b; }
+    .bus-status-dot.alert   { background: #ef4444; }
+    .bus-status-dot.idle    { background: #94a3b8; }
+
+    .bus-header-info { flex: 1; }
+
+    .bus-plate {
+      font-size: 16px;
+      font-weight: 700;
+      color: #111;
+      letter-spacing: 0.5px;
+    }
+
+    .bus-model {
+      font-size: 12px;
+      color: #888;
+      margin-top: 1px;
+    }
+
+    .bus-state-chip {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 9px;
+      border-radius: 20px;
+      flex-shrink: 0;
+    }
+
+    .bus-state-chip.activo   { background: #dcfce7; color: #16a34a; }
+    .bus-state-chip.alerta   { background: #fee2e2; color: #dc2626; }
+    .bus-state-chip.revision { background: #fef3c7; color: #d97706; }
+    .bus-state-chip.inactivo { background: #f1f5f9; color: #64748b; }
+
+    /* Bus illustration strip */
+    .bus-illustration {
+      background: linear-gradient(135deg, #f8f9fa 0%, #eef0f3 100%);
+      height: 72px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .bus-illustration svg { width: 130px; opacity: 0.7; }
+
+    .bus-route-tag {
+      position: absolute;
+      bottom: 8px;
+      right: 10px;
+      font-size: 10px;
+      font-weight: 700;
+      color: #555;
+      background: rgba(255,255,255,.85);
+      padding: 2px 7px;
+      border-radius: 6px;
+      letter-spacing: 0.5px;
+    }
+
+    /* Bus card body */
+    .bus-card-body {
+      padding: 14px 18px;
+    }
+
+    /* Mantenimiento mini indicadores */
+    .mant-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+
+    .mant-chip {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 6px;
+    }
+
+    .mant-chip.ok      { background: #f0fdf4; color: #16a34a; }
+    .mant-chip.warn    { background: #fffbeb; color: #d97706; }
+    .mant-chip.alert   { background: #fef2f2; color: #dc2626; }
+
+    .mant-chip::before {
+      content: '';
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: currentColor;
+      flex-shrink: 0;
+    }
+
+    /* Stats row */
+    .bus-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .bus-stat {
+      background: #f8f8f8;
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+
+    .bus-stat-label { font-size: 10px; color: #aaa; font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 3px; }
+    .bus-stat-value { font-size: 16px; font-weight: 700; color: #111; }
+    .bus-stat-sub   { font-size: 10px; color: #888; margin-top: 1px; }
+
+    /* Bus card footer */
+    .bus-card-footer {
+      padding: 10px 18px 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-ver-detalle {
+      flex: 1;
+      padding: 8px 0;
+      border-radius: 10px;
+      border: 1.5px solid #e5e7eb;
+      background: #fff;
+      font-size: 12px;
+      font-weight: 600;
+      color: #333;
+      cursor: pointer;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+    }
+
+    .btn-ver-detalle:hover {
+      background: #111;
+      color: #fff;
+      border-color: #111;
+    }
+
+    .btn-alerta {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      border: 1.5px solid #fee2e2;
+      background: #fef2f2;
+      color: #dc2626;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+
+    .btn-alerta:hover { background: #dc2626; color: #fff; }
+    .btn-alerta.hidden { display: none; }
+
+    /* ─── BOTTOM GRID ─── */
+    .bottom-grid {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 16px;
+    }
+
+    /* ─── INGRESOS CARD ─── */
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 16px;
+    }
+
+    .card-title { font-size: 14px; font-weight: 600; color: #111; }
+    .card-sub   { font-size: 11px; color: #aaa; margin-top: 2px; }
+
+    .chart-legend {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px;
+      color: #666;
+    }
+
+    .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+    .chart-wrapper { height: 200px; position: relative; }
+
+    /* ─── ALERTAS CARD ─── */
+    .alertas-list { display: flex; flex-direction: column; gap: 10px; }
+
+    .alerta-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: #f9f9f9;
+      transition: background 0.12s;
+    }
+
+    .alerta-item:hover { background: #f2f2f2; }
+
+    .alerta-icon {
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .alerta-icon.red    { background: #fee2e2; color: #dc2626; }
+    .alerta-icon.amber  { background: #fef3c7; color: #d97706; }
+    .alerta-icon.green  { background: #dcfce7; color: #16a34a; }
+
+    .alerta-body { flex: 1; }
+    .alerta-title { font-size: 12px; font-weight: 600; color: #111; }
+    .alerta-desc  { font-size: 11px; color: #888; margin-top: 1px; }
+    .alerta-time  { font-size: 10px; color: #bbb; margin-top: 3px; }
+
+    /* ─── EMPTY STATE ─── */
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: #aaa;
+    }
+
+    .empty-state svg { opacity: 0.3; margin-bottom: 12px; }
+    .empty-state p { font-size: 13px; }
+
+    /* ─── MODAL (detalle bus) ─── */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.45);
+      z-index: 500;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+    }
+
+    .modal-overlay.open {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    .modal {
+      background: #fff;
+      border-radius: 20px;
+      width: 580px;
+      max-width: 95vw;
+      max-height: 85vh;
+      overflow-y: auto;
+      padding: 28px;
+      transform: scale(0.95) translateY(10px);
+      transition: transform 0.22s cubic-bezier(.22,1,.36,1);
+    }
+
+    .modal-overlay.open .modal { transform: scale(1) translateY(0); }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+
+    .modal-title { font-size: 17px; font-weight: 700; }
+    .modal-close {
+      width: 30px; height: 30px;
+      border-radius: 8px; border: none;
+      background: #f2f2f2; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      color: #666; font-size: 16px; line-height: 1;
+    }
+
+    .modal-close:hover { background: #e5e5e5; }
+
+    .modal-section-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: #aaa;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+      margin-top: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .modal-refresh-btn {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 6px;
+      border: 1.5px solid #e5e7eb;
+      background: #fff;
+      cursor: pointer;
+      color: #555;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      text-transform: none;
+      letter-spacing: 0;
+      transition: all .13s;
+    }
+    .modal-refresh-btn:hover { background: #f4f4f6; border-color: #aaa; }
+
+    .mov-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .mov-table thead th {
+      padding: 8px 10px;
+      text-align: left;
+      font-size: 10px; font-weight: 700; color: #aaa;
+      text-transform: uppercase; letter-spacing: .4px;
+      background: #f8f8f8;
+    }
+    .mov-table thead th:not(:first-child) { text-align: center; }
+    .mov-table tbody tr { border-bottom: 1px solid #f4f4f4; }
+    .mov-table tbody tr:last-child { border-bottom: none; }
+    .mov-table tbody td { padding: 9px 10px; color: #333; }
+    .mov-table tbody td:not(:first-child) { text-align: center; }
+    .mov-empty {
+      text-align: center; padding: 20px;
+      background: #f8f8f8; border-radius: 10px;
+      color: #aaa; font-size: 12px;
+    }
+
+    .modal-mant-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .modal-mant-item {
+      background: #f8f8f8;
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+
+    .mmi-label { font-size: 10px; font-weight: 700; color: #aaa; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 6px; }
+    .mmi-bar-wrap { background: #eee; border-radius: 4px; height: 5px; margin-bottom: 5px; overflow: hidden; }
+    .mmi-bar { height: 100%; border-radius: 4px; transition: width 0.5s; }
+    .mmi-bar.ok    { background: #22c55e; }
+    .mmi-bar.warn  { background: #f59e0b; }
+    .mmi-bar.alert { background: #ef4444; }
+    .mmi-obs { font-size: 11px; color: #555; }
+    .mmi-date { font-size: 10px; color: #aaa; margin-top: 2px; }
+
+    .modal-ingreso-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid #f2f2f2;
+      font-size: 13px;
+    }
+
+    .modal-ingreso-row:last-child { border-bottom: none; }
+    .modal-ingreso-row span { color: #555; }
+    .modal-ingreso-row strong { color: #111; font-weight: 600; }
+
+    /* ── HISTORIAL ── */
+    .historial-wrap {
+      max-width: 1300px;
+      margin: 0 auto;
+      padding: 24px 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .hist-controls {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      background: #fff;
+      border-radius: 16px;
+      padding: 16px 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+      flex-wrap: wrap;
+    }
+
+    .hist-mode-group { display: flex; gap: 4px; }
+
+    .hist-mode-btn {
+      display: flex; align-items: center; gap: 6px;
+      padding: 7px 14px;
+      border-radius: 20px;
+      border: 1.5px solid #e5e7eb;
+      background: #fff;
+      font-size: 12px; font-weight: 600; color: #666;
+      cursor: pointer; transition: all .15s;
+    }
+    .hist-mode-btn.active { background: #111; border-color: #111; color: #fff; }
+    .hist-mode-btn:hover:not(.active) { border-color: #aaa; color: #333; }
+
+    .hist-date-wrap { display: flex; align-items: center; gap: 8px; }
+
+    .hist-lbl { font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: .4px; white-space: nowrap; }
+
+    .hist-date-input {
+      border: 1.5px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 7px 12px;
+      font-size: 13px;
+      color: #111;
+      outline: none;
+      transition: border-color .15s;
+    }
+    .hist-date-input:focus { border-color: #111; }
+
+    .hist-nav {
+      width: 28px; height: 28px;
+      border-radius: 8px;
+      border: 1.5px solid #e5e7eb;
+      background: #fff; color: #555; font-size: 16px;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      transition: all .13s;
+    }
+    .hist-nav:hover { background: #f4f4f6; }
+
+    .hist-btn-buscar {
+      display: flex; align-items: center; gap: 6px;
+      padding: 8px 18px;
+      background: #111; border: none; border-radius: 20px;
+      color: #fff; font-size: 13px; font-weight: 600;
+      cursor: pointer; transition: background .15s;
+      margin-left: auto;
+    }
+    .hist-btn-buscar:hover { background: #333; }
+
+    /* KPI row */
+    .hist-kpi-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+    }
+
+    .hist-kpi {
+      background: #fff;
+      border-radius: 16px;
+      padding: 16px 18px;
+      display: flex; align-items: center; gap: 14px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+
+    .hist-kpi-icon {
+      width: 42px; height: 42px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .hist-kpi-val { font-size: 24px; font-weight: 700; color: #111; line-height: 1; margin-bottom: 3px; }
+    .hist-kpi-lbl { font-size: 11px; color: #888; }
+
+    /* Tabla resultados */
+    .hist-table-wrap {
+      background: #fff;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+
+    .hist-table-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid #f0f0f0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .hist-table-title { font-size: 14px; font-weight: 600; }
+    .hist-table-sub   { font-size: 11px; color: #aaa; margin-top: 2px; }
+
+    .hist-table { width: 100%; border-collapse: collapse; }
+
+    .hist-table thead th {
+      padding: 10px 16px;
+      text-align: left;
+      font-size: 11px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .5px;
+      color: #aaa;
+      background: #fafafa;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    .hist-table tbody tr { border-bottom: 1px solid #f6f6f6; transition: background .1s; }
+    .hist-table tbody tr:last-child { border-bottom: none; }
+    .hist-table tbody tr:hover { background: #fafafa; }
+    .hist-table tbody td { padding: 12px 16px; font-size: 13px; color: #333; }
+
+    .hist-bus-num { font-size: 20px; font-weight: 800; letter-spacing: -1px; color: #111; }
+    .hist-bus-sub { font-size: 10px; color: #aaa; }
+
+    .hist-val { font-size: 16px; font-weight: 700; color: #111; }
+    .hist-val-sub { font-size: 10px; color: #aaa; margin-top: 1px; }
+
+    .hist-novedad {
+      font-size: 12px; color: #666;
+      max-width: 220px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    .hist-empty {
+      text-align: center; padding: 56px 20px; color: #aaa;
+    }
+    .hist-empty p { font-size: 13px; }
+    .hist-empty strong { color: #888; }
+
+    /* Range mode: group by bus */
+    .hist-bus-block {
+      background: #fff;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+
+    .hist-bus-block-header {
+      padding: 14px 20px;
+      background: #fafafa;
+      border-bottom: 1px solid #f0f0f0;
+      display: flex; align-items: center; gap: 14px;
+    }
+
+    .hist-bus-block-totals {
+      margin-left: auto;
+      display: flex; gap: 24px;
+    }
+
+    .hbt-item { text-align: right; }
+    .hbt-val  { font-size: 16px; font-weight: 700; color: #111; }
+    .hbt-lbl  { font-size: 10px; color: #aaa; }
+  </style>
+</head>
+<body>
+
+  <!-- NAVBAR -->
+  <nav class="navbar">
+    <a class="navbar-logo" href="#">
+      <div class="logo-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2.2" stroke-linecap="round">
+          <rect x="1" y="3" width="15" height="13" rx="2"/>
+          <path d="M16 8h4l3 5v5h-7V8z"/>
+          <circle cx="5.5" cy="18.5" r="2.5"/>
+          <circle cx="18.5" cy="18.5" r="2.5"/>
+        </svg>
+      </div>
+      <span>La Milagrosa</span>
+    </a>
+
+    <nav class="navbar-nav">
+      <a href="#" class="active" onclick="showSection('buses',this)">Mis Buses</a>
+      <a href="#" onclick="showSection('movilidad',this)">Movilidad</a>
+      <a href="#" onclick="showSection('historial',this)">Historial</a>
+    </nav>
+
+    <div class="navbar-right">
+      <button class="nav-icon-btn" title="Notificaciones" id="btnNotif">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+          <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+        </svg>
+        <span class="notif-dot" id="notifDot"></span>
+      </button>
+      <div class="user-profile">
+        <div class="user-avatar" id="navAvatar">CN</div>
+        <div class="user-info">
+          <div class="uname" id="navName">Carlos Propietario</div>
+          <div class="urole">Propietario de Bus</div>
+        </div>
+        <svg width="12" height="12" fill="none" stroke="#777" stroke-width="2" viewBox="0 0 24 24" style="margin-left:2px"><path d="m6 9 6 6 6-6"/></svg>
+      </div>
+    </div>
+  </nav>
+
+  <!-- MAIN -->
+  <div id="section-buses">
+  <div class="main">
+
+    <!-- HEADER -->
+    <div class="header-row">
+      <div>
+        <div class="greeting-small" id="greetingSmall">Hola Carlos,</div>
+        <div class="greeting-big">
+          Mis Buses
+          <span class="owner-badge">
+            <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/></svg>
+            Propietario
+          </span>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button class="btn-outline" id="btnFecha">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <span id="mesActual">Abr 2026</span>
+          <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <button class="btn-outline" onclick="exportarResumen()">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Exportar
+        </button>
+      </div>
+    </div>
+
+    <!-- KPI CARDS -->
+    <div class="kpi-row">
+      <div class="kpi-card">
+        <div class="kpi-icon amber">
+          <svg width="20" height="20" fill="none" stroke="#b45309" stroke-width="2" viewBox="0 0 24 24">
+            <rect x="1" y="3" width="15" height="13" rx="2"/>
+            <path d="M16 8h4l3 5v5h-7V8z"/>
+            <circle cx="5.5" cy="18.5" r="2.5"/>
+            <circle cx="18.5" cy="18.5" r="2.5"/>
+          </svg>
+        </div>
+        <div class="kpi-body">
+          <div class="kpi-value" id="kpiTotalBuses">3</div>
+          <div class="kpi-label">Buses Asignados</div>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon green">
+          <svg width="20" height="20" fill="none" stroke="#16a34a" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+        </div>
+        <div class="kpi-body">
+          <div class="kpi-value">
+            <span id="kpiIngreso">0</span>
+            <span class="kpi-badge up" id="kpiIngresoTrend">+0% ↗</span>
+          </div>
+          <div class="kpi-label">Pasajeros este mes</div>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon blue">
+          <svg width="20" height="20" fill="none" stroke="#1d4ed8" stroke-width="2" viewBox="0 0 24 24">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+          </svg>
+        </div>
+        <div class="kpi-body">
+          <div class="kpi-value" id="kpiBusesActivos">2</div>
+          <div class="kpi-label">Buses en Ruta</div>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon red">
+          <svg width="20" height="20" fill="none" stroke="#dc2626" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+        </div>
+        <div class="kpi-body">
+          <div class="kpi-value" id="kpiAlertas">1</div>
+          <div class="kpi-label">Alertas Activas</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MIS BUSES -->
+    <div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <div>
+          <div class="section-label">Mis Buses</div>
+          <div class="section-sub">Estado actual de cada unidad asignada a tu cuenta</div>
+        </div>
+        <div style="display:flex;gap:6px;">
+          <button class="btn-outline" style="padding:6px 12px;font-size:12px;" onclick="filtrarBuses('todos')" id="filtro-todos">Todos</button>
+          <button class="btn-outline" style="padding:6px 12px;font-size:12px;" onclick="filtrarBuses('activo')" id="filtro-activo">Activos</button>
+          <button class="btn-outline" style="padding:6px 12px;font-size:12px;" onclick="filtrarBuses('alerta')" id="filtro-alerta">Con Alerta</button>
+        </div>
+      </div>
+      <div class="bus-grid" id="busGrid"></div>
+    </div>
+
+    <!-- BOTTOM GRID -->
+    <div class="bottom-grid">
+
+      <!-- MOVILIDAD CHART -->
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Pasajeros Movilizados — Últimos 6 meses</div>
+            <div class="card-sub">Historial de movilidad mensual por unidad</div>
+          </div>
+          <div class="chart-legend">
+            <div class="legend-item">
+              <div class="legend-dot" style="background:#f59e0b"></div>ABC-001
+            </div>
+            <div class="legend-item">
+              <div class="legend-dot" style="background:#3b82f6"></div>DEF-452
+            </div>
+            <div class="legend-item">
+              <div class="legend-dot" style="background:#22c55e"></div>GHI-789
+            </div>
+          </div>
+        </div>
+        <div class="chart-wrapper">
+          <canvas id="movilidadChart"></canvas>
+        </div>
+      </div>
+
+      <!-- ALERTAS -->
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Alertas y Avisos</div>
+            <div class="card-sub">Últimas notificaciones de tu flota</div>
+          </div>
+          <span style="background:#fee2e2;color:#dc2626;font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;" id="alertaCount">1 nueva</span>
+        </div>
+        <div class="alertas-list" id="alertasList"></div>
+      </div>
+
+    </div>
+
+  </div><!-- /main -->
+  </div><!-- /section-buses -->
+
+  <!-- ── SECCIÓN HISTORIAL ── -->
+  <div id="section-historial" style="display:none">
+    <div class="historial-wrap">
+
+      <!-- CONTROLES -->
+      <div class="hist-controls">
+        <div class="hist-mode-group">
+          <button class="hist-mode-btn active" id="modeDay" onclick="setMode('day')">
+            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>
+            Por Día
+          </button>
+          <button class="hist-mode-btn" id="modeRange" onclick="setMode('range')">
+            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="15" x2="16" y2="15"/></svg>
+            Por Rango
+          </button>
+        </div>
+
+        <div class="hist-date-wrap" id="ctrlDay">
+          <label class="hist-lbl">Fecha</label>
+          <div style="display:flex;gap:6px;align-items:center">
+            <button class="hist-nav" onclick="shiftHistDay(-1)">‹</button>
+            <input type="date" class="hist-date-input" id="histFecha" />
+            <button class="hist-nav" onclick="shiftHistDay(1)">›</button>
+          </div>
+        </div>
+
+        <div class="hist-date-wrap" id="ctrlRange" style="display:none">
+          <label class="hist-lbl">Desde</label>
+          <input type="date" class="hist-date-input" id="histDesde" />
+          <label class="hist-lbl" style="margin-left:8px">Hasta</label>
+          <input type="date" class="hist-date-input" id="histHasta" />
+        </div>
+
+        <button class="hist-btn-buscar" onclick="buscarHistorial()">
+          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          Consultar
+        </button>
+      </div>
+
+      <!-- KPI SUMMARY -->
+      <div class="hist-kpi-row" id="histKpis" style="display:none">
+        <div class="hist-kpi">
+          <div class="hist-kpi-icon" style="background:#fef3c7">
+            <svg width="18" height="18" fill="none" stroke="#b45309" stroke-width="2" viewBox="0 0 24 24"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+          </div>
+          <div><div class="hist-kpi-val" id="hkVueltas">—</div><div class="hist-kpi-lbl">Total Vueltas</div></div>
+        </div>
+        <div class="hist-kpi">
+          <div class="hist-kpi-icon" style="background:#dbeafe">
+            <svg width="18" height="18" fill="none" stroke="#1d4ed8" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+          </div>
+          <div><div class="hist-kpi-val" id="hkPax">—</div><div class="hist-kpi-lbl">Total Pasajeros</div></div>
+        </div>
+        <div class="hist-kpi">
+          <div class="hist-kpi-icon" style="background:#dcfce7">
+            <svg width="18" height="18" fill="none" stroke="#16a34a" stroke-width="2" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          </div>
+          <div><div class="hist-kpi-val" id="hkKm">—</div><div class="hist-kpi-lbl">Total Km</div></div>
+        </div>
+        <div class="hist-kpi">
+          <div class="hist-kpi-icon" style="background:#f3e8ff">
+            <svg width="18" height="18" fill="none" stroke="#7c3aed" stroke-width="2" viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="2"/><circle cx="5.5" cy="18.5" r="2.5"/></svg>
+          </div>
+          <div><div class="hist-kpi-val" id="hkBuses">—</div><div class="hist-kpi-lbl">Buses con datos</div></div>
+        </div>
+      </div>
+
+      <!-- TABLA RESULTADOS -->
+      <div id="histResultados">
+        <div class="hist-empty">
+          <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="opacity:.25;margin-bottom:12px"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>
+          <p>Selecciona una fecha o rango y presiona <strong>Consultar</strong></p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- MODAL DETALLE BUS -->
+  <div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+    <div class="modal" id="modalContent">
+      <div class="modal-header">
+        <div class="modal-title" id="modalTitle">Bus ABC-001</div>
+        <button class="modal-close" onclick="cerrarModal()">✕</button>
+      </div>
+      <div id="modalBody"></div>
+    </div>
+  </div>
+
+  <script>
+    const API = (window.location.port === '3030') ? 'http://localhost:8001/api' : (window.location.origin + '/api');
+    let currentUser = null;
+    let busesData   = [];
+    let modalBusId  = null;
+    let chartInst   = null;
+
+    // ── INIT ──
+    document.addEventListener('DOMContentLoaded', async () => {
+      currentUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
+      if (currentUser) {
+        document.getElementById('navAvatar').textContent = currentUser.iniciales || 'PR';
+        document.getElementById('navAvatar').style.background =
+          `linear-gradient(135deg,${currentUser.color||'#f59e0b'},${currentUser.color||'#d97706'})`;
+        document.getElementById('navName').textContent = currentUser.nombre || 'Propietario';
+        document.getElementById('greetingSmall').textContent =
+          `Hola ${(currentUser.nombre||'').split(' ')[0]},`;
+      }
+      const now = new Date();
+      const mes = now.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' });
+      document.getElementById('mesActual').textContent = mes.charAt(0).toUpperCase() + mes.slice(1);
+
+      await cargarDatos();
+      initHistorial();
+    });
+
+    // ── CARGAR DATOS PRINCIPALES ──
+    async function cargarDatos() {
+      const uid = currentUser ? currentUser.id : null;
+      const qs  = uid ? `?user_id=${uid}` : '';
+      try {
+        const [busesRes, dashRes] = await Promise.all([
+          fetch(`${API}/buses${qs}`),
+          fetch(`${API}/dashboard/propietario${qs}`),
+        ]);
+        busesData = await busesRes.json();
+        const dash = await dashRes.json();
+
+        // Pasajeros del mes actual por bus
+        const now      = new Date();
+        const primerDia = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
+        const hoy      = now.toISOString().slice(0,10);
+        const movRes   = await fetch(`${API}/movilidad/rango?desde=${primerDia}&hasta=${hoy}${uid ? '&user_id='+uid : ''}`);
+        const movMes   = await movRes.json();
+
+        const paxMes = {};
+        movMes.forEach(r => { paxMes[r.bus_id] = (paxMes[r.bus_id]||0) + (r.pasajeros||0); });
+        busesData.forEach(b => { b._paxMes = paxMes[b.id] || 0; });
+
+        // KPIs
+        const statusMap = {};
+        (dash.status_counts||[]).forEach(s => { statusMap[s.estado] = s.count; });
+        document.getElementById('kpiTotalBuses').textContent    = busesData.length;
+        document.getElementById('kpiIngreso').textContent       = (dash.today_passengers||0).toLocaleString();
+        document.getElementById('kpiIngresoTrend').textContent  = 'hoy';
+        document.getElementById('kpiIngresoTrend').className    = 'kpi-badge up';
+        document.getElementById('kpiBusesActivos').textContent  = statusMap['activo'] || 0;
+        const alerts = dash.alerts || [];
+        document.getElementById('kpiAlertas').textContent = alerts.length;
+        if (!alerts.length) document.getElementById('notifDot').style.display = 'none';
+
+        renderBuses(busesData);
+        renderAlertasAPI(alerts);
+        renderChartAPI(busesData, movMes);
+      } catch(err) {
+        document.getElementById('busGrid').innerHTML =
+          '<div class="empty-state" style="grid-column:1/-1"><p>Error al conectar con el servidor.</p></div>';
+      }
+    }
+
+    // ── RENDER TARJETAS DE BUSES ──
+    function renderBuses(lista) {
+      const grid = document.getElementById('busGrid');
+      if (!lista.length) {
+        grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
+          <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+            <rect x="1" y="3" width="15" height="13" rx="2"/><path d="M16 8h4l3 5v5h-7V8z"/>
+            <circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
+          </svg>
+          <p>No hay buses asignados</p></div>`;
+        return;
+      }
+      const dotMap  = { activo:'active', alerta:'alert', revision:'warning', inactivo:'idle' };
+      const chipMap = { activo:'En Ruta', alerta:'Alerta', revision:'En Revisión', inactivo:'Inactivo' };
+
+      grid.innerHTML = lista.map(bus => {
+        const estado = bus.estado || 'activo';
+        return `
+        <div class="bus-card" data-estado="${estado}">
+          <div class="bus-card-header">
+            <div class="bus-icon-wrap">
+              <svg width="22" height="22" fill="none" stroke="#555" stroke-width="1.8" viewBox="0 0 24 24">
+                <rect x="1" y="3" width="15" height="13" rx="2"/>
+                <path d="M16 8h4l3 5v5h-7V8z"/>
+                <circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
+              </svg>
+              <span class="bus-status-dot ${dotMap[estado]||'idle'}"></span>
+            </div>
+            <div class="bus-header-info">
+              <div class="bus-plate">${escH(bus.placa||'Bus '+bus.numero)}</div>
+              <div class="bus-model">${escH(bus.modelo||'—')} · Grupo ${escH(bus.grupo||'—')}</div>
+            </div>
+            <span class="bus-state-chip ${estado}">${chipMap[estado]||estado}</span>
+          </div>
+
+          <div class="bus-illustration">
+            <svg viewBox="0 0 160 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="4" y="14" width="126" height="34" rx="6" fill="#d1d5db"/>
+              <rect x="4" y="14" width="126" height="22" rx="6" fill="#e5e7eb"/>
+              <rect x="8" y="18" width="20" height="12" rx="2" fill="#93c5fd"/>
+              <rect x="31" y="18" width="20" height="12" rx="2" fill="#93c5fd"/>
+              <rect x="54" y="18" width="20" height="12" rx="2" fill="#93c5fd"/>
+              <rect x="77" y="18" width="20" height="12" rx="2" fill="#93c5fd"/>
+              <rect x="100" y="18" width="20" height="12" rx="2" fill="#bfdbfe"/>
+              <circle cx="24" cy="48" r="8" fill="#374151"/><circle cx="24" cy="48" r="4" fill="#9ca3af"/>
+              <circle cx="104" cy="48" r="8" fill="#374151"/><circle cx="104" cy="48" r="4" fill="#9ca3af"/>
+              <rect x="130" y="22" width="24" height="18" rx="4" fill="#d1d5db"/>
+              <rect x="133" y="24" width="18" height="10" rx="2" fill="#93c5fd"/>
+              <circle cx="140" cy="48" r="8" fill="#374151"/><circle cx="140" cy="48" r="4" fill="#9ca3af"/>
+            </svg>
+            <span class="bus-route-tag">Bus ${bus.numero} · Grupo ${bus.grupo||'?'}</span>
+          </div>
+
+          <div class="bus-card-body">
+            <div class="mant-row" id="mant-card-${bus.id}">
+              <span style="font-size:10px;color:#ccc">Cargando…</span>
+            </div>
+            <div class="bus-stats">
+              <div class="bus-stat">
+                <div class="bus-stat-label">Pasajeros Mes</div>
+                <div class="bus-stat-value">${(bus._paxMes||0).toLocaleString()}</div>
+                <div class="bus-stat-sub">acumulado este mes</div>
+              </div>
+              <div class="bus-stat">
+                <div class="bus-stat-label">Kilometraje</div>
+                <div class="bus-stat-value">${bus.km_actuales ? (bus.km_actuales/1000).toFixed(0)+'K' : '—'}</div>
+                <div class="bus-stat-sub">km acumulados</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bus-card-footer">
+            <button class="btn-ver-detalle" onclick="abrirModal(${bus.id})">
+              <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+              </svg>
+              Ver Detalle
+            </button>
+          </div>
+        </div>`;
+      }).join('');
+
+      lista.forEach(bus => cargarMantCard(bus.id));
+    }
+
+    async function cargarMantCard(busId) {
+      try {
+        const res   = await fetch(`${API}/mantenimiento/estado/${busId}`);
+        const items = await res.json();
+        const el = document.getElementById(`mant-card-${busId}`);
+        if (!el) return;
+        if (!items.length) { el.innerHTML = '<span style="font-size:10px;color:#ccc">Sin mantenimiento registrado</span>'; return; }
+        const alerts = items.filter(i => i.estado === 'alert');
+        const warns  = items.filter(i => i.estado === 'warn');
+        const oks    = items.filter(i => i.estado === 'ok');
+        el.innerHTML = [
+          ...alerts.map(i => `<span class="mant-chip alert">${escH(i.label)}</span>`),
+          ...warns.map(i  => `<span class="mant-chip warn">${escH(i.label)}</span>`),
+          ...oks.slice(0,2).map(i => `<span class="mant-chip ok">${escH(i.label)}</span>`),
+        ].join('');
+        if (alerts.length) {
+          const footer = el.closest('.bus-card').querySelector('.bus-card-footer');
+          if (!footer.querySelector('.btn-alerta')) {
+            footer.insertAdjacentHTML('beforeend', `
+              <button class="btn-alerta" title="${alerts.length} alerta(s) crítica(s)">
+                <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+              </button>`);
+          }
+        }
+      } catch(e) { /* ignorar */ }
+    }
+
+    // ── FILTROS ──
+    function filtrarBuses(filtro) {
+      ['todos','activo','alerta'].forEach(f => {
+        const btn = document.getElementById(`filtro-${f}`);
+        btn.style.background  = f === filtro ? '#111' : '#fff';
+        btn.style.color       = f === filtro ? '#fff' : '#333';
+        btn.style.borderColor = f === filtro ? '#111' : '#ddd';
+      });
+      renderBuses(filtro === 'todos' ? busesData : busesData.filter(b => b.estado === filtro));
+    }
+
+    // ── ALERTAS (API) ──
+    function renderAlertasAPI(alerts) {
+      if (!alerts.length) {
+        document.getElementById('alertasList').innerHTML =
+          '<div style="text-align:center;padding:24px 0;color:#ccc;font-size:13px">Sin alertas activas</div>';
+        document.getElementById('alertaCount').textContent = '0 nuevas';
+        return;
+      }
+      document.getElementById('alertasList').innerHTML = alerts.map(a => {
+        const isAlert = a.estado === 'alert';
+        return `
+        <div class="alerta-item">
+          <div class="alerta-icon ${isAlert?'red':'amber'}">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+              ${isAlert
+                ? '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>'
+                : '<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>'}
+            </svg>
+          </div>
+          <div class="alerta-body">
+            <div class="alerta-title">${escH(a.novedad_label)} — Bus ${a.bus_numero}</div>
+            <div class="alerta-desc">${escH(a.ultima_obs||'—')}</div>
+            <div class="alerta-time">${fmtFecha(a.updated_at ? a.updated_at.slice(0,10) : '')}</div>
+          </div>
+        </div>`;
+      }).join('');
+      const n = alerts.filter(a => a.estado === 'alert').length;
+      document.getElementById('alertaCount').textContent = `${n} nueva${n!==1?'s':''}`;
+    }
+
+    // ── CHART ──
+    function renderChartAPI(buses, movMes) {
+      if (chartInst) chartInst.destroy();
+      const colors = ['#f59e0b','#3b82f6','#22c55e','#a855f7','#ef4444','#06b6d4'];
+      const now = new Date();
+      const months = Array.from({length:6}, (_,i) => {
+        const d = new Date(now.getFullYear(), now.getMonth()-5+i, 1);
+        return { key:`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`,
+                 label: d.toLocaleDateString('es-ES',{month:'short'}) };
+      });
+      const datasets = buses.slice(0,5).map((bus, idx) => ({
+        label: bus.placa || 'Bus '+bus.numero,
+        data: months.map(m =>
+          movMes.filter(r => r.bus_id===bus.id && r.fecha && r.fecha.startsWith(m.key))
+                .reduce((s,r) => s+(r.pasajeros||0), 0)
+        ),
+        borderColor: colors[idx], backgroundColor: colors[idx]+'14',
+        borderWidth:2, tension:0.4, fill:true,
+        pointRadius:3, pointBackgroundColor: colors[idx],
+      }));
+      const ctx = document.getElementById('movilidadChart').getContext('2d');
+      chartInst = new Chart(ctx, {
+        type: 'line',
+        data: { labels: months.map(m => m.label), datasets },
+        options: {
+          responsive:true, maintainAspectRatio:false,
+          plugins:{ legend:{ display:false } },
+          scales: {
+            x: { grid:{display:false}, ticks:{font:{size:11},color:'#aaa'} },
+            y: { grid:{color:'#f2f2f2'}, ticks:{font:{size:11},color:'#aaa',callback:v=>v.toLocaleString()+' pax'} },
+          },
+        },
+      });
+    }
+
+    // ── MODAL DETALLE BUS ──
+    async function abrirModal(busId) {
+      modalBusId = busId;
+      const bus = busesData.find(b => b.id === busId);
+      if (!bus) return;
+      document.getElementById('modalTitle').textContent = `Bus ${bus.placa || bus.numero}`;
+      document.getElementById('modalBody').innerHTML =
+        '<div style="text-align:center;padding:48px 0;color:#aaa;font-size:13px">Cargando datos…</div>';
+      document.getElementById('modalOverlay').classList.add('open');
+      await cargarContenidoModal(bus);
+    }
+
+    async function cargarContenidoModal(bus) {
+      try {
+        const hoy    = new Date().toISOString().slice(0,10);
+        const hace30 = new Date(Date.now()-30*86400000).toISOString().slice(0,10);
+        const uid    = currentUser ? '&user_id='+currentUser.id : '';
+
+        const [mantRes, movRes, tarifasRes] = await Promise.all([
+          fetch(`${API}/mantenimiento/estado/${bus.id}`),
+          fetch(`${API}/movilidad/rango?desde=${hace30}&hasta=${hoy}${uid}`),
+          fetch(`${API}/tarifas`),
+        ]);
+        const mantItems  = await mantRes.json();
+        const movRows    = (await movRes.json())
+          .filter(r => r.bus_id === bus.id)
+          .sort((a,b) => b.fecha.localeCompare(a.fecha));
+        const tarifas     = await tarifasRes.json();
+        const tarifasActivas = tarifas.filter(t => t.activa);
+        const tarifaPromedio = tarifasActivas.length
+          ? tarifasActivas.reduce((s,t) => s + t.valor, 0) / tarifasActivas.length
+          : 0;
+
+        // Mantenimiento
+        const mantHtml = mantItems.length
+          ? `<div class="modal-mant-grid">${mantItems.map(m => `
+              <div class="modal-mant-item">
+                <div class="mmi-label">${escH(m.label)}</div>
+                <div class="mmi-bar-wrap">
+                  <div class="mmi-bar ${m.estado==='alert'?'alert':m.estado==='warn'?'warn':'ok'}"
+                       style="width:${m.progreso||0}%"></div>
+                </div>
+                <div class="mmi-obs">${escH(m.ultima_obs||'—')}</div>
+                <div class="mmi-date">${escH(m.ultima_fecha||'—')}</div>
+              </div>`).join('')}</div>`
+          : '<p style="font-size:12px;color:#aaa;padding:6px 0">Sin datos de mantenimiento registrados.</p>';
+
+        // Movilidad diaria
+        const totalPax      = movRows.reduce((s,r) => s + (r.pasajeros||0), 0);
+        const totalIngreso  = Math.round(totalPax * tarifaPromedio);
+        const fmtCOP = v => '$' + Math.round(v).toLocaleString('es-CO');
+
+        const movHtml = movRows.length
+          ? `<div style="overflow-x:auto;border-radius:10px;border:1px solid #f0f0f0">
+               <table class="mov-table">
+                 <thead><tr>
+                   <th>Fecha</th><th>Vueltas</th><th>Pasajeros</th><th>Km</th><th>Tarifa Est.</th>
+                 </tr></thead>
+                 <tbody>${movRows.map(r => `
+                   <tr>
+                     <td style="font-weight:600;color:#333;white-space:nowrap">${fmtFecha(r.fecha)}</td>
+                     <td style="font-weight:700;font-size:14px">${r.vueltas||0}</td>
+                     <td style="font-weight:700;font-size:15px;color:#111">${(r.pasajeros||0).toLocaleString()}</td>
+                     <td style="color:#555">${(r.km_recorridos||0).toFixed(1)}</td>
+                     <td style="font-weight:700;color:#16a34a;font-size:13px">${fmtCOP((r.pasajeros||0) * tarifaPromedio)}</td>
+                   </tr>`).join('')}
+                 </tbody>
+               </table>
+             </div>
+             <div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;
+                         background:#f0fdf4;border-radius:8px;padding:10px 14px">
+               <span style="font-size:11px;color:#16a34a;font-weight:600">
+                 Ingreso estimado del período
+                 <span style="font-size:10px;color:#86efac;font-weight:400">
+                   (tarifa prom. ${fmtCOP(tarifaPromedio)} × ${totalPax.toLocaleString()} pax)
+                 </span>
+               </span>
+               <span style="font-size:17px;font-weight:800;color:#15803d">${fmtCOP(totalIngreso)}</span>
+             </div>
+             <div style="margin-top:6px;font-size:10px;color:#bbb;text-align:right">
+               Últimos 30 días · ${movRows.length} registro${movRows.length!==1?'s':''}
+             </div>`
+          : `<div class="mov-empty">
+               Sin registros de movilidad en los últimos 30 días.<br>
+               <span style="font-size:11px;color:#ccc">Los datos aparecen cuando el analista ingresa información.</span>
+             </div>`;
+
+        document.getElementById('modalBody').innerHTML = `
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;background:#f8f8f8;border-radius:12px;padding:14px;margin-bottom:4px">
+            <div><div style="font-size:10px;color:#aaa;text-transform:uppercase;font-weight:700;letter-spacing:.4px;margin-bottom:3px">Número</div>
+                 <div style="font-size:22px;font-weight:800;letter-spacing:-1px;color:#111">${bus.numero}</div></div>
+            <div><div style="font-size:10px;color:#aaa;text-transform:uppercase;font-weight:700;letter-spacing:.4px;margin-bottom:3px">Placa</div>
+                 <div style="font-size:13px;font-weight:600">${escH(bus.placa||'—')}</div></div>
+            <div><div style="font-size:10px;color:#aaa;text-transform:uppercase;font-weight:700;letter-spacing:.4px;margin-bottom:3px">Modelo</div>
+                 <div style="font-size:13px;font-weight:600">${escH(bus.modelo||'—')}</div></div>
+            <div><div style="font-size:10px;color:#aaa;text-transform:uppercase;font-weight:700;letter-spacing:.4px;margin-bottom:3px">Grupo</div>
+                 <div style="font-size:13px;font-weight:600">${escH(bus.grupo||'—')}</div></div>
+            <div><div style="font-size:10px;color:#aaa;text-transform:uppercase;font-weight:700;letter-spacing:.4px;margin-bottom:3px">Kilometraje</div>
+                 <div style="font-size:13px;font-weight:600">${bus.km_actuales ? bus.km_actuales.toLocaleString()+' km' : '—'}</div></div>
+            <div><div style="font-size:10px;color:#aaa;text-transform:uppercase;font-weight:700;letter-spacing:.4px;margin-bottom:3px">Estado</div>
+                 <div style="font-size:13px;font-weight:600;text-transform:capitalize">${escH(bus.estado||'—')}</div></div>
+          </div>
+
+          <div class="modal-section-title">Estado de Mantenimiento</div>
+          ${mantHtml}
+
+          <div class="modal-section-title">
+            <span>Movilidad por Día — Últimos 30 días</span>
+            <button class="modal-refresh-btn" onclick="refrescarModal()">
+              <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                <polyline points="1 4 1 10 7 10"/>
+                <path d="M3.51 15a9 9 0 1 0 .49-4.01"/>
+              </svg>
+              Actualizar
+            </button>
+          </div>
+          ${movHtml}`;
+      } catch(err) {
+        document.getElementById('modalBody').innerHTML =
+          '<div style="text-align:center;padding:40px 0;color:#aaa;font-size:13px">Error al cargar datos del bus.</div>';
+      }
+    }
+
+    async function refrescarModal() {
+      if (!modalBusId) return;
+      const bus = busesData.find(b => b.id === modalBusId);
+      if (!bus) return;
+      document.getElementById('modalBody').innerHTML =
+        '<div style="text-align:center;padding:48px 0;color:#aaa;font-size:13px">Actualizando…</div>';
+      await cargarContenidoModal(bus);
+    }
+
+    function cerrarModal() {
+      document.getElementById('modalOverlay').classList.remove('open');
+      modalBusId = null;
+    }
+
+    function closeModal(e) {
+      if (e.target === document.getElementById('modalOverlay')) cerrarModal();
+    }
+
+    // ── NAV SECTIONS ──
+    function showSection(section, el) {
+      document.querySelectorAll('.navbar-nav a').forEach(a => a.classList.remove('active'));
+      el.classList.add('active');
+      document.getElementById('section-buses').style.display     = section === 'buses'    ? '' : 'none';
+      document.getElementById('section-historial').style.display = section === 'historial' ? '' : 'none';
+    }
+
+    function exportarResumen() {
+      alert('Función de exportación disponible próximamente.');
+    }
+
+    // ── HISTORIAL ──
+    let histMode = 'day';
+
+    function initHistorial() {
+      const ayer = new Date(); ayer.setDate(ayer.getDate()-1);
+      const iso  = d => d.toISOString().slice(0,10);
+      document.getElementById('histFecha').value = iso(ayer);
+      const semAnt = new Date(ayer); semAnt.setDate(semAnt.getDate()-6);
+      document.getElementById('histDesde').value = iso(semAnt);
+      document.getElementById('histHasta').value = iso(ayer);
+    }
+
+    function setMode(mode) {
+      histMode = mode;
+      document.getElementById('modeDay').classList.toggle('active',   mode==='day');
+      document.getElementById('modeRange').classList.toggle('active', mode==='range');
+      document.getElementById('ctrlDay').style.display   = mode==='day'   ? 'flex' : 'none';
+      document.getElementById('ctrlRange').style.display = mode==='range' ? 'flex' : 'none';
+    }
+
+    function shiftHistDay(delta) {
+      const inp = document.getElementById('histFecha');
+      const d   = new Date(inp.value+'T12:00:00');
+      d.setDate(d.getDate()+delta);
+      inp.value = d.toISOString().slice(0,10);
+    }
+
+    async function buscarHistorial() {
+      const uid      = currentUser ? `&user_id=${currentUser.id}` : '';
+      const resultDiv = document.getElementById('histResultados');
+      const kpisDiv   = document.getElementById('histKpis');
+      resultDiv.innerHTML = '<div class="hist-empty"><p>Cargando…</p></div>';
+      kpisDiv.style.display = 'none';
+      try {
+        let rows = [];
+        if (histMode === 'day') {
+          const fecha = document.getElementById('histFecha').value;
+          const res   = await fetch(`${API}/movilidad?fecha=${fecha}${uid}`);
+          rows = await res.json();
+          renderDia(rows, fecha);
+        } else {
+          const desde = document.getElementById('histDesde').value;
+          const hasta = document.getElementById('histHasta').value;
+          const res   = await fetch(`${API}/movilidad/rango?desde=${desde}&hasta=${hasta}${uid}`);
+          rows = await res.json();
+          renderRango(rows, desde, hasta);
+        }
+        actualizarKpis(rows);
+        kpisDiv.style.display = 'grid';
+      } catch(e) {
+        resultDiv.innerHTML = '<div class="hist-empty"><p>Error al cargar datos.</p></div>';
+      }
+    }
+
+    function actualizarKpis(rows) {
+      document.getElementById('hkVueltas').textContent = rows.reduce((s,r)=>s+(r.vueltas||0),0).toLocaleString();
+      document.getElementById('hkPax').textContent     = rows.reduce((s,r)=>s+(r.pasajeros||0),0).toLocaleString();
+      document.getElementById('hkKm').textContent      = rows.reduce((s,r)=>s+(r.km_recorridos||0),0).toFixed(1)+' km';
+      document.getElementById('hkBuses').textContent   = new Set(rows.map(r=>r.bus_id)).size;
+    }
+
+    function fmtFecha(iso) {
+      if (!iso) return '—';
+      const parts = iso.slice(0,10).split('-');
+      const meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+      return `${parseInt(parts[2])} ${meses[parseInt(parts[1])-1]} ${parts[0]}`;
+    }
+
+    function renderDia(rows, fecha) {
+      const div = document.getElementById('histResultados');
+      if (!rows.length) {
+        div.innerHTML = `<div class="hist-empty">
+          <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"
+               style="opacity:.25;margin-bottom:12px"><rect x="3" y="4" width="18" height="18" rx="2"/>
+               <line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <p>No hay datos de movilidad para el <strong>${fmtFecha(fecha)}</strong></p>
+          <p style="font-size:11px;margin-top:6px;color:#bbb">El analista aún no ha ingresado información para este día.</p>
+        </div>`; return;
+      }
+      const filas = rows.map(r => `<tr>
+        <td><div class="hist-bus-num">${r.numero}</div><div class="hist-bus-sub">${r.placa||'—'} · Grupo ${r.grupo}</div></td>
+        <td><div class="hist-val">${(r.vueltas||0).toLocaleString()}</div><div class="hist-val-sub">vueltas</div></td>
+        <td><div class="hist-val">${(r.pasajeros||0).toLocaleString()}</div><div class="hist-val-sub">pasajeros</div></td>
+        <td><div class="hist-val">${(r.km_recorridos||0).toFixed(1)}</div><div class="hist-val-sub">km</div></td>
+        <td><div class="hist-novedad" title="${escH(r.novedades)}">${r.novedades||'<span style="color:#ccc">Sin novedades</span>'}</div></td>
+      </tr>`).join('');
+      div.innerHTML = `
+        <div class="hist-table-wrap">
+          <div class="hist-table-header">
+            <div><div class="hist-table-title">Movilidad del ${fmtFecha(fecha)}</div>
+                 <div class="hist-table-sub">${rows.length} bus${rows.length!==1?'es':''} con registro</div></div>
+          </div>
+          <table class="hist-table">
+            <thead><tr><th>Bus</th><th>Vueltas</th><th>Pasajeros</th><th>Km</th><th>Novedades</th></tr></thead>
+            <tbody>${filas}</tbody>
+          </table>
+        </div>`;
+    }
+
+    function renderRango(rows, desde, hasta) {
+      const div = document.getElementById('histResultados');
+      if (!rows.length) {
+        div.innerHTML = `<div class="hist-empty">
+          <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"
+               style="opacity:.25;margin-bottom:12px"><rect x="3" y="4" width="18" height="18" rx="2"/>
+               <line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <p>No hay datos entre <strong>${fmtFecha(desde)}</strong> y <strong>${fmtFecha(hasta)}</strong></p>
+        </div>`; return;
+      }
+      const byBus = {};
+      rows.forEach(r => {
+        if (!byBus[r.bus_id]) byBus[r.bus_id] = { numero:r.numero, placa:r.placa, grupo:r.grupo, dias:[] };
+        byBus[r.bus_id].dias.push(r);
+      });
+      const bloques = Object.values(byBus).sort((a,b)=>a.numero-b.numero).map(bus => {
+        const totV  = bus.dias.reduce((s,d)=>s+(d.vueltas||0),0);
+        const totP  = bus.dias.reduce((s,d)=>s+(d.pasajeros||0),0);
+        const totKm = bus.dias.reduce((s,d)=>s+(d.km_recorridos||0),0);
+        const filas = bus.dias.map(d => `<tr>
+          <td style="color:#888;font-size:12px">${fmtFecha(d.fecha)}</td>
+          <td><div class="hist-val" style="font-size:14px">${d.vueltas||0}</div></td>
+          <td><div class="hist-val" style="font-size:14px">${(d.pasajeros||0).toLocaleString()}</div></td>
+          <td><div class="hist-val" style="font-size:14px">${(d.km_recorridos||0).toFixed(1)}</div></td>
+          <td><div class="hist-novedad" title="${escH(d.novedades)}">${d.novedades||'<span style="color:#ccc">—</span>'}</div></td>
+        </tr>`).join('');
+        return `
+          <div class="hist-bus-block">
+            <div class="hist-bus-block-header">
+              <div>
+                <div class="hist-bus-num">Bus ${bus.numero}</div>
+                <div class="hist-bus-sub">${bus.placa||'—'} · Grupo ${bus.grupo} · ${bus.dias.length} días con datos</div>
+              </div>
+              <div class="hist-bus-block-totals">
+                <div class="hbt-item"><div class="hbt-val">${totV}</div><div class="hbt-lbl">Vueltas</div></div>
+                <div class="hbt-item"><div class="hbt-val">${totP.toLocaleString()}</div><div class="hbt-lbl">Pasajeros</div></div>
+                <div class="hbt-item"><div class="hbt-val">${totKm.toFixed(1)}</div><div class="hbt-lbl">Km</div></div>
+              </div>
+            </div>
+            <table class="hist-table">
+              <thead><tr><th>Fecha</th><th>Vueltas</th><th>Pasajeros</th><th>Km</th><th>Novedades</th></tr></thead>
+              <tbody>${filas}</tbody>
+            </table>
+          </div>`;
+      }).join('');
+      div.innerHTML = `
+        <div style="margin-bottom:12px">
+          <div class="hist-table-title">Rango: ${fmtFecha(desde)} — ${fmtFecha(hasta)}</div>
+          <div style="font-size:11px;color:#aaa;margin-top:3px">${Object.keys(byBus).length} buses · ${rows.length} registros encontrados</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:14px">${bloques}</div>`;
+    }
+
+    function escH(s) { return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+  </script>
+</body>
+</html>

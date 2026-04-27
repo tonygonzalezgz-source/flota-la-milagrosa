@@ -1,0 +1,6 @@
+.env
+api/flota.db
+__pycache__/
+**/__pycache__/
+*.pyc
+.DS_Store

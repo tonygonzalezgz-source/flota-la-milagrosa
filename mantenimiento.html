@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>La Milagrosa — Mantenimiento</title>
+  <style>
+    /* ══════════════════════════════════════
+       TOKENS & RESET
+    ══════════════════════════════════════ */
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+    :root {
+      --top-bg:        #0c0c0e;
+      --btm-bg:        #f1f2f6;
+      --card-dark:     #161618;
+      --card-light:    #ffffff;
+      --border-d:      #252528;
+      --border-l:      #e5e5eb;
+      --blue:          #6366f1;
+      --blue-dim:      #4338ca;
+      --blue-bg:       rgba(99,102,241,.12);
+      --green:         #22c55e;
+      --green-bg:      #dcfce7;
+      --green-text:    #16a34a;
+      --yellow:        #f59e0b;
+      --yellow-bg:     #fef3c7;
+      --yellow-text:   #b45309;
+      --red:           #ef4444;
+      --red-bg:        #fee2e2;
+      --red-text:      #dc2626;
+      --purple:        #a855f7;
+      --teal:          #14b8a6;
+      --orange:        #fb923c;
+      --txt-inv:       #ffffff;
+      --txt-muted:     #888;
+      --txt-dim:       #555;
+      --radius:        14px;
+      --radius-sm:     9px;
+      --shadow:        0 1px 4px rgba(0,0,0,.07);
+      --shadow-md:     0 4px 20px rgba(0,0,0,.12);
+    }
+
+    html, body { height:100%; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Inter',sans-serif; overflow:hidden; }
+
+    /* ══════════════════════════════════════
+       SPLIT LAYOUT
+    ══════════════════════════════════════ */
+    .split { display:grid; grid-template-rows:50vh 50vh; height:100vh; }
+
+    .half-top {
+      background: var(--top-bg);
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: #333 transparent;
+    }
+    .half-top::-webkit-scrollbar { width:4px; }
+    .half-top::-webkit-scrollbar-thumb { background:#2e2e2e; border-radius:4px; }
+
+    .half-btm {
+      background: var(--btm-bg);
+      overflow-y: auto;
+      border-top: 3px solid var(--yellow);
+      scrollbar-width: thin;
+      scrollbar-color: #ccc transparent;
+    }
+    .half-btm::-webkit-scrollbar { width:4px; }
+    .half-btm::-webkit-scrollbar-thumb { background:#ccc; border-radius:4px; }
+
+    /* ══════════════════════════════════════
+       PANEL HEADERS
+    ══════════════════════════════════════ */
+    .ph {
+      display:flex; align-items:center; gap:12px;
+      padding:14px 26px;
+      position:sticky; top:0; z-index:20;
+    }
+    .ph-dark  { background:var(--top-bg); border-bottom:1px solid var(--border-d); }
+    .ph-light { background:var(--btm-bg); border-bottom:1px solid var(--border-l); }
+
+    .role-badge {
+      font-size:10px; font-weight:700; letter-spacing:1px;
+      text-transform:uppercase; padding:3px 10px; border-radius:20px;
+    }
+    .badge-tech  { background:#1c1c2e; color:var(--yellow); border:1px solid #3a3008; }
+    .badge-owner { background:var(--yellow-bg); color:var(--yellow-text); }
+
+    .ph-title { font-size:15px; font-weight:700; }
+    .ph-title.d { color:var(--txt-inv); }
+    .ph-title.l { color:#111; }
+    .ph-sub { font-size:11px; margin-top:1px; }
+    .ph-sub.d { color:var(--txt-muted); }
+    .ph-sub.l { color:#999; }
+
+    /* User chip */
+    .user-chip {
+      margin-left:auto;
+      display:flex; align-items:center; gap:8px;
+      padding:5px 12px 5px 6px;
+      background:var(--card-dark);
+      border:1px solid var(--border-d);
+      border-radius:20px;
+    }
+    .user-avatar {
+      width:26px; height:26px; border-radius:50%;
+      display:flex; align-items:center; justify-content:center;
+      font-size:10px; font-weight:700; color:#fff;
+    }
+    .user-name { font-size:12px; font-weight:600; color:var(--txt-inv); }
+    .user-role { font-size:10px; color:var(--txt-muted); }
+
+    /* Switcher button */
+    .switch-btn {
+      margin-left:6px;
+      background:none; border:1px solid #333; border-radius:6px;
+      padding:2px 8px; font-size:10px; color:var(--txt-muted);
+      cursor:pointer; font-family:inherit; transition:border-color .15s,color .15s;
+    }
+    .switch-btn:hover { border-color:#666; color:#aaa; }
+
+    /* ══════════════════════════════════════
+       TOP HALF — BODY
+    ══════════════════════════════════════ */
+    .top-body {
+      padding:18px 26px 24px;
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:16px;
+    }
+
+    /* ── FORM CARD ── */
+    .card-dark {
+      background:var(--card-dark);
+      border:1px solid var(--border-d);
+      border-radius:var(--radius);
+      padding:20px 22px;
+      display:flex; flex-direction:column; gap:16px;
+    }
+
+    .card-title-d {
+      font-size:13px; font-weight:600; color:var(--txt-inv);
+      display:flex; align-items:center; gap:8px;
+    }
+    .card-title-d svg { opacity:.6; }
+
+    /* Field */
+    .field { display:flex; flex-direction:column; gap:5px; }
+
+    label {
+      font-size:10px; font-weight:700; color:var(--txt-dim);
+      text-transform:uppercase; letter-spacing:.7px;
+    }
+
+    select, textarea {
+      width:100%; font-family:inherit; outline:none;
+      border-radius:var(--radius-sm);
+      border:1.5px solid var(--border-d);
+      background:#0f0f0f; color:var(--txt-inv);
+      font-size:13px;
+      transition:border-color .2s, box-shadow .2s;
+    }
+
+    select {
+      padding:9px 34px 9px 13px;
+      appearance:none; -webkit-appearance:none; cursor:pointer;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' fill='none' stroke='%23555' stroke-width='2' viewBox='0 0 24 24'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat:no-repeat; background-position:right 11px center;
+    }
+
+    textarea {
+      padding:9px 13px; resize:none; height:72px; line-height:1.5;
+    }
+
+    select:focus, textarea:focus {
+      border-color:var(--yellow);
+      box-shadow:0 0 0 3px rgba(245,158,11,.15);
+    }
+
+    select:disabled { opacity:.4; cursor:not-allowed; }
+    select option { background:#1a1a1a; }
+
+    /* Novedad icon pills */
+    .novedad-grid {
+      display:grid; grid-template-columns:repeat(3,1fr); gap:6px;
+    }
+
+    .nov-pill {
+      display:flex; flex-direction:column; align-items:center; gap:4px;
+      padding:8px 4px;
+      border-radius:10px;
+      border:1.5px solid var(--border-d);
+      background:#0f0f0f;
+      cursor:pointer; transition:border-color .15s, background .15s;
+      font-size:10px; color:var(--txt-muted); font-weight:600;
+      text-align:center; user-select:none;
+    }
+
+    .nov-pill:hover { background:#1a1a1a; border-color:#444; color:#aaa; }
+
+    .nov-pill.selected {
+      border-color:var(--yellow);
+      background:rgba(245,158,11,.08);
+      color:var(--yellow);
+    }
+
+    /* Save button */
+    .btn-save {
+      width:100%; padding:11px; border:none; border-radius:var(--radius-sm);
+      background:var(--yellow); color:#0c0c0e;
+      font-size:13px; font-weight:700; font-family:inherit;
+      cursor:pointer; display:flex; align-items:center; justify-content:center; gap:7px;
+      transition:background .2s, transform .1s;
+    }
+    .btn-save:hover:not(:disabled) { background:#e08d00; }
+    .btn-save:active:not(:disabled) { transform:scale(.98); }
+    .btn-save:disabled { opacity:.45; cursor:not-allowed; }
+    .btn-save.success { background:var(--green); color:#fff; pointer-events:none; }
+
+    /* Success message */
+    .success-msg {
+      display:none; align-items:center; gap:9px;
+      padding:9px 14px;
+      background:rgba(34,197,94,.1); border:1px solid rgba(34,197,94,.25);
+      border-radius:var(--radius-sm); color:var(--green);
+      font-size:12px; font-weight:600;
+      animation:fadeIn .25s ease;
+    }
+    .success-msg.show { display:flex; }
+
+    @keyframes fadeIn { from{opacity:0;transform:translateY(-5px)} to{opacity:1;transform:translateY(0)} }
+
+    /* ── LOG CARD ── */
+    .log-list {
+      display:flex; flex-direction:column; gap:6px;
+      max-height:200px; overflow-y:auto;
+      scrollbar-width:thin; scrollbar-color:#2a2a2a transparent;
+    }
+    .log-list::-webkit-scrollbar { width:3px; }
+    .log-list::-webkit-scrollbar-thumb { background:#2a2a2a; border-radius:3px; }
+
+    .log-empty {
+      text-align:center; padding:24px 0;
+      color:#3a3a3a; font-size:12px;
+    }
+    .log-empty svg { display:block; margin:0 auto 8px; opacity:.2; }
+
+    .log-row {
+      display:grid;
+      grid-template-columns:50px auto 1fr auto;
+      gap:8px; align-items:center;
+      padding:8px 10px;
+      background:#0f0f0f;
+      border:1px solid var(--border-d);
+      border-radius:8px;
+      font-size:12px;
+      animation:slideIn .3s ease;
+    }
+    @keyframes slideIn { from{opacity:0;transform:translateX(-8px)} to{opacity:1;transform:translateX(0)} }
+
+    .log-bus {
+      font-size:11px; font-weight:700; padding:2px 7px;
+      border-radius:6px; background:#1c1c2e; color:var(--blue); text-align:center;
+    }
+    .log-type {
+      font-size:11px; font-weight:600; padding:2px 8px;
+      border-radius:6px; white-space:nowrap;
+    }
+    .log-obs { color:#888; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:11px; }
+    .log-time { color:#444; font-size:10px; white-space:nowrap; }
+
+    /* ══════════════════════════════════════
+       BOTTOM HALF — PROPIETARIO
+    ══════════════════════════════════════ */
+    .btm-body { padding:14px 26px 24px; display:flex; flex-direction:column; gap:14px; }
+
+    /* Bus tab selector */
+    .bus-tabs {
+      display:flex; gap:6px; align-items:center;
+      padding:4px 0;
+    }
+
+    .bus-tab {
+      display:flex; align-items:center; gap:6px;
+      padding:6px 14px; border-radius:20px;
+      border:1.5px solid var(--border-l);
+      background:#fff; cursor:pointer;
+      font-size:12px; font-weight:600; color:#888;
+      font-family:inherit; transition:all .15s;
+    }
+    .bus-tab:hover { border-color:#aaa; color:#444; }
+    .bus-tab.active { background:#111; color:#fff; border-color:#111; }
+    .bus-tab .bus-dot {
+      width:6px; height:6px; border-radius:50%;
+      background:var(--green); display:none;
+    }
+    .bus-tab.has-updates .bus-dot { display:block; }
+
+    /* Maintenance grid */
+    .maint-grid {
+      display:grid; grid-template-columns:repeat(3,1fr); gap:12px;
+    }
+
+    .maint-card {
+      background:var(--card-light);
+      border-radius:var(--radius);
+      border:1.5px solid var(--border-l);
+      padding:16px 16px 14px;
+      box-shadow:var(--shadow);
+      display:flex; flex-direction:column; gap:11px;
+      position:relative; overflow:hidden;
+      transition:box-shadow .2s, border-color .3s;
+    }
+    .maint-card:hover { box-shadow:var(--shadow-md); }
+
+    /* Accent stripe left */
+    .maint-card::after {
+      content:''; position:absolute;
+      left:0; top:14px; bottom:14px;
+      width:3px; border-radius:0 3px 3px 0;
+      transition:background .4s;
+    }
+    .maint-card.ok::after     { background:var(--green); }
+    .maint-card.warn::after   { background:var(--yellow); }
+    .maint-card.alert::after  { background:var(--red); }
+
+    /* Flash animation when updated */
+    .maint-card.flash {
+      animation:cardFlash .6s ease;
+    }
+    @keyframes cardFlash {
+      0%   { border-color:var(--green); box-shadow:0 0 0 3px rgba(34,197,94,.25); }
+      100% { border-color:var(--border-l); box-shadow:var(--shadow); }
+    }
+
+    .mc-top { display:flex; align-items:center; justify-content:space-between; }
+
+    .mc-icon {
+      width:40px; height:40px; border-radius:11px;
+      display:flex; align-items:center; justify-content:center;
+      transition:background .4s;
+    }
+    .mc-icon.ok   { background:var(--green-bg); }
+    .mc-icon.warn { background:var(--yellow-bg); }
+    .mc-icon.alert{ background:var(--red-bg); }
+
+    .mc-chip {
+      display:flex; align-items:center; gap:4px;
+      font-size:10px; font-weight:700; padding:3px 9px; border-radius:20px;
+      transition:background .4s, color .4s;
+    }
+    .mc-chip::before {
+      content:''; width:5px; height:5px; border-radius:50%; background:currentColor;
+    }
+    .mc-chip.ok   { background:var(--green-bg); color:var(--green-text); }
+    .mc-chip.warn { background:var(--yellow-bg); color:var(--yellow-text); }
+    .mc-chip.alert{ background:var(--red-bg); color:var(--red-text); }
+
+    .mc-name { font-size:14px; font-weight:700; color:#111; }
+    .mc-desc { font-size:11px; color:#aaa; margin-top:1px; }
+
+    /* Progress */
+    .mc-prog { display:flex; flex-direction:column; gap:5px; }
+    .prog-labels { display:flex; justify-content:space-between; font-size:10px; color:#aaa; }
+    .prog-bar {
+      height:6px; background:#f0f0f4; border-radius:20px; overflow:hidden;
+    }
+    .prog-fill {
+      height:100%; border-radius:20px;
+      transition:width .6s cubic-bezier(.4,0,.2,1), background .4s;
+    }
+    .prog-fill.ok   { background:linear-gradient(90deg,#22c55e,#4ade80); }
+    .prog-fill.warn { background:linear-gradient(90deg,#f59e0b,#fbbf24); }
+    .prog-fill.alert{ background:linear-gradient(90deg,#ef4444,#f87171); }
+
+    /* Footer */
+    .mc-footer {
+      display:flex; justify-content:space-between; align-items:center;
+      padding-top:8px; border-top:1px solid #f4f4f6;
+    }
+    .mc-footer-lbl { font-size:10px; color:#aaa; }
+    .mc-footer-val { font-size:11px; font-weight:600; color:#111; margin-top:1px; }
+    .mc-obs {
+      font-size:10px; color:#aaa; font-style:italic;
+      max-width:100px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    }
+  </style>
+</head>
+<body>
+
+<div class="split">
+
+  <!-- ════════════════════════════
+       MITAD SUPERIOR — TÉCNICO
+  ════════════════════════════ -->
+  <div class="half-top">
+
+    <div class="ph ph-dark">
+      <span class="role-badge badge-tech">Técnico</span>
+      <div>
+        <div class="ph-title d">Registro de Novedades</div>
+        <div class="ph-sub d">Solo puedes registrar tus unidades asignadas</div>
+      </div>
+      <!-- User chip -->
+      <div class="user-chip" id="userChip">
+        <div class="user-avatar" id="avatarEl" style="background:#6366f1">JM</div>
+        <div>
+          <div class="user-name" id="userNameEl">Jorge Méndez</div>
+          <div class="user-role" id="userRoleEl">Buses: 12, 45, 80</div>
+        </div>
+        <button class="switch-btn" id="btnSwitch">Cambiar usuario</button>
+      </div>
+    </div>
+
+    <div class="top-body">
+
+      <!-- FORMULARIO -->
+      <div class="card-dark">
+        <div class="card-title-d">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+          </svg>
+          Nueva Novedad
+        </div>
+
+        <!-- Bus -->
+        <div class="field">
+          <label>Bus asignado</label>
+          <select id="selBus">
+            <option value="">— Selecciona un bus —</option>
+          </select>
+        </div>
+
+        <!-- Tipo de novedad (visual pills) -->
+        <div class="field">
+          <label>Tipo de novedad</label>
+          <div class="novedad-grid" id="novedadGrid">
+            <!-- populated by JS -->
+          </div>
+          <input type="hidden" id="hiddenNovedad" value="" />
+        </div>
+
+        <!-- Observaciones -->
+        <div class="field">
+          <label>Observaciones</label>
+          <textarea id="txtObs" placeholder="Describe brevemente la condición observada…" maxlength="120"></textarea>
+        </div>
+
+        <!-- Feedback -->
+        <div class="success-msg" id="successMsg">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+          Novedad registrada — panel del propietario actualizado
+        </div>
+
+        <!-- Botón -->
+        <button class="btn-save" id="btnSave" disabled>
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+            <polyline points="17 21 17 13 7 13 7 21"/>
+          </svg>
+          <span id="btnTxt">Registrar Novedad</span>
+        </button>
+      </div>
+
+      <!-- LOG DE REGISTROS -->
+      <div class="card-dark">
+        <div class="card-title-d" style="justify-content:space-between;">
+          <span style="display:flex;align-items:center;gap:8px;">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+            Historial de sesión
+          </span>
+          <button id="btnClearLog" style="background:none;border:1px solid #2a2a2a;border-radius:6px;padding:2px 8px;font-size:10px;color:#555;cursor:pointer;font-family:inherit;">
+            Limpiar
+          </button>
+        </div>
+        <div class="log-list" id="logList">
+          <div class="log-empty" id="logEmpty">
+            <svg width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 10h8M8 14h5"/></svg>
+            Sin novedades registradas aún
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ════════════════════════════
+       MITAD INFERIOR — PROPIETARIO
+  ════════════════════════════ -->
+  <div class="half-btm">
+
+    <div class="ph ph-light">
+      <span class="role-badge badge-owner">Propietario</span>
+      <div>
+        <div class="ph-title l">Estado de Mantenimiento</div>
+        <div class="ph-sub l">Se actualiza en tiempo real al registrar novedades</div>
+      </div>
+      <!-- Live indicator -->
+      <div style="margin-left:auto;display:flex;align-items:center;gap:7px;font-size:11px;font-weight:600;color:var(--green-text);background:var(--green-bg);padding:5px 12px;border-radius:20px;">
+        <div style="width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 1.8s infinite;"></div>
+        En vivo
+      </div>
+    </div>
+
+    <div class="btm-body">
+      <!-- Bus tabs -->
+      <div class="bus-tabs" id="busTabs">
+        <!-- populated by JS -->
+      </div>
+      <!-- Cards -->
+      <div class="maint-grid" id="maintGrid">
+        <!-- populated by JS -->
+      </div>
+    </div>
+
+  </div>
+</div><!-- /split -->
+
+<style>
+  @keyframes pulse {
+    0%,100%{opacity:1;transform:scale(1)}
+    50%{opacity:.5;transform:scale(.75)}
+  }
+</style>
+
+<!-- ════════════════════════════════════════
+     JAVASCRIPT
+════════════════════════════════════════ -->
+<script>
+  /* ═══════════════════════════════════════════
+     API
+  ═══════════════════════════════════════════ */
+  const API_URL = (window.location.port === '3030') ? 'http://localhost:8001/api' : (window.location.origin + '/api');
+  let busesData       = [];  // [{id, numero, grupo, ...}]
+  let tiposNovedadMap = {};  // clave → {id, label, color}
+  const loadedFromDB  = new Set(); // buses cuyo estado ya se cargó de la DB
+
+  /* ═══════════════════════════════════════════
+     1. SIMULACIÓN DE USUARIOS Y PERMISOS
+  ═══════════════════════════════════════════ */
+  const USERS = [
+    {
+      id: 'jm',
+      name: 'Jorge Méndez',
+      initials: 'JM',
+      color: '#6366f1',
+      role: 'Técnico Senior',
+      buses: [12, 45, 80],
+    },
+    {
+      id: 'rs',
+      name: 'Rosa Salinas',
+      initials: 'RS',
+      color: '#f59e0b',
+      role: 'Técnica de Turno',
+      buses: [7, 33, 60],
+    },
+    {
+      id: 'ca',
+      name: 'Carlos Armas',
+      initials: 'CA',
+      color: '#22c55e',
+      role: 'Auxiliar',
+      buses: [21, 55],
+    },
+  ];
+
+  let currentUserIdx = 0;    // usuario activo
+  let currentBusTab  = null; // bus seleccionado en panel propietario
+
+  /* ═══════════════════════════════════════════
+     2. TIPOS DE NOVEDAD
+  ═══════════════════════════════════════════ */
+  const NOVEDADES = [
+    { key: 'aceite',  label: 'Aceite',   icon: `<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M20 11.08V8l-6-6H6a2 2 0 0 0-2 2v16c0 1.1.9 2 2 2h6"/><path d="M14 3v5h5M18 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M18 15v3l2 1"/></svg>`, color: '#6366f1' },
+    { key: 'llantas', label: 'Llantas',  icon: `<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/></svg>`, color: '#14b8a6' },
+    { key: 'bateria', label: 'Batería',  icon: `<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="2" y="7" width="16" height="10" rx="2"/><path d="M22 11v2"/><line x1="6" y1="12" x2="10" y2="12"/><line x1="8" y1="10" x2="8" y2="14"/></svg>`, color: '#f59e0b' },
+    { key: 'luces',   label: 'Luces',    icon: `<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>`, color: '#22c55e' },
+    { key: 'frenos',  label: 'Frenos',   icon: `<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>`, color: '#ef4444' },
+    { key: 'motor',   label: 'Motor',    icon: `<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 6V4M10 6V4M14 6V4M18 6V4M6 18v2M10 18v2M14 18v2M18 18v2"/></svg>`, color: '#a855f7' },
+  ];
+
+  /* ═══════════════════════════════════════════
+     3. ESTADO DE MANTENIMIENTO POR BUS
+     Estructura: mainState[busNum][novedadKey]
+  ═══════════════════════════════════════════ */
+
+  // Estado inicial por defecto para un bus
+  function defaultBusState() {
+    return {
+      aceite:  { status: 'ok',   progress: 82, lastDate: '02 Abr 2026', lastObs: 'Cambio rutinario' },
+      llantas: { status: 'warn', progress: 58, lastDate: '15 Feb 2026', lastObs: 'Presión baja delantera' },
+      bateria: { status: 'alert',progress: 18, lastDate: '10 Ene 2026', lastObs: 'Carga crítica' },
+      luces:   { status: 'ok',   progress:100, lastDate: '10 Abr 2026', lastObs: 'Todo operativo' },
+      frenos:  { status: 'alert',progress:  9, lastDate: '05 Nov 2025', lastObs: 'Pastillas al límite' },
+      motor:   { status: 'warn', progress: 63, lastDate: '20 Mar 2026', lastObs: 'Temperatura elevada' },
+    };
+  }
+
+  const mainState = {};  // populated per bus on demand
+
+  function getOrInitBus(busNum) {
+    if (!mainState[busNum]) mainState[busNum] = defaultBusState();
+    return mainState[busNum];
+  }
+
+  /* Track which buses have had updates this session (for dot indicator) */
+  const updatedBuses = new Set();
+
+  /* ═══════════════════════════════════════════
+     4. DOM REFS
+  ═══════════════════════════════════════════ */
+  const selBus       = document.getElementById('selBus');
+  const novedadGrid  = document.getElementById('novedadGrid');
+  const hidNovedad   = document.getElementById('hiddenNovedad');
+  const txtObs       = document.getElementById('txtObs');
+  const btnSave      = document.getElementById('btnSave');
+  const btnTxt       = document.getElementById('btnTxt');
+  const successMsg   = document.getElementById('successMsg');
+  const logList      = document.getElementById('logList');
+  const logEmpty     = document.getElementById('logEmpty');
+  const busTabs      = document.getElementById('busTabs');
+  const maintGrid    = document.getElementById('maintGrid');
+  const avatarEl     = document.getElementById('avatarEl');
+  const userNameEl   = document.getElementById('userNameEl');
+  const userRoleEl   = document.getElementById('userRoleEl');
+  const btnSwitch    = document.getElementById('btnSwitch');
+  const btnClearLog  = document.getElementById('btnClearLog');
+
+  /* ═══════════════════════════════════════════
+     5. INICIALIZAR USUARIO ACTIVO
+  ═══════════════════════════════════════════ */
+  function loadUser(idx) {
+    const u = USERS[idx];
+    avatarEl.textContent  = u.initials;
+    avatarEl.style.background = u.color;
+    userNameEl.textContent = u.name;
+    userRoleEl.textContent = `Buses: ${u.buses.join(', ')}`;
+
+    // Rebuild bus select
+    selBus.innerHTML = '<option value="">— Selecciona un bus —</option>';
+    u.buses.forEach(b => {
+      const opt = document.createElement('option');
+      opt.value = b;
+      opt.textContent = `Bus ${String(b).padStart(2,'0')}`;
+      selBus.appendChild(opt);
+    });
+
+    // Reset form
+    hidNovedad.value = '';
+    txtObs.value = '';
+    document.querySelectorAll('.nov-pill').forEach(p => p.classList.remove('selected'));
+    validate();
+
+    // Reset propietario tabs to this user's buses
+    buildOwnerTabs(u.buses);
+  }
+
+  /* ═══════════════════════════════════════════
+     6. SWITCH DE USUARIO (demo)
+  ═══════════════════════════════════════════ */
+  btnSwitch.addEventListener('click', () => {
+    currentUserIdx = (currentUserIdx + 1) % USERS.length;
+    loadUser(currentUserIdx);
+  });
+
+  /* ═══════════════════════════════════════════
+     7. CONSTRUIR PILLS DE NOVEDAD
+  ═══════════════════════════════════════════ */
+  NOVEDADES.forEach(n => {
+    const pill = document.createElement('div');
+    pill.className = 'nov-pill';
+    pill.dataset.key = n.key;
+    pill.style.setProperty('--pill-color', n.color);
+    pill.innerHTML = n.icon + `<span>${n.label}</span>`;
+
+    pill.addEventListener('click', () => {
+      document.querySelectorAll('.nov-pill').forEach(p => p.classList.remove('selected'));
+      pill.classList.add('selected');
+      hidNovedad.value = n.key;
+      validate();
+    });
+
+    novedadGrid.appendChild(pill);
+  });
+
+  /* ═══════════════════════════════════════════
+     8. VALIDACIÓN EN TIEMPO REAL
+  ═══════════════════════════════════════════ */
+  selBus.addEventListener('change', validate);
+  txtObs.addEventListener('input', validate);
+
+  function validate() {
+    const ok = selBus.value && hidNovedad.value && txtObs.value.trim().length >= 3;
+    btnSave.disabled = !ok;
+  }
+
+  /* ═══════════════════════════════════════════
+     9. GUARDAR NOVEDAD
+  ═══════════════════════════════════════════ */
+  btnSave.addEventListener('click', async () => {
+    const busNum  = parseInt(selBus.value);
+    const novKey  = hidNovedad.value;
+    const obs     = txtObs.value.trim();
+    const now     = new Date();
+    const timeStr = now.toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit' });
+    const dateStr = now.toLocaleDateString('es-MX', { day:'2-digit', month:'short', year:'numeric' });
+
+    // ── Actualizar estado local ──
+    const state = getOrInitBus(busNum);
+    state[novKey] = { status:'ok', progress:100, lastDate:dateStr, lastObs:obs };
+    updatedBuses.add(busNum);
+
+    // ── UX ──
+    btnSave.classList.add('success');
+    btnTxt.textContent = '¡Registrado! ✓';
+    successMsg.classList.add('show');
+    appendLogRow(busNum, novKey, obs, timeStr);
+
+    selBus.value = '';
+    hidNovedad.value = '';
+    txtObs.value = '';
+    document.querySelectorAll('.nov-pill').forEach(p => p.classList.remove('selected'));
+    btnSave.disabled = true;
+
+    setTimeout(() => {
+      btnSave.classList.remove('success');
+      btnTxt.textContent = 'Registrar Novedad';
+      successMsg.classList.remove('show');
+    }, 1700);
+
+    refreshOwnerPanel(busNum, novKey);
+
+    // ── Persistir en base de datos ──
+    try {
+      const busObj  = busesData.find(b => b.numero === busNum);
+      const novObj  = tiposNovedadMap[novKey];
+      if (busObj && novObj) {
+        const userId = window.parent?.currentUser?.id ?? null;
+        await Promise.all([
+          fetch(`${API_URL}/mantenimiento/estado`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              bus_id: busObj.id, tipo_novedad_id: novObj.id,
+              estado: 'ok', progreso: 100,
+              ultima_fecha: dateStr, ultima_obs: obs,
+            }),
+          }),
+          fetch(`${API_URL}/mantenimiento/registro`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              bus_id: busObj.id, tipo_novedad_id: novObj.id,
+              observacion: obs, usuario_id: userId,
+            }),
+          }),
+        ]);
+      }
+    } catch (e) {
+      console.warn('[API] No se pudo guardar novedad en DB:', e.message);
+    }
+  });
+
+  /* ═══════════════════════════════════════════
+     10. LOG VISUAL
+  ═══════════════════════════════════════════ */
+  function appendLogRow(busNum, novKey, obs, time) {
+    if (logEmpty) logEmpty.style.display = 'none';
+
+    const nov = NOVEDADES.find(n => n.key === novKey);
+    const row = document.createElement('div');
+    row.className = 'log-row';
+    row.innerHTML = `
+      <span class="log-bus">Bus ${String(busNum).padStart(2,'0')}</span>
+      <span class="log-type" style="background:${nov.color}22;color:${nov.color}">${nov.label}</span>
+      <span class="log-obs">${obs}</span>
+      <span class="log-time">${time}</span>
+    `;
+    logList.insertBefore(row, logList.firstChild);
+  }
+
+  btnClearLog.addEventListener('click', () => {
+    logList.innerHTML = `
+      <div class="log-empty" id="logEmpty">
+        <svg width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 10h8M8 14h5"/></svg>
+        Sin novedades registradas aún
+      </div>`;
+  });
+
+  /* ═══════════════════════════════════════════
+     11. PANEL PROPIETARIO — TABS
+  ═══════════════════════════════════════════ */
+  function buildOwnerTabs(buses) {
+    busTabs.innerHTML = '';
+    buses.forEach((b, i) => {
+      const tab = document.createElement('button');
+      tab.className = 'bus-tab' + (i === 0 ? ' active' : '');
+      tab.dataset.bus = b;
+      tab.innerHTML = `<div class="bus-dot"></div>Bus ${String(b).padStart(2,'0')}`;
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.bus-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        tab.classList.remove('has-updates');
+        tab.querySelector('.bus-dot').style.display = 'none';
+        currentBusTab = b;
+        renderMaintGrid(b);
+        loadMaintEstadoFromDB(b);
+      });
+      busTabs.appendChild(tab);
+    });
+
+    // Activate first bus
+    currentBusTab = buses[0];
+    renderMaintGrid(buses[0]);
+  }
+
+  /* ═══════════════════════════════════════════
+     12. RENDERIZAR GRID DE MANTENIMIENTO
+  ═══════════════════════════════════════════ */
+  function renderMaintGrid(busNum, flashKey = null) {
+    const state = getOrInitBus(busNum);
+    maintGrid.innerHTML = '';
+
+    NOVEDADES.forEach(n => {
+      const s = state[n.key];
+      const card = document.createElement('div');
+      card.className = `maint-card ${s.status}`;
+      card.id = `mc-${busNum}-${n.key}`;
+      if (flashKey === n.key) card.classList.add('flash');
+
+      const chipLabel  = { ok:'Al día', warn:'Revisar', alert:'Urgente' }[s.status];
+
+      card.innerHTML = `
+        <div class="mc-top">
+          <div class="mc-icon ${s.status}">${n.icon.replace('stroke="currentColor"', `stroke="${iconColor(s.status)}"`)}</div>
+          <span class="mc-chip ${s.status}">${chipLabel}</span>
+        </div>
+        <div>
+          <div class="mc-name">${n.label}</div>
+          <div class="mc-desc">${s.lastObs}</div>
+        </div>
+        <div class="mc-prog">
+          <div class="prog-labels">
+            <span>${progLabel(n.key)}</span>
+            <span>${s.progress}%</span>
+          </div>
+          <div class="prog-bar">
+            <div class="prog-fill ${s.status}" style="width:${s.progress}%"></div>
+          </div>
+        </div>
+        <div class="mc-footer">
+          <div>
+            <div class="mc-footer-lbl">Último servicio</div>
+            <div class="mc-footer-val">${s.lastDate}</div>
+          </div>
+        </div>
+      `;
+      maintGrid.appendChild(card);
+    });
+  }
+
+  function iconColor(status) {
+    return { ok: '#16a34a', warn: '#b45309', alert: '#dc2626' }[status];
+  }
+
+  function progLabel(key) {
+    return {
+      aceite:'Vida útil', llantas:'Desgaste',
+      bateria:'Capacidad', luces:'Funcionamiento',
+      frenos:'Vida útil', motor:'Estado'
+    }[key] || 'Estado';
+  }
+
+  /* ═══════════════════════════════════════════
+     13. ACTUALIZACIÓN REACTIVA
+     Cuando el técnico guarda, si el propietario
+     está viendo ese bus → redibuja con flash.
+     Si no, muestra dot de notificación en la tab.
+  ═══════════════════════════════════════════ */
+  function refreshOwnerPanel(busNum, novKey) {
+    if (currentBusTab === busNum) {
+      // El propietario está mirando este bus → actualizar en vivo con flash
+      renderMaintGrid(busNum, novKey);
+    } else {
+      // El propietario está en otra tab → mostrar dot de alerta
+      const tab = busTabs.querySelector(`[data-bus="${busNum}"]`);
+      if (tab) {
+        tab.classList.add('has-updates');
+      }
+    }
+  }
+
+  /* ═══════════════════════════════════════════
+     14. CARGAR ESTADO DE MANTENIMIENTO DESDE API
+  ═══════════════════════════════════════════ */
+  async function loadMaintEstadoFromDB(busNum) {
+    if (loadedFromDB.has(busNum)) return;
+    try {
+      const busObj = busesData.find(b => b.numero === busNum);
+      if (!busObj) return;
+      const res  = await fetch(`${API_URL}/mantenimiento/estado/${busObj.id}`);
+      const rows = await res.json();
+      if (!rows.length) return;
+
+      const state = getOrInitBus(busNum);
+      rows.forEach(r => {
+        state[r.clave] = {
+          status:   r.estado,
+          progress: r.progreso,
+          lastDate: r.ultima_fecha || '—',
+          lastObs:  r.ultima_obs  || '—',
+        };
+      });
+      loadedFromDB.add(busNum);
+      if (currentBusTab === busNum) renderMaintGrid(busNum);
+    } catch (e) {
+      console.warn('[API] No se pudo cargar estado de bus:', busNum, e.message);
+    }
+  }
+
+  /* ═══════════════════════════════════════════
+     15. INIT API + ARRANCAR
+  ═══════════════════════════════════════════ */
+  async function initAPI() {
+    try {
+      const [busRes, novRes] = await Promise.all([
+        fetch(`${API_URL}/buses`),
+        fetch(`${API_URL}/tipos-novedad`),
+      ]);
+      busesData = await busRes.json();
+      const tipos = await novRes.json();
+      tipos.forEach(t => { tiposNovedadMap[t.clave] = t; });
+    } catch (e) {
+      console.warn('[API] Modo offline:', e.message);
+    }
+    loadUser(0);
+  }
+
+  initAPI();
+</script>
+
+</body>
+</html>

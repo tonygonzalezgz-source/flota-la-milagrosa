@@ -1,0 +1,1324 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>La Milagrosa — Dashboard Operador</title>
+  <style>
+
+    /* ═══════════════════════════════════════
+       RESET & BASE
+    ═══════════════════════════════════════ */
+    *, *::before, *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg:          #f2f3f7;
+      --sidebar-bg:  #0f0f0f;
+      --sidebar-w:   240px;
+      --card-bg:     #ffffff;
+      --border:      #eaeaea;
+      --text-main:   #111111;
+      --text-muted:  #909090;
+      --text-light:  #c4c4c4;
+      --accent:      #111111;
+      --green:       #22c55e;
+      --green-bg:    #dcfce7;
+      --green-text:  #16a34a;
+      --yellow:      #f59e0b;
+      --yellow-bg:   #fef3c7;
+      --yellow-text: #b45309;
+      --red:         #ef4444;
+      --red-bg:      #fee2e2;
+      --red-text:    #dc2626;
+      --blue:        #6366f1;
+      --blue-bg:     #e0e7ff;
+      --blue-text:   #4338ca;
+      --radius-card: 16px;
+      --radius-sm:   10px;
+      --shadow:      0 1px 4px rgba(0,0,0,.07);
+      --shadow-md:   0 4px 16px rgba(0,0,0,.10);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+    }
+
+    /* ═══════════════════════════════════════
+       SIDEBAR
+    ═══════════════════════════════════════ */
+    .sidebar {
+      width: var(--sidebar-w);
+      min-height: 100vh;
+      background: var(--sidebar-bg);
+      display: flex;
+      flex-direction: column;
+      position: fixed;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      z-index: 50;
+    }
+
+    /* Logo */
+    .sidebar-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 22px 20px 20px;
+      border-bottom: 1px solid #1e1e1e;
+    }
+
+    .logo-box {
+      width: 36px;
+      height: 36px;
+      background: #fff;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .logo-box svg { width: 20px; height: 20px; }
+
+    .logo-text {
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      letter-spacing: -0.3px;
+      line-height: 1.2;
+    }
+
+    .logo-text span {
+      display: block;
+      color: #555;
+      font-size: 10px;
+      font-weight: 400;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    /* Nav section label */
+    .nav-label {
+      padding: 18px 20px 6px;
+      font-size: 10px;
+      font-weight: 600;
+      color: #444;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    /* Nav links */
+    .nav-menu {
+      list-style: none;
+      padding: 0 10px;
+      flex: 1;
+    }
+
+    .nav-menu li { margin-bottom: 2px; }
+
+    .nav-menu a {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 12px;
+      border-radius: 10px;
+      text-decoration: none;
+      color: #666;
+      font-size: 13px;
+      font-weight: 500;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .nav-menu a svg { flex-shrink: 0; }
+
+    .nav-menu a:hover {
+      background: #1a1a1a;
+      color: #ccc;
+    }
+
+    .nav-menu a.active {
+      background: #fff;
+      color: #111;
+    }
+
+    .nav-menu a.active svg { stroke: #111; }
+
+    .nav-badge {
+      margin-left: auto;
+      background: #ef4444;
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 20px;
+      min-width: 18px;
+      text-align: center;
+    }
+
+    /* Sidebar divider */
+    .sidebar-divider {
+      height: 1px;
+      background: #1e1e1e;
+      margin: 10px 16px;
+    }
+
+    /* Sidebar user */
+    .sidebar-user {
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-top: 1px solid #1e1e1e;
+    }
+
+    .s-avatar {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      color: #fff;
+      flex-shrink: 0;
+    }
+
+    .s-info { flex: 1; min-width: 0; }
+    .s-name { color: #ddd; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .s-role { color: #555; font-size: 10px; margin-top: 1px; }
+
+    .s-logout {
+      background: none;
+      border: none;
+      color: #444;
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 6px;
+      transition: color 0.15s;
+    }
+
+    .s-logout:hover { color: #aaa; }
+
+    /* ═══════════════════════════════════════
+       MAIN AREA
+    ═══════════════════════════════════════ */
+    .main-area {
+      margin-left: var(--sidebar-w);
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    /* Top bar */
+    .topbar {
+      background: #fff;
+      border-bottom: 1px solid var(--border);
+      padding: 0 28px;
+      height: 58px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 40;
+    }
+
+    .topbar-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-main);
+      flex: 1;
+    }
+
+    .topbar-date {
+      font-size: 12px;
+      color: var(--text-muted);
+      background: var(--bg);
+      padding: 5px 12px;
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .topbar-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 14px;
+      border-radius: 20px;
+      border: 1.5px solid var(--border);
+      background: #fff;
+      font-size: 12px;
+      color: #444;
+      cursor: pointer;
+      font-weight: 500;
+      transition: border-color 0.15s;
+    }
+
+    .topbar-btn:hover { border-color: #aaa; }
+
+    .topbar-btn.primary {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+
+    .topbar-btn.primary:hover { background: #333; border-color: #333; }
+
+    .topbar-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 9px;
+      background: var(--bg);
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #888;
+      transition: background 0.15s;
+      position: relative;
+    }
+
+    .topbar-icon:hover { background: #e5e5e5; color: #333; }
+
+    .notif-dot {
+      position: absolute;
+      top: 7px; right: 7px;
+      width: 6px; height: 6px;
+      background: #ef4444;
+      border-radius: 50%;
+      border: 1.5px solid #fff;
+    }
+
+    /* Page content */
+    .page-content {
+      padding: 26px 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+    }
+
+    /* Section wrapper */
+    .section {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .section-title-block { display: flex; align-items: center; gap: 10px; }
+
+    .section-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .section-icon.mobility { background: var(--blue-bg); }
+    .section-icon.maint    { background: var(--yellow-bg); }
+
+    .section-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .section-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 1px;
+    }
+
+    .section-action {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      border: 1.5px solid var(--border);
+      background: #fff;
+      font-size: 12px;
+      color: #555;
+      cursor: pointer;
+      font-weight: 500;
+      transition: border-color 0.15s;
+    }
+
+    .section-action:hover { border-color: #aaa; }
+
+    /* ═══════════════════════════════════════
+       SECCIÓN 1 — MOVILIDAD
+    ═══════════════════════════════════════ */
+
+    /* KPI row */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+    }
+
+    .kpi-card {
+      background: var(--card-bg);
+      border-radius: var(--radius-card);
+      padding: 20px 22px;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Subtle top color bar */
+    .kpi-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      border-radius: var(--radius-card) var(--radius-card) 0 0;
+    }
+
+    .kpi-card.blue::before  { background: linear-gradient(90deg, #6366f1, #818cf8); }
+    .kpi-card.green::before { background: linear-gradient(90deg, #22c55e, #4ade80); }
+    .kpi-card.dark::before  { background: linear-gradient(90deg, #111, #555); }
+
+    .kpi-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+    }
+
+    .kpi-icon-wrap {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .kpi-icon-wrap.blue   { background: var(--blue-bg); }
+    .kpi-icon-wrap.green  { background: var(--green-bg); }
+    .kpi-icon-wrap.dark   { background: #f2f3f7; }
+
+    .kpi-trend {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 20px;
+    }
+
+    .kpi-trend.up   { color: var(--green-text); background: var(--green-bg); }
+    .kpi-trend.down { color: var(--red-text);   background: var(--red-bg); }
+    .kpi-trend.neu  { color: var(--text-muted); background: #f2f3f7; }
+
+    .kpi-value {
+      font-size: 30px;
+      font-weight: 800;
+      color: var(--text-main);
+      letter-spacing: -1px;
+      line-height: 1;
+    }
+
+    .kpi-label {
+      font-size: 13px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .kpi-footer {
+      padding-top: 10px;
+      border-top: 1px solid #f4f4f6;
+      font-size: 11px;
+      color: var(--text-light);
+    }
+
+    /* Report row */
+    .report-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .report-card {
+      background: var(--card-bg);
+      border-radius: var(--radius-card);
+      padding: 20px 22px;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .report-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+
+    .report-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .report-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .report-tag {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 9px;
+      border-radius: 20px;
+    }
+
+    .report-tag.monthly { background: var(--blue-bg);   color: var(--blue-text); }
+    .report-tag.weekly  { background: var(--green-bg);  color: var(--green-text); }
+
+    /* Placeholder chart area */
+    .chart-placeholder {
+      flex: 1;
+      min-height: 140px;
+      border-radius: 10px;
+      background: #f8f8fb;
+      border: 1.5px dashed #dde0f0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .chart-placeholder svg { opacity: 0.25; }
+
+    .chart-placeholder-text {
+      font-size: 12px;
+      color: var(--text-light);
+      font-weight: 500;
+    }
+
+    /* Mini stat row inside report cards */
+    .mini-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .mini-stat {
+      background: #f8f8fb;
+      border-radius: 10px;
+      padding: 10px 12px;
+      text-align: center;
+    }
+
+    .mini-stat-val {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-main);
+      line-height: 1;
+    }
+
+    .mini-stat-label {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 3px;
+    }
+
+    /* Section divider */
+    .section-divider {
+      height: 1px;
+      background: var(--border);
+      margin: 4px 0;
+    }
+
+    /* ═══════════════════════════════════════
+       SECCIÓN 2 — MANTENIMIENTO
+    ═══════════════════════════════════════ */
+    .maint-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+    }
+
+    .maint-card {
+      background: var(--card-bg);
+      border-radius: var(--radius-card);
+      padding: 22px 20px 18px;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      position: relative;
+      overflow: hidden;
+      transition: box-shadow 0.2s;
+    }
+
+    .maint-card:hover { box-shadow: var(--shadow-md); }
+
+    /* Left accent stripe */
+    .maint-card::after {
+      content: '';
+      position: absolute;
+      left: 0; top: 16px; bottom: 16px;
+      width: 3px;
+      border-radius: 0 3px 3px 0;
+    }
+
+    .maint-card.ok::after     { background: var(--green); }
+    .maint-card.warning::after{ background: var(--yellow); }
+    .maint-card.alert::after  { background: var(--red); }
+
+    /* Top row */
+    .maint-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .maint-icon-wrap {
+      width: 44px;
+      height: 44px;
+      border-radius: 13px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .maint-icon-wrap.ok      { background: var(--green-bg); }
+    .maint-icon-wrap.warning { background: var(--yellow-bg); }
+    .maint-icon-wrap.alert   { background: var(--red-bg); }
+
+    .maint-status-chip {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 20px;
+    }
+
+    .maint-status-chip.ok      { background: var(--green-bg); color: var(--green-text); }
+    .maint-status-chip.warning { background: var(--yellow-bg); color: var(--yellow-text); }
+    .maint-status-chip.alert   { background: var(--red-bg);    color: var(--red-text); }
+
+    .maint-status-chip::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    /* Card title */
+    .maint-name {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .maint-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* Progress bar */
+    .progress-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .progress-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 7px;
+      background: #f0f0f4;
+      border-radius: 20px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      border-radius: 20px;
+      transition: width 0.3s;
+    }
+
+    .progress-fill.ok      { background: linear-gradient(90deg, #22c55e, #4ade80); }
+    .progress-fill.warning { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+    .progress-fill.alert   { background: linear-gradient(90deg, #ef4444, #f87171); }
+
+    /* Last service */
+    .maint-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-top: 8px;
+      border-top: 1px solid #f4f4f6;
+    }
+
+    .maint-footer-label {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .maint-footer-val {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .maint-action {
+      background: none;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      padding: 4px 10px;
+      font-size: 11px;
+      color: #555;
+      cursor: pointer;
+      font-weight: 500;
+      transition: border-color 0.15s, background 0.15s;
+    }
+
+    .maint-action:hover { background: #f4f4f6; border-color: #ccc; }
+
+    /* ═══════════════════════════════════════
+       ALERT BANNER
+    ═══════════════════════════════════════ */
+    .alert-banner {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 18px;
+      background: var(--red-bg);
+      border: 1px solid #fca5a5;
+      border-radius: 12px;
+      font-size: 13px;
+      color: var(--red-text);
+      font-weight: 500;
+    }
+
+    .alert-banner svg { flex-shrink: 0; }
+
+    .alert-banner span { flex: 1; }
+
+    .alert-dismiss {
+      background: none;
+      border: none;
+      color: var(--red-text);
+      cursor: pointer;
+      opacity: 0.6;
+      font-size: 18px;
+      line-height: 1;
+      padding: 0 4px;
+    }
+
+    .alert-dismiss:hover { opacity: 1; }
+
+  </style>
+</head>
+<body>
+
+  <!-- ════════════════════════
+       SIDEBAR
+  ════════════════════════ -->
+  <aside class="sidebar">
+
+    <div class="sidebar-logo">
+      <div class="logo-box">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="1" y="3" width="15" height="13" rx="2"/>
+          <path d="M16 8h4l3 5v5h-7V8z"/>
+          <circle cx="5.5" cy="18.5" r="2.5"/>
+          <circle cx="18.5" cy="18.5" r="2.5"/>
+        </svg>
+      </div>
+      <div class="logo-text">
+        La Milagrosa
+        <span>Flota · Sistema</span>
+      </div>
+    </div>
+
+    <div class="nav-label">Principal</div>
+
+    <ul class="nav-menu">
+      <li>
+        <a href="#">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
+            <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+            <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+          </svg>
+          Resumen
+        </a>
+      </li>
+      <li>
+        <a href="#" class="active">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/>
+          </svg>
+          Movilidad
+        </a>
+      </li>
+      <li>
+        <a href="#">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
+            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+          </svg>
+          Mantenimiento
+          <span class="nav-badge">2</span>
+        </a>
+      </li>
+      <li>
+        <a href="#">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+          Conductores
+        </a>
+      </li>
+      <li>
+        <a href="#">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
+            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+          </svg>
+          Rastreo GPS
+        </a>
+      </li>
+    </ul>
+
+    <div class="nav-label" style="margin-top:auto;">Configuración</div>
+
+    <ul class="nav-menu" style="margin-bottom:8px;">
+      <li>
+        <a href="#">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.07 4.93A10 10 0 1 0 4.93 19.07 10 10 0 0 0 19.07 4.93z" opacity=".4"/>
+            <path d="M12 1v3M12 20v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M1 12h3M20 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/>
+          </svg>
+          Ajustes
+        </a>
+      </li>
+      <li>
+        <a href="#">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
+          </svg>
+          Historial
+        </a>
+      </li>
+    </ul>
+
+    <div class="sidebar-divider"></div>
+
+    <div class="sidebar-user">
+      <div class="s-avatar">OP</div>
+      <div class="s-info">
+        <div class="s-name">Operador Principal</div>
+        <div class="s-role">Turno Mañana</div>
+      </div>
+      <button class="s-logout" title="Cerrar sesión">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+          <polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+        </svg>
+      </button>
+    </div>
+
+  </aside>
+
+  <!-- ════════════════════════
+       MAIN AREA
+  ════════════════════════ -->
+  <div class="main-area">
+
+    <!-- Top bar -->
+    <header class="topbar">
+      <div class="topbar-title">Panel del Operador</div>
+
+      <div class="topbar-date">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
+          <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+        </svg>
+        Abril 2026
+      </div>
+
+      <button class="topbar-btn">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        Exportar
+      </button>
+
+      <button class="topbar-icon" title="Notificaciones">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+          <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+        </svg>
+        <span class="notif-dot"></span>
+      </button>
+
+      <button class="topbar-btn primary">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        Nuevo Registro
+      </button>
+    </header>
+
+    <!-- Page content -->
+    <div class="page-content">
+
+      <!-- ─── ALERTA ─── -->
+      <div class="alert-banner">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+        <span><strong>Atención:</strong> 2 unidades requieren mantenimiento urgente — Frenos y Batería pendientes de revisión.</span>
+        <button class="alert-dismiss">×</button>
+      </div>
+
+      <!-- ══════════════════════════════════
+           SECCIÓN 1: MOVILIDAD
+      ══════════════════════════════════ -->
+      <section class="section">
+
+        <div class="section-header">
+          <div class="section-title-block">
+            <div class="section-icon mobility">
+              <svg width="18" height="18" fill="none" stroke="#4338ca" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
+                <rect x="1" y="3" width="15" height="13" rx="2"/>
+                <path d="M16 8h4l3 5v5h-7V8z"/>
+                <circle cx="5.5" cy="18.5" r="2.5"/>
+                <circle cx="18.5" cy="18.5" r="2.5"/>
+              </svg>
+            </div>
+            <div>
+              <div class="section-title">Movilidad</div>
+              <div class="section-sub">Resumen de operaciones de transporte</div>
+            </div>
+          </div>
+          <button class="section-action">
+            Ver detalles
+            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+          </button>
+        </div>
+
+        <!-- KPI cards -->
+        <div class="kpi-grid">
+
+          <!-- Pasajeros del día -->
+          <div class="kpi-card blue">
+            <div class="kpi-top">
+              <div class="kpi-icon-wrap blue">
+                <svg width="20" height="20" fill="none" stroke="#4338ca" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                  <circle cx="9" cy="7" r="4"/>
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+              </div>
+              <span class="kpi-trend up">↗ +3.4%</span>
+            </div>
+            <div>
+              <div class="kpi-value">1,284</div>
+              <div class="kpi-label">Pasajeros hoy</div>
+            </div>
+            <div class="kpi-footer">Actualizado: hace 5 min</div>
+          </div>
+
+          <!-- Días trabajados -->
+          <div class="kpi-card green">
+            <div class="kpi-top">
+              <div class="kpi-icon-wrap green">
+                <svg width="20" height="20" fill="none" stroke="#16a34a" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
+                  <rect x="3" y="4" width="18" height="18" rx="2"/>
+                  <line x1="16" y1="2" x2="16" y2="6"/>
+                  <line x1="8" y1="2" x2="8" y2="6"/>
+                  <line x1="3" y1="10" x2="21" y2="10"/>
+                  <polyline points="9 16 11 18 15 14"/>
+                </svg>
+              </div>
+              <span class="kpi-trend up">↗ +1.2%</span>
+            </div>
+            <div>
+              <div class="kpi-value">22</div>
+              <div class="kpi-label">Días trabajados</div>
+            </div>
+            <div class="kpi-footer">De 30 días en el mes</div>
+          </div>
+
+          <!-- Pasajeros movilizados -->
+          <div class="kpi-card dark">
+            <div class="kpi-top">
+              <div class="kpi-icon-wrap dark">
+                <svg width="20" height="20" fill="none" stroke="#555" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
+                  <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                </svg>
+              </div>
+              <span class="kpi-trend down">↘ -0.8%</span>
+            </div>
+            <div>
+              <div class="kpi-value">28,410</div>
+              <div class="kpi-label">Pasajeros movilizados</div>
+            </div>
+            <div class="kpi-footer">Acumulado del mes</div>
+          </div>
+
+        </div>
+
+        <!-- Report area -->
+        <div class="report-grid">
+
+          <!-- Reporte Mensual -->
+          <div class="report-card">
+            <div class="report-header">
+              <div>
+                <div class="report-title">Reporte Mensual</div>
+                <div class="report-sub">Abril 2026 · Acumulado</div>
+              </div>
+              <span class="report-tag monthly">Mensual</span>
+            </div>
+
+            <div class="mini-stats">
+              <div class="mini-stat">
+                <div class="mini-stat-val">28.4K</div>
+                <div class="mini-stat-label">Pasajeros</div>
+              </div>
+              <div class="mini-stat">
+                <div class="mini-stat-val">22</div>
+                <div class="mini-stat-label">Días op.</div>
+              </div>
+              <div class="mini-stat">
+                <div class="mini-stat-val">89%</div>
+                <div class="mini-stat-label">Eficiencia</div>
+              </div>
+            </div>
+
+            <div class="chart-placeholder">
+              <svg width="48" height="48" fill="none" stroke="#6366f1" stroke-width="1.5" viewBox="0 0 24 24">
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+              </svg>
+              <div class="chart-placeholder-text">Gráfica mensual · próximamente</div>
+            </div>
+          </div>
+
+          <!-- Reporte Semanal -->
+          <div class="report-card">
+            <div class="report-header">
+              <div>
+                <div class="report-title">Reporte Semanal</div>
+                <div class="report-sub">Semana 15 · 14–20 Abr</div>
+              </div>
+              <span class="report-tag weekly">Semanal</span>
+            </div>
+
+            <div class="mini-stats">
+              <div class="mini-stat">
+                <div class="mini-stat-val">7.2K</div>
+                <div class="mini-stat-label">Pasajeros</div>
+              </div>
+              <div class="mini-stat">
+                <div class="mini-stat-val">5</div>
+                <div class="mini-stat-label">Días op.</div>
+              </div>
+              <div class="mini-stat">
+                <div class="mini-stat-val">94%</div>
+                <div class="mini-stat-label">Eficiencia</div>
+              </div>
+            </div>
+
+            <div class="chart-placeholder">
+              <svg width="48" height="48" fill="none" stroke="#22c55e" stroke-width="1.5" viewBox="0 0 24 24">
+                <rect x="2" y="3" width="4" height="18" rx="1"/>
+                <rect x="9" y="8" width="4" height="13" rx="1"/>
+                <rect x="16" y="5" width="4" height="16" rx="1"/>
+              </svg>
+              <div class="chart-placeholder-text">Gráfica semanal · próximamente</div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <div class="section-divider"></div>
+
+      <!-- ══════════════════════════════════
+           SECCIÓN 2: MANTENIMIENTO
+      ══════════════════════════════════ -->
+      <section class="section">
+
+        <div class="section-header">
+          <div class="section-title-block">
+            <div class="section-icon maint">
+              <svg width="18" height="18" fill="none" stroke="#b45309" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
+                <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+              </svg>
+            </div>
+            <div>
+              <div class="section-title">Mantenimiento</div>
+              <div class="section-sub">Estado de componentes críticos de la unidad</div>
+            </div>
+          </div>
+          <button class="section-action">
+            Registrar servicio
+            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+        </div>
+
+        <!-- Maintenance cards grid -->
+        <div class="maint-grid">
+
+          <!-- Cambio de aceite — OK -->
+          <div class="maint-card ok">
+            <div class="maint-top">
+              <div class="maint-icon-wrap ok">
+                <svg width="22" height="22" fill="none" stroke="#16a34a" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
+                  <path d="M20 11.08V8l-6-6H6a2 2 0 0 0-2 2v16c0 1.1.9 2 2 2h6"/>
+                  <path d="M14 3v5h5M18 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/>
+                  <path d="M18 15v3l2 1"/>
+                </svg>
+              </div>
+              <span class="maint-status-chip ok">Al día</span>
+            </div>
+            <div>
+              <div class="maint-name">Cambio de Aceite</div>
+              <div class="maint-desc">Próximo en 1,200 km</div>
+            </div>
+            <div class="progress-wrap">
+              <div class="progress-labels">
+                <span>Uso actual</span>
+                <span>82%</span>
+              </div>
+              <div class="progress-bar">
+                <div class="progress-fill ok" style="width: 82%"></div>
+              </div>
+            </div>
+            <div class="maint-footer">
+              <div>
+                <div class="maint-footer-label">Último servicio</div>
+                <div class="maint-footer-val">02 Abr 2026</div>
+              </div>
+              <button class="maint-action">Ver detalles</button>
+            </div>
+          </div>
+
+          <!-- Llantas — WARNING -->
+          <div class="maint-card warning">
+            <div class="maint-top">
+              <div class="maint-icon-wrap warning">
+                <svg width="22" height="22" fill="none" stroke="#b45309" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="10"/>
+                  <circle cx="12" cy="12" r="4"/>
+                  <line x1="12" y1="2" x2="12" y2="6"/>
+                  <line x1="12" y1="18" x2="12" y2="22"/>
+                  <line x1="2" y1="12" x2="6" y2="12"/>
+                  <line x1="18" y1="12" x2="22" y2="12"/>
+                </svg>
+              </div>
+              <span class="maint-status-chip warning">Revisar</span>
+            </div>
+            <div>
+              <div class="maint-name">Llantas</div>
+              <div class="maint-desc">Presión baja detectada</div>
+            </div>
+            <div class="progress-wrap">
+              <div class="progress-labels">
+                <span>Desgaste</span>
+                <span>58%</span>
+              </div>
+              <div class="progress-bar">
+                <div class="progress-fill warning" style="width: 58%"></div>
+              </div>
+            </div>
+            <div class="maint-footer">
+              <div>
+                <div class="maint-footer-label">Último servicio</div>
+                <div class="maint-footer-val">15 Feb 2026</div>
+              </div>
+              <button class="maint-action">Ver detalles</button>
+            </div>
+          </div>
+
+          <!-- Batería — ALERT -->
+          <div class="maint-card alert">
+            <div class="maint-top">
+              <div class="maint-icon-wrap alert">
+                <svg width="22" height="22" fill="none" stroke="#dc2626" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
+                  <rect x="2" y="7" width="16" height="10" rx="2"/>
+                  <path d="M22 11v2M5 11v2M7 11h6"/>
+                  <line x1="10" y1="9" x2="10" y2="15"/>
+                </svg>
+              </div>
+              <span class="maint-status-chip alert">Urgente</span>
+            </div>
+            <div>
+              <div class="maint-name">Batería</div>
+              <div class="maint-desc">Carga crítica — requiere reemplazo</div>
+            </div>
+            <div class="progress-wrap">
+              <div class="progress-labels">
+                <span>Capacidad</span>
+                <span>18%</span>
+              </div>
+              <div class="progress-bar">
+                <div class="progress-fill alert" style="width: 18%"></div>
+              </div>
+            </div>
+            <div class="maint-footer">
+              <div>
+                <div class="maint-footer-label">Último servicio</div>
+                <div class="maint-footer-val">10 Ene 2026</div>
+              </div>
+              <button class="maint-action">Ver detalles</button>
+            </div>
+          </div>
+
+          <!-- Estado de luces — OK -->
+          <div class="maint-card ok">
+            <div class="maint-top">
+              <div class="maint-icon-wrap ok">
+                <svg width="22" height="22" fill="none" stroke="#16a34a" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="4"/>
+                  <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+                </svg>
+              </div>
+              <span class="maint-status-chip ok">Al día</span>
+            </div>
+            <div>
+              <div class="maint-name">Estado de Luces</div>
+              <div class="maint-desc">Todas las luces operativas</div>
+            </div>
+            <div class="progress-wrap">
+              <div class="progress-labels">
+                <span>Funcionamiento</span>
+                <span>100%</span>
+              </div>
+              <div class="progress-bar">
+                <div class="progress-fill ok" style="width: 100%"></div>
+              </div>
+            </div>
+            <div class="maint-footer">
+              <div>
+                <div class="maint-footer-label">Último servicio</div>
+                <div class="maint-footer-val">10 Abr 2026</div>
+              </div>
+              <button class="maint-action">Ver detalles</button>
+            </div>
+          </div>
+
+          <!-- Frenos — ALERT -->
+          <div class="maint-card alert">
+            <div class="maint-top">
+              <div class="maint-icon-wrap alert">
+                <svg width="22" height="22" fill="none" stroke="#dc2626" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="10"/>
+                  <circle cx="12" cy="12" r="6"/>
+                  <circle cx="12" cy="12" r="2"/>
+                </svg>
+              </div>
+              <span class="maint-status-chip alert">Urgente</span>
+            </div>
+            <div>
+              <div class="maint-name">Frenos</div>
+              <div class="maint-desc">Pastillas al límite de desgaste</div>
+            </div>
+            <div class="progress-wrap">
+              <div class="progress-labels">
+                <span>Vida útil restante</span>
+                <span>9%</span>
+              </div>
+              <div class="progress-bar">
+                <div class="progress-fill alert" style="width: 9%"></div>
+              </div>
+            </div>
+            <div class="maint-footer">
+              <div>
+                <div class="maint-footer-label">Último servicio</div>
+                <div class="maint-footer-val">05 Nov 2025</div>
+              </div>
+              <button class="maint-action">Ver detalles</button>
+            </div>
+          </div>
+
+          <!-- Motor — WARNING -->
+          <div class="maint-card warning">
+            <div class="maint-top">
+              <div class="maint-icon-wrap warning">
+                <svg width="22" height="22" fill="none" stroke="#b45309" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
+                  <rect x="2" y="6" width="20" height="12" rx="2"/>
+                  <path d="M6 6V4M10 6V4M14 6V4M18 6V4M6 18v2M10 18v2M14 18v2M18 18v2M2 10h20"/>
+                </svg>
+              </div>
+              <span class="maint-status-chip warning">Revisar</span>
+            </div>
+            <div>
+              <div class="maint-name">Motor</div>
+              <div class="maint-desc">Temperatura elevada en ruta larga</div>
+            </div>
+            <div class="progress-wrap">
+              <div class="progress-labels">
+                <span>Estado general</span>
+                <span>63%</span>
+              </div>
+              <div class="progress-bar">
+                <div class="progress-fill warning" style="width: 63%"></div>
+              </div>
+            </div>
+            <div class="maint-footer">
+              <div>
+                <div class="maint-footer-label">Último servicio</div>
+                <div class="maint-footer-val">20 Mar 2026</div>
+              </div>
+              <button class="maint-action">Ver detalles</button>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+    </div><!-- /page-content -->
+  </div><!-- /main-area -->
+
+</body>
+</html>

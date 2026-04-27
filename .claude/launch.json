@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "flota-milagrosa",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["server.py"],
+      "port": 3030
+    },
+    {
+      "name": "flota-api",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["api/app.py"],
+      "port": 8001
+    }
+  ]
+}

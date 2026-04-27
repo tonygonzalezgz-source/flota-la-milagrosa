@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>La Milagrosa — Movilidad Diaria</title>
+  <style>
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+    :root {
+      --bg:      #0f0f11;
+      --surface: #17171a;
+      --card:    #1e1e22;
+      --border:  #2a2a30;
+      --accent:  #6366f1;
+      --green:   #22c55e;
+      --yellow:  #f59e0b;
+      --red:     #ef4444;
+      --txt:     #f0f0f3;
+      --txt2:    #aaaaaa;
+      --txt3:    #555;
+      --radius:  10px;
+    }
+
+    html, body {
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--txt);
+      overflow: hidden;
+    }
+
+    .page { display: flex; flex-direction: column; height: 100vh; }
+
+    /* ── TOP BAR ── */
+    .topbar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      height: 58px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-shrink: 0;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+
+    .topbar-title {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: -.3px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .topbar-title svg { color: var(--accent); }
+
+    .topbar-sep { width: 1px; height: 22px; background: var(--border); }
+
+    .date-wrap { display: flex; align-items: center; gap: 8px; }
+    .lbl { font-size: 11px; color: var(--txt2); font-weight: 600; letter-spacing: .4px; text-transform: uppercase; }
+
+    .date-input {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--txt);
+      font-size: 13px;
+      padding: 6px 12px;
+      cursor: pointer;
+      outline: none;
+      transition: border-color .15s;
+      color-scheme: dark;
+    }
+    .date-input:focus { border-color: var(--accent); }
+
+    .nav-day {
+      width: 28px; height: 28px;
+      border-radius: 7px;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--txt2);
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all .13s;
+    }
+    .nav-day:hover { background: var(--border); color: var(--txt); }
+
+    .group-filter { display: flex; gap: 4px; }
+    .gf-btn {
+      padding: 5px 12px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--txt2);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .13s;
+    }
+    .gf-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .gf-btn:hover:not(.active) { border-color: #444; color: var(--txt); }
+
+    .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+
+    .btn-save-all {
+      display: flex; align-items: center; gap: 7px;
+      padding: 7px 18px;
+      background: var(--accent);
+      border: none;
+      border-radius: var(--radius);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .btn-save-all:hover { background: #4f52d1; }
+    .btn-save-all:disabled { opacity: .5; cursor: not-allowed; }
+
+    .saved-toast {
+      font-size: 12px;
+      color: var(--green);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      opacity: 0;
+      transition: opacity .3s;
+    }
+    .saved-toast.show { opacity: 1; }
+
+    /* ── STATS BAR ── */
+    .stats-bar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 24px;
+      display: flex;
+      gap: 28px;
+      flex-shrink: 0;
+    }
+
+    .stat-item { display: flex; flex-direction: column; gap: 2px; }
+    .stat-val { font-size: 20px; font-weight: 700; letter-spacing: -.5px; }
+    .stat-lbl { font-size: 10px; color: var(--txt2); text-transform: uppercase; letter-spacing: .5px; font-weight: 600; }
+    .stat-val.green  { color: var(--green); }
+    .stat-val.yellow { color: var(--yellow); }
+    .stat-val.blue   { color: #818cf8; }
+    .stat-val.sky    { color: #38bdf8; }
+
+    /* ── PROGRESS ── */
+    .progress-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 24px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .progress-bar-wrap {
+      flex: 1;
+      height: 4px;
+      background: var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: var(--green);
+      border-radius: 4px;
+      transition: width .4s;
+    }
+    .progress-text { font-size: 11px; color: var(--txt2); white-space: nowrap; }
+
+    /* ── TABLE ── */
+    .table-area {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 24px 24px;
+    }
+
+    .table-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+
+    table { width: 100%; border-collapse: collapse; }
+
+    thead th {
+      background: var(--card);
+      padding: 10px 14px;
+      text-align: left;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      color: var(--txt3);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background .1s;
+    }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: rgba(255,255,255,.02); }
+    tbody tr.has-data { background: rgba(99,102,241,.04); }
+    tbody tr.has-data:hover { background: rgba(99,102,241,.08); }
+
+    tbody td { padding: 8px 14px; font-size: 13px; vertical-align: middle; }
+
+    .bus-num {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -1px;
+      color: var(--txt);
+    }
+    .bus-placa { font-size: 11px; color: var(--txt2); margin-top: 1px; font-family: monospace; }
+
+    .badge-grupo {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 6px;
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .badge-a { background: rgba(99,102,241,.15); color: #818cf8; }
+    .badge-b { background: rgba(236,72,153,.12); color: #f472b6; }
+
+    /* Inputs */
+    .num-input {
+      width: 80px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      color: var(--txt);
+      font-size: 13px;
+      padding: 6px 10px;
+      text-align: right;
+      outline: none;
+      transition: border-color .13s;
+    }
+    .num-input:focus { border-color: var(--accent); background: #1a1a20; }
+    .num-input.touched { border-color: var(--yellow); }
+
+    .ruta-select {
+      width: 190px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      color: var(--txt);
+      font-size: 12px;
+      padding: 6px 10px;
+      outline: none;
+      cursor: pointer;
+      transition: border-color .13s;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' fill='none' stroke='%23666' stroke-width='2'%3E%3Cpath d='M1 1l4 4 4-4'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+      padding-right: 28px;
+    }
+    .ruta-select:focus  { border-color: var(--accent); background-color: #1a1a20; }
+    .ruta-select.touched { border-color: var(--yellow); }
+    .ruta-select option { background: #1e1e22; color: var(--txt); }
+
+    .nov-input {
+      width: 180px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      color: var(--txt);
+      font-size: 12px;
+      padding: 6px 10px;
+      outline: none;
+      transition: border-color .13s;
+    }
+    .nov-input:focus  { border-color: var(--accent); background: #1a1a20; }
+    .nov-input.touched { border-color: var(--yellow); }
+
+    /* Estado badge */
+    .estado-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 9px;
+      border-radius: 20px;
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .estado-badge::before {
+      content: '';
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    .estado-badge.sin-datos  { background: rgba(85,85,85,.15);   color: var(--txt3); }
+    .estado-badge.guardado   { background: rgba(34,197,94,.12);  color: var(--green); }
+    .estado-badge.modificado { background: rgba(245,158,11,.12); color: var(--yellow); }
+
+    .btn-row-save {
+      padding: 5px 12px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      color: var(--txt2);
+      font-size: 12px;
+      cursor: pointer;
+      transition: all .13s;
+      white-space: nowrap;
+    }
+    .btn-row-save:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-row-save.saving { opacity: .5; cursor: not-allowed; }
+
+    .empty-state {
+      text-align: center;
+      padding: 48px 20px;
+      color: var(--txt3);
+    }
+    .empty-state p { font-size: 13px; }
+
+    /* Sin rutas aviso */
+    .no-rutas-tip {
+      font-size: 11px;
+      color: var(--txt3);
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div class="topbar-title">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <rect x="3" y="4" width="18" height="18" rx="2"/>
+        <line x1="16" y1="2" x2="16" y2="6"/>
+        <line x1="8"  y1="2" x2="8"  y2="6"/>
+        <line x1="3"  y1="10" x2="21" y2="10"/>
+      </svg>
+      Movilidad Diaria
+    </div>
+
+    <div class="topbar-sep"></div>
+
+    <div class="date-wrap">
+      <span class="lbl">Fecha</span>
+      <button class="nav-day" id="btnPrevDay" title="Día anterior">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
+      </button>
+      <input type="date" class="date-input" id="datePicker" />
+      <button class="nav-day" id="btnNextDay" title="Día siguiente">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+      </button>
+    </div>
+
+    <div class="topbar-sep"></div>
+
+    <div class="group-filter">
+      <button class="gf-btn active" data-grupo="todos" onclick="setGrupo('todos',this)">Todos</button>
+      <button class="gf-btn" data-grupo="A"     onclick="setGrupo('A',this)">Grupo A</button>
+      <button class="gf-btn" data-grupo="B"     onclick="setGrupo('B',this)">Grupo B</button>
+    </div>
+
+    <div class="topbar-right">
+      <span class="saved-toast" id="savedToast">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+        Guardado
+      </span>
+      <button class="btn-save-all" id="btnSaveAll" onclick="saveAll()">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+          <polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
+        </svg>
+        Guardar Todo
+      </button>
+    </div>
+  </div>
+
+  <!-- STATS BAR -->
+  <div class="stats-bar">
+    <div class="stat-item">
+      <div class="stat-val"         id="statTotal">—</div>
+      <div class="stat-lbl">Buses en flota</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-val green"   id="statConDatos">—</div>
+      <div class="stat-lbl">Con datos</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-val yellow"  id="statVueltas">—</div>
+      <div class="stat-lbl">Total Vueltas</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-val blue"    id="statPasajeros">—</div>
+      <div class="stat-lbl">Total Pasajeros</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-val sky"     id="statConRuta">—</div>
+      <div class="stat-lbl">Con Ruta</div>
+    </div>
+  </div>
+
+  <!-- PROGRESS -->
+  <div class="progress-row">
+    <span class="progress-text" id="progressText">Cargando…</span>
+    <div class="progress-bar-wrap">
+      <div class="progress-bar-fill" id="progressBar" style="width:0%"></div>
+    </div>
+  </div>
+
+  <!-- TABLE -->
+  <div class="table-area">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Bus</th>
+            <th>Grupo</th>
+            <th>Vueltas</th>
+            <th>Pasajeros</th>
+            <th>Ruta</th>
+            <th>Novedades</th>
+            <th>Estado</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const API = (window.location.port === '3030') ? 'http://localhost:8001/api' : (window.location.origin + '/api');
+  let currentUser = null;
+  let allBuses    = [];
+  let allRutas    = [];
+  let records     = {};   // bus_id → record
+  let grupoFiltro = 'todos';
+  let dirty       = new Set();
+
+  /* ── INIT ── */
+  document.addEventListener('DOMContentLoaded', async () => {
+    currentUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
+
+    const ayer = new Date();
+    ayer.setDate(ayer.getDate() - 1);
+    document.getElementById('datePicker').value = isoDate(ayer);
+    document.getElementById('datePicker').addEventListener('change', () => loadFecha());
+    document.getElementById('btnPrevDay').onclick = () => shiftDay(-1);
+    document.getElementById('btnNextDay').onclick = () => shiftDay(1);
+
+    await Promise.all([loadBuses(), loadRutas()]);
+    await loadFecha();
+  });
+
+  /* ── HELPERS ── */
+  function isoDate(d) { return d.toISOString().slice(0, 10); }
+
+  function shiftDay(delta) {
+    const d = new Date(document.getElementById('datePicker').value + 'T12:00:00');
+    d.setDate(d.getDate() + delta);
+    document.getElementById('datePicker').value = isoDate(d);
+    loadFecha();
+  }
+
+  function escHtml(s) { return (s || '').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+
+  /* Rutas activas filtradas por grupo del bus */
+  function rutasForGrupo(grupo) {
+    return allRutas.filter(r => r.grupo === grupo);
+  }
+
+  /* ── CARGAR BUSES ── */
+  async function loadBuses() {
+    const res = await fetch(`${API}/buses`);
+    allBuses = await res.json();
+    document.getElementById('statTotal').textContent = allBuses.length;
+  }
+
+  /* ── CARGAR RUTAS ── */
+  async function loadRutas() {
+    try {
+      const res = await fetch(`${API}/rutas`);
+      allRutas = await res.json();
+    } catch (_) { allRutas = []; }
+  }
+
+  /* ── CARGAR REGISTROS ── */
+  async function loadFecha() {
+    const fecha = document.getElementById('datePicker').value;
+    if (!fecha) return;
+    dirty.clear();
+
+    const res  = await fetch(`${API}/movilidad?fecha=${fecha}`);
+    const data = await res.json();
+    records = {};
+    data.forEach(r => { records[r.bus_id] = r; });
+
+    renderTable();
+    updateStats();
+  }
+
+  /* ── FILTRO GRUPO ── */
+  function setGrupo(g, btn) {
+    grupoFiltro = g;
+    document.querySelectorAll('.gf-btn').forEach(b => b.classList.toggle('active', b.dataset.grupo === g));
+    renderTable();
+  }
+
+  /* ── RENDER ── */
+  function renderTable() {
+    const buses = grupoFiltro === 'todos' ? allBuses : allBuses.filter(b => b.grupo === grupoFiltro);
+    const tbody = document.getElementById('tbody');
+
+    if (!buses.length) {
+      tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><p>No hay buses para mostrar</p></div></td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = buses.map(b => {
+      const rec      = records[b.id];
+      const cls      = rec ? 'has-data' : '';
+      const est      = dirty.has(b.id) ? 'modificado' : (rec ? 'guardado' : 'sin-datos');
+      const estLabel = { 'sin-datos': 'Sin datos', guardado: 'Guardado', modificado: 'Modificado' }[est];
+      const rutasBus = rutasForGrupo(b.grupo);
+
+      const rutaOptions = rutasBus.length
+        ? rutasBus.map(r =>
+            `<option value="${r.id}" ${rec && rec.ruta_id == r.id ? 'selected' : ''}>${r.nombre}</option>`
+          ).join('')
+        : '';
+
+      return `
+      <tr id="row-${b.id}" class="${cls}">
+        <td>
+          <div class="bus-num">${b.numero}</div>
+          <div class="bus-placa">${b.placa || '—'}</div>
+        </td>
+        <td><span class="badge-grupo badge-${(b.grupo || 'A').toLowerCase()}">${b.grupo}</span></td>
+        <td><input  class="num-input"   id="v-${b.id}"    type="number" min="0"
+                    value="${rec ? rec.vueltas : ''}" placeholder="0"
+                    oninput="markDirty(${b.id})" /></td>
+        <td><input  class="num-input"   id="p-${b.id}"    type="number" min="0"
+                    value="${rec ? rec.pasajeros : ''}" placeholder="0"
+                    oninput="markDirty(${b.id})" /></td>
+        <td>
+          ${rutasBus.length
+            ? `<select class="ruta-select" id="ruta-${b.id}" onchange="markDirty(${b.id})">
+                 <option value="">— Sin ruta —</option>
+                 ${rutaOptions}
+               </select>`
+            : `<span class="no-rutas-tip">Sin rutas Gr.${b.grupo}</span>`
+          }
+        </td>
+        <td><input  class="nov-input"   id="n-${b.id}"    type="text"
+                    value="${rec ? escHtml(rec.novedades) : ''}" placeholder="Sin novedades"
+                    oninput="markDirty(${b.id})" /></td>
+        <td><span class="estado-badge ${est}" id="est-${b.id}">${estLabel}</span></td>
+        <td><button class="btn-row-save" id="brs-${b.id}" onclick="saveRow(${b.id})">Guardar</button></td>
+      </tr>`;
+    }).join('');
+  }
+
+  /* ── MARCAR MODIFICADO ── */
+  function markDirty(busId) {
+    dirty.add(busId);
+    const est = document.getElementById(`est-${busId}`);
+    if (est) { est.className = 'estado-badge modificado'; est.textContent = 'Modificado'; }
+    document.querySelectorAll(`#row-${busId} .num-input, #row-${busId} .nov-input, #row-${busId} .ruta-select`)
+      .forEach(i => i.classList.add('touched'));
+  }
+
+  /* ── STATS ── */
+  function updateStats() {
+    const buses   = grupoFiltro === 'todos' ? allBuses : allBuses.filter(b => b.grupo === grupoFiltro);
+    const visible = buses.map(b => records[b.id]).filter(Boolean);
+    const conDatos   = Object.keys(records).length;
+    const vueltas    = visible.reduce((s, r) => s + (r.vueltas   || 0), 0);
+    const pasajeros  = visible.reduce((s, r) => s + (r.pasajeros || 0), 0);
+    const conRuta    = visible.filter(r => r.ruta_id).length;
+
+    document.getElementById('statConDatos').textContent  = conDatos;
+    document.getElementById('statVueltas').textContent   = vueltas.toLocaleString();
+    document.getElementById('statPasajeros').textContent = pasajeros.toLocaleString();
+    document.getElementById('statConRuta').textContent   = conRuta;
+
+    const total = allBuses.length;
+    const pct   = total > 0 ? (conDatos / total) * 100 : 0;
+    document.getElementById('progressBar').style.width   = `${pct}%`;
+    document.getElementById('progressText').textContent  = `${conDatos} de ${total} buses con datos para esta fecha`;
+  }
+
+  /* ── GUARDAR FILA ── */
+  async function saveRow(busId) {
+    const fecha   = document.getElementById('datePicker').value;
+    const vueltas = parseInt(document.getElementById(`v-${busId}`).value)   || 0;
+    const pax     = parseInt(document.getElementById(`p-${busId}`).value)   || 0;
+    const rutaEl  = document.getElementById(`ruta-${busId}`);
+    const rutaId  = rutaEl ? (parseInt(rutaEl.value) || null) : null;
+    const nov     = document.getElementById(`n-${busId}`).value.trim();
+
+    const btn = document.getElementById(`brs-${busId}`);
+    btn.textContent = '…'; btn.disabled = true;
+
+    try {
+      await fetch(`${API}/movilidad/batch`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fecha,
+          usuario_id: currentUser?.id,
+          registros: [{ bus_id: busId, vueltas, pasajeros: pax, ruta_id: rutaId, novedades: nov }],
+        }),
+      });
+
+      records[busId] = { bus_id: busId, vueltas, pasajeros: pax, ruta_id: rutaId, novedades: nov };
+      dirty.delete(busId);
+
+      const row = document.getElementById(`row-${busId}`);
+      if (row) row.classList.add('has-data');
+      const est = document.getElementById(`est-${busId}`);
+      if (est) { est.className = 'estado-badge guardado'; est.textContent = 'Guardado'; }
+
+      document.querySelectorAll(`#row-${busId} .num-input, #row-${busId} .nov-input, #row-${busId} .ruta-select`)
+        .forEach(i => i.classList.remove('touched'));
+
+      updateStats();
+      flashSaved();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      btn.textContent = 'Guardar'; btn.disabled = false;
+    }
+  }
+
+  /* ── GUARDAR TODO ── */
+  async function saveAll() {
+    const fecha  = document.getElementById('datePicker').value;
+    const btn    = document.getElementById('btnSaveAll');
+    btn.disabled = true; btn.textContent = 'Guardando…';
+
+    const buses = grupoFiltro === 'todos' ? allBuses : allBuses.filter(b => b.grupo === grupoFiltro);
+    const registros = buses.map(b => {
+      const rutaEl = document.getElementById(`ruta-${b.id}`);
+      return {
+        bus_id:    b.id,
+        vueltas:   parseInt(document.getElementById(`v-${b.id}`)?.value)  || 0,
+        pasajeros: parseInt(document.getElementById(`p-${b.id}`)?.value)  || 0,
+        ruta_id:   rutaEl ? (parseInt(rutaEl.value) || null) : null,
+        novedades: document.getElementById(`n-${b.id}`)?.value.trim() || '',
+      };
+    }).filter(r => r.vueltas > 0 || r.pasajeros > 0 || r.ruta_id || r.novedades);
+
+    if (!registros.length) {
+      btn.disabled = false; btn.textContent = 'Guardar Todo';
+      return;
+    }
+
+    try {
+      await fetch(`${API}/movilidad/batch`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fecha, usuario_id: currentUser?.id, registros }),
+      });
+
+      registros.forEach(r => {
+        records[r.bus_id] = r;
+        dirty.delete(r.bus_id);
+        const row = document.getElementById(`row-${r.bus_id}`);
+        if (row) row.classList.add('has-data');
+        const est = document.getElementById(`est-${r.bus_id}`);
+        if (est) { est.className = 'estado-badge guardado'; est.textContent = 'Guardado'; }
+        document.querySelectorAll(`#row-${r.bus_id} .num-input, #row-${r.bus_id} .nov-input, #row-${r.bus_id} .ruta-select`)
+          .forEach(i => i.classList.remove('touched'));
+      });
+
+      updateStats();
+      flashSaved();
+    } catch (e) { console.error(e); }
+    finally { btn.disabled = false; btn.textContent = 'Guardar Todo'; }
+  }
+
+  function flashSaved() {
+    const t = document.getElementById('savedToast');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2500);
+  }
+
+  window.addEventListener('message', e => {
+    if (e.data?.type === 'REFRESH_ROUTES') { loadRutas().then(() => renderTable()); }
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,1175 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>La Milagrosa — Dashboard Admin</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f4f4f6;
+      color: #111;
+      min-height: 100vh;
+    }
+
+    /* ─── NAVBAR ─── */
+    .navbar {
+      background: #111;
+      display: flex;
+      align-items: center;
+      padding: 0 28px;
+      height: 60px;
+      gap: 0;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .navbar-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-right: 40px;
+      text-decoration: none;
+    }
+
+    .logo-icon {
+      width: 34px;
+      height: 34px;
+      background: #fff;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .logo-icon svg { width: 20px; height: 20px; }
+
+    .navbar-logo span {
+      color: #fff;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.3px;
+    }
+
+    .navbar-nav {
+      display: flex;
+      gap: 4px;
+      flex: 1;
+    }
+
+    .navbar-nav a {
+      color: #aaa;
+      text-decoration: none;
+      font-size: 14px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      transition: all 0.18s;
+    }
+
+    .navbar-nav a:hover { color: #fff; }
+
+    .navbar-nav a.active {
+      background: #fff;
+      color: #111;
+      font-weight: 500;
+    }
+
+    .navbar-right {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .nav-icon-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #aaa;
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s;
+      position: relative;
+    }
+
+    .nav-icon-btn:hover { background: #222; color: #fff; }
+
+    .notif-dot {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      width: 7px;
+      height: 7px;
+      background: #f87171;
+      border-radius: 50%;
+      border: 1.5px solid #111;
+    }
+
+    .user-profile {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 10px;
+      transition: background 0.15s;
+    }
+
+    .user-profile:hover { background: #222; }
+
+    .user-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #6366f1, #8b5cf6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .user-info { line-height: 1.2; }
+    .user-info .uname { color: #fff; font-size: 13px; font-weight: 500; }
+    .user-info .urole { color: #777; font-size: 11px; }
+
+    /* ─── MAIN LAYOUT ─── */
+    .main {
+      padding: 24px 28px;
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;
+      gap: 20px;
+      max-width: 1440px;
+      margin: 0 auto;
+    }
+
+    /* ─── HEADER ROW ─── */
+    .header-row {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+    }
+
+    .greeting-small {
+      font-size: 14px;
+      color: #666;
+      margin-bottom: 2px;
+    }
+
+    .greeting-big {
+      font-size: 32px;
+      font-weight: 700;
+      letter-spacing: -1px;
+      color: #111;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .btn-outline {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border: 1.5px solid #ddd;
+      border-radius: 20px;
+      background: #fff;
+      font-size: 13px;
+      cursor: pointer;
+      color: #333;
+      font-weight: 500;
+      transition: border-color 0.15s;
+    }
+
+    .btn-outline:hover { border-color: #aaa; }
+
+    .btn-primary {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 18px;
+      border: none;
+      border-radius: 20px;
+      background: #111;
+      font-size: 13px;
+      cursor: pointer;
+      color: #fff;
+      font-weight: 500;
+      transition: background 0.15s;
+    }
+
+    .btn-primary:hover { background: #333; }
+
+    /* ─── KPI CARDS ─── */
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+    }
+
+    .kpi-card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 18px 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+
+    .kpi-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      background: #f4f4f6;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .kpi-body { flex: 1; }
+
+    .kpi-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: #111;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      line-height: 1;
+      margin-bottom: 3px;
+    }
+
+    .kpi-badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 6px;
+    }
+
+    .kpi-badge.up { color: #16a34a; background: #dcfce7; }
+    .kpi-badge.down { color: #dc2626; background: #fee2e2; }
+
+    .kpi-label { font-size: 12px; color: #888; }
+
+    /* ─── CONTENT GRID ─── */
+    .content-grid {
+      display: grid;
+      grid-template-columns: 1fr 300px 280px;
+      gap: 16px;
+    }
+
+    /* ─── CARD BASE ─── */
+    .card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 4px;
+    }
+
+    .card-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #111;
+    }
+
+    .card-sub {
+      font-size: 11px;
+      color: #aaa;
+      margin-top: 2px;
+    }
+
+    .card-menu {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #bbb;
+      font-size: 18px;
+      line-height: 1;
+      padding: 0 4px;
+    }
+
+    /* ─── CHART CARD ─── */
+    .chart-card { }
+
+    .chart-legend {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px;
+      color: #666;
+    }
+
+    .legend-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+
+    .chart-filter {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .filter-select {
+      border: 1.5px solid #eee;
+      border-radius: 10px;
+      padding: 4px 10px;
+      font-size: 12px;
+      color: #333;
+      background: #fff;
+      cursor: pointer;
+      outline: none;
+    }
+
+    .chart-wrapper {
+      height: 220px;
+      position: relative;
+    }
+
+    /* ─── ANALYTIC CARD ─── */
+    .analytic-card {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .gauge-wrapper {
+      position: relative;
+      height: 130px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .gauge-canvas { width: 200px !important; height: 130px !important; }
+
+    .gauge-center {
+      position: absolute;
+      text-align: center;
+      bottom: 8px;
+    }
+
+    .gauge-value { font-size: 20px; font-weight: 700; color: #111; line-height: 1; }
+    .gauge-change { font-size: 11px; color: #16a34a; margin-top: 2px; }
+
+    /* ─── VEHICLES CARD ─── */
+    .vehicles-card { }
+
+    .vehicles-big {
+      font-size: 36px;
+      font-weight: 700;
+      color: #111;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 10px 0 2px;
+    }
+
+    .vehicles-sub { font-size: 11px; color: #aaa; margin-bottom: 12px; }
+
+    .vehicle-illustration {
+      width: 100%;
+      height: 90px;
+      background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .vehicle-svg { width: 160px; }
+
+    .on-route-badge {
+      position: absolute;
+      bottom: 10px;
+      left: 12px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #111;
+    }
+
+    .on-route-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #22c55e;
+      box-shadow: 0 0 0 3px rgba(34,197,94,.2);
+    }
+
+    /* ─── TRACKING CARD ─── */
+    .tracking-card { }
+
+    .map-placeholder {
+      width: 100%;
+      height: 110px;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #e2e8f0;
+      margin-bottom: 14px;
+      position: relative;
+    }
+
+    .map-svg { width: 100%; height: 100%; }
+
+    .tracking-id-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .tracking-label { font-size: 11px; color: #aaa; margin-bottom: 2px; }
+    .tracking-id { font-size: 13px; font-weight: 600; color: #111; }
+
+    .status-badge {
+      padding: 4px 10px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .status-badge.in-transit { background: #dbeafe; color: #1d4ed8; }
+    .status-badge.delivered { background: #dcfce7; color: #16a34a; }
+    .status-badge.pending { background: #fef3c7; color: #d97706; }
+
+    .timeline { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+
+    .timeline-item {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      position: relative;
+    }
+
+    .timeline-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-top: 4px;
+      flex-shrink: 0;
+    }
+
+    .timeline-dot.green { background: #22c55e; }
+    .timeline-dot.orange { background: #f97316; }
+    .timeline-dot.gray { background: #d1d5db; }
+
+    .timeline-content { flex: 1; }
+    .timeline-date { font-size: 11px; color: #aaa; }
+    .timeline-event { font-size: 12px; color: #333; font-weight: 500; }
+    .timeline-time { font-size: 11px; color: #aaa; }
+
+    .courier-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px;
+      background: #f8f8f8;
+      border-radius: 10px;
+    }
+
+    .courier-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #f59e0b, #ef4444);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .courier-label { font-size: 10px; color: #aaa; }
+    .courier-name { font-size: 12px; font-weight: 600; color: #111; }
+
+    .courier-actions { margin-left: auto; display: flex; gap: 6px; }
+
+    .action-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: #fff;
+      border: 1.5px solid #eee;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #666;
+      transition: border-color 0.15s;
+    }
+
+    .action-btn:hover { border-color: #aaa; }
+
+    /* ─── TABLE SECTION ─── */
+    .table-section {
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+      overflow: hidden;
+    }
+
+    .table-header {
+      padding: 18px 20px 0;
+    }
+
+    .table-title { font-size: 14px; font-weight: 600; color: #111; }
+    .table-sub { font-size: 11px; color: #aaa; margin-top: 2px; margin-bottom: 14px; }
+
+    .table-tabs {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .tab-btn {
+      padding: 6px 14px;
+      border-radius: 20px;
+      border: none;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+      background: transparent;
+      color: #888;
+    }
+
+    .tab-btn:hover { background: #f4f4f6; color: #333; }
+
+    .tab-btn.active {
+      background: #111;
+      color: #fff;
+    }
+
+    .tab-right {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #888;
+      font-size: 12px;
+    }
+
+    .tab-right button {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #aaa;
+      padding: 4px;
+      border-radius: 6px;
+      transition: background 0.15s;
+    }
+
+    .tab-right button:hover { background: #f4f4f6; color: #333; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    thead th {
+      padding: 10px 20px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 600;
+      color: #aaa;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      background: #fafafa;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    thead th .sort-icon { margin-left: 4px; opacity: 0.5; }
+
+    tbody tr {
+      border-bottom: 1px solid #f6f6f6;
+      transition: background 0.12s;
+    }
+
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: #fafafa; }
+
+    tbody td {
+      padding: 12px 20px;
+      font-size: 13px;
+      color: #333;
+    }
+
+    .order-id { font-weight: 600; color: #111; font-size: 12px; }
+    .category-chip {
+      display: inline-flex;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 500;
+      background: #f4f4f6;
+      color: #555;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .status-pill.delivered { background: #dcfce7; color: #16a34a; }
+    .status-pill.in-transit { background: #dbeafe; color: #1d4ed8; }
+    .status-pill.pending { background: #fef3c7; color: #d97706; }
+    .status-pill.processing { background: #f3e8ff; color: #7c3aed; }
+
+    .status-pill::before {
+      content: '';
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .row-menu {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #ccc;
+      font-size: 16px;
+    }
+
+    .row-menu:hover { color: #666; }
+  </style>
+</head>
+<body>
+
+  <!-- NAVBAR -->
+  <nav class="navbar">
+    <a class="navbar-logo" href="#">
+      <div class="logo-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2.2" stroke-linecap="round">
+          <rect x="1" y="3" width="15" height="13" rx="2"/>
+          <path d="M16 8h4l3 5v5h-7V8z"/>
+          <circle cx="5.5" cy="18.5" r="2.5"/>
+          <circle cx="18.5" cy="18.5" r="2.5"/>
+        </svg>
+      </div>
+      <span>La Milagrosa</span>
+    </a>
+
+    <nav class="navbar-nav">
+      <a href="#" class="active">Resumen</a>
+      <a href="#">Envíos</a>
+      <a href="#">Rastreo</a>
+      <a href="#">Análisis</a>
+      <a href="#">Historial</a>
+    </nav>
+
+    <div class="navbar-right">
+      <button class="nav-icon-btn" title="Buscar">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      </button>
+      <button class="nav-icon-btn" title="Notificaciones">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <span class="notif-dot"></span>
+      </button>
+      <div class="user-profile">
+        <div class="user-avatar">MA</div>
+        <div class="user-info">
+          <div class="uname">Marco Admin</div>
+          <div class="urole">Head Admin</div>
+        </div>
+        <svg width="12" height="12" fill="none" stroke="#777" stroke-width="2" viewBox="0 0 24 24" style="margin-left:2px"><path d="m6 9 6 6 6-6"/></svg>
+      </div>
+    </div>
+  </nav>
+
+  <!-- MAIN CONTENT -->
+  <div class="main">
+
+    <!-- HEADER ROW -->
+    <div class="header-row">
+      <div>
+        <div class="greeting-small">Hola Marco,</div>
+        <div class="greeting-big">Buenos Días</div>
+      </div>
+      <div class="header-actions">
+        <button class="btn-outline">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          Abr 2026
+          <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <button class="btn-outline">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Exportar CSV
+        </button>
+        <button class="btn-primary">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Nuevo Envío
+        </button>
+      </div>
+    </div>
+
+    <!-- KPI CARDS -->
+    <div class="kpi-row">
+      <div class="kpi-card">
+        <div class="kpi-icon">
+          <svg width="20" height="20" fill="none" stroke="#555" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        </div>
+        <div class="kpi-body">
+          <div class="kpi-value">
+            172
+            <span class="kpi-badge up">+1.92% ↗</span>
+          </div>
+          <div class="kpi-label">Total Envíos</div>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon">
+          <svg width="20" height="20" fill="none" stroke="#555" stroke-width="2" viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="2"/><path d="M16 8h4l3 5v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+        </div>
+        <div class="kpi-body">
+          <div class="kpi-value">
+            42
+            <span class="kpi-badge up">+1.89% ↗</span>
+          </div>
+          <div class="kpi-label">Paquetes Pendientes</div>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-icon">
+          <svg width="20" height="20" fill="none" stroke="#555" stroke-width="2" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        </div>
+        <div class="kpi-body">
+          <div class="kpi-value">
+            16
+            <span class="kpi-badge down">-0.98% ↘</span>
+          </div>
+          <div class="kpi-label">Entregas Completadas</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONTENT GRID -->
+    <div class="content-grid">
+
+      <!-- LEFT: CHART -->
+      <div class="card chart-card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Estadísticas de Envíos</div>
+            <div class="card-sub">Total de entregas: 72.8K</div>
+          </div>
+          <div class="chart-filter" style="display:flex;align-items:center;gap:10px;">
+            <div class="chart-legend">
+              <div class="legend-item">
+                <div class="legend-dot" style="background:#111"></div>
+                Envío
+              </div>
+              <div class="legend-item">
+                <div class="legend-dot" style="background:#c7d2fe"></div>
+                Entrega
+              </div>
+            </div>
+            <select class="filter-select">
+              <option>Diario</option>
+              <option>Semanal</option>
+              <option>Mensual</option>
+            </select>
+          </div>
+        </div>
+        <div class="chart-wrapper">
+          <canvas id="barChart"></canvas>
+        </div>
+      </div>
+
+      <!-- CENTER COLUMN -->
+      <div style="display:flex;flex-direction:column;gap:14px;">
+
+        <!-- ANALYTICS -->
+        <div class="card analytic-card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Vista Analítica</div>
+              <div class="card-sub">Resumen de ingresos totales</div>
+            </div>
+            <button class="card-menu">···</button>
+          </div>
+          <div class="gauge-wrapper">
+            <canvas id="gaugeChart" class="gauge-canvas"></canvas>
+            <div class="gauge-center">
+              <div class="gauge-value">$272,980</div>
+              <div class="gauge-change">+2.52% ↗ vs semana pasada</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- VEHICLES -->
+        <div class="card vehicles-card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Unidades en Ruta</div>
+              <div class="card-sub">Vehículos operando actualmente</div>
+            </div>
+            <button class="card-menu">···</button>
+          </div>
+          <div class="vehicles-big">
+            89
+            <span style="font-size:13px;color:#aaa;font-weight:400">unidades</span>
+            <span class="kpi-badge up" style="font-size:11px;padding:3px 7px;">+2.29% ↗</span>
+          </div>
+          <div class="vehicles-sub">vs semana pasada</div>
+          <div class="vehicle-illustration">
+            <svg class="vehicle-svg" viewBox="0 0 200 70" fill="none">
+              <!-- Truck body -->
+              <rect x="10" y="25" width="100" height="32" rx="4" fill="#d1d5db"/>
+              <rect x="110" y="15" width="60" height="42" rx="4" fill="#9ca3af"/>
+              <rect x="113" y="19" width="30" height="20" rx="3" fill="#dbeafe"/>
+              <!-- Wheels -->
+              <circle cx="35" cy="60" r="9" fill="#374151"/>
+              <circle cx="35" cy="60" r="5" fill="#6b7280"/>
+              <circle cx="90" cy="60" r="9" fill="#374151"/>
+              <circle cx="90" cy="60" r="5" fill="#6b7280"/>
+              <circle cx="145" cy="60" r="9" fill="#374151"/>
+              <circle cx="145" cy="60" r="5" fill="#6b7280"/>
+              <!-- Road lines -->
+              <line x1="0" y1="70" x2="200" y2="70" stroke="#e5e7eb" stroke-width="1"/>
+              <line x1="0" y1="66" x2="200" y2="66" stroke="#e5e7eb" stroke-width="0.5" stroke-dasharray="10,8"/>
+            </svg>
+            <div class="on-route-badge">
+              <div class="on-route-dot"></div>
+              En Ruta
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- RIGHT: TRACKING -->
+      <div class="card tracking-card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Rastreo de Entrega</div>
+            <div class="card-sub">Último historial visto</div>
+          </div>
+          <button class="card-menu">···</button>
+        </div>
+
+        <!-- Map placeholder -->
+        <div class="map-placeholder">
+          <svg class="map-svg" viewBox="0 0 280 110" fill="none">
+            <rect width="280" height="110" fill="#e2e8f0"/>
+            <!-- Roads -->
+            <line x1="0" y1="55" x2="280" y2="55" stroke="#cbd5e1" stroke-width="4"/>
+            <line x1="100" y1="0" x2="100" y2="110" stroke="#cbd5e1" stroke-width="4"/>
+            <line x1="190" y1="0" x2="190" y2="110" stroke="#cbd5e1" stroke-width="3"/>
+            <line x1="0" y1="30" x2="280" y2="30" stroke="#e2e8f0" stroke-width="2"/>
+            <line x1="0" y1="80" x2="280" y2="80" stroke="#e2e8f0" stroke-width="2"/>
+            <!-- Blocks -->
+            <rect x="20" y="10" width="60" height="15" rx="2" fill="#cbd5e1" opacity="0.5"/>
+            <rect x="20" y="65" width="60" height="10" rx="2" fill="#cbd5e1" opacity="0.5"/>
+            <rect x="110" y="10" width="70" height="15" rx="2" fill="#cbd5e1" opacity="0.5"/>
+            <rect x="110" y="65" width="70" height="10" rx="2" fill="#cbd5e1" opacity="0.5"/>
+            <rect x="200" y="10" width="60" height="15" rx="2" fill="#cbd5e1" opacity="0.5"/>
+            <rect x="200" y="65" width="60" height="10" rx="2" fill="#cbd5e1" opacity="0.5"/>
+            <!-- Route line -->
+            <polyline points="40,55 100,30 190,55 240,40" stroke="#6366f1" stroke-width="2.5" stroke-dasharray="5,3" stroke-linecap="round"/>
+            <!-- Pin -->
+            <circle cx="190" cy="55" r="7" fill="#ef4444"/>
+            <circle cx="190" cy="55" r="3" fill="#fff"/>
+            <!-- Location label -->
+            <rect x="155" y="38" width="48" height="13" rx="4" fill="#fff" opacity="0.9"/>
+            <text x="179" y="48" fill="#333" font-size="7" text-anchor="middle" font-family="sans-serif">La Milagrosa</text>
+          </svg>
+        </div>
+
+        <div class="tracking-id-row">
+          <div>
+            <div class="tracking-label">Tracking ID</div>
+            <div class="tracking-id">#172989-72-727bjk</div>
+          </div>
+          <span class="status-badge in-transit">En tránsito</span>
+        </div>
+
+        <div class="timeline">
+          <div class="timeline-item">
+            <div class="timeline-dot green"></div>
+            <div class="timeline-content">
+              <div class="timeline-date">11 Abr 2026</div>
+              <div class="timeline-event">Verificación</div>
+            </div>
+            <div class="timeline-time">10:23 AM</div>
+          </div>
+          <div class="timeline-item">
+            <div class="timeline-dot orange"></div>
+            <div class="timeline-content">
+              <div class="timeline-date">12 Abr 2026</div>
+              <div class="timeline-event">En tránsito</div>
+            </div>
+            <div class="timeline-time">10:23 AM</div>
+          </div>
+          <div class="timeline-item">
+            <div class="timeline-dot gray"></div>
+            <div class="timeline-content">
+              <div class="timeline-date">13 Abr 2026</div>
+              <div class="timeline-event">Entregado</div>
+            </div>
+            <div class="timeline-time">—</div>
+          </div>
+        </div>
+
+        <div class="courier-row">
+          <div class="courier-avatar">CR</div>
+          <div>
+            <div class="courier-label">Conductor</div>
+            <div class="courier-name">Carlos Rodríguez</div>
+          </div>
+          <div class="courier-actions">
+            <button class="action-btn" title="Mensaje">
+              <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            </button>
+            <button class="action-btn" title="Llamar">
+              <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.58 3.44 2 2 0 0 1 3.55 1.26h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.8a16 16 0 0 0 6 6l.9-1.05a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ACTIVITY TABLE -->
+    <div class="table-section">
+      <div class="table-header">
+        <div class="table-title">Actividad de Envíos</div>
+        <div class="table-sub">Seguimiento de actividad reciente</div>
+        <div class="table-tabs">
+          <button class="tab-btn active">Todos los Envíos</button>
+          <button class="tab-btn">Entregado</button>
+          <button class="tab-btn">En Tránsito</button>
+          <button class="tab-btn">Pendiente</button>
+          <button class="tab-btn">Procesando</button>
+          <div class="tab-right">
+            <button>
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="12" y1="18" x2="12" y2="18"/></svg>
+            </button>
+            <span>1–10 de 60</span>
+            <button>
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
+            </button>
+            <button>
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Order ID <span class="sort-icon">↕</span></th>
+            <th>Categoría <span class="sort-icon">↕</span></th>
+            <th>Empresa <span class="sort-icon">↕</span></th>
+            <th>Llegada <span class="sort-icon">↕</span></th>
+            <th>Ruta <span class="sort-icon">↕</span></th>
+            <th>Precio <span class="sort-icon">↕</span></th>
+            <th>Estado <span class="sort-icon">↕</span></th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="order-id">#LM-00124</span></td>
+            <td><span class="category-chip">Electrónica</span></td>
+            <td>Fextron Co.</td>
+            <td>24 Abr 2026</td>
+            <td>CDMX → Puebla</td>
+            <td>$5,872.90</td>
+            <td><span class="status-pill delivered">Entregado</span></td>
+            <td><button class="row-menu">···</button></td>
+          </tr>
+          <tr>
+            <td><span class="order-id">#LM-00125</span></td>
+            <td><span class="category-chip">Alimentos</span></td>
+            <td>Distribuciones RM</td>
+            <td>25 Abr 2026</td>
+            <td>Guadalajara → León</td>
+            <td>$3,200.00</td>
+            <td><span class="status-pill in-transit">En Tránsito</span></td>
+            <td><button class="row-menu">···</button></td>
+          </tr>
+          <tr>
+            <td><span class="order-id">#LM-00126</span></td>
+            <td><span class="category-chip">Farmacéutico</span></td>
+            <td>MedSupply SA</td>
+            <td>26 Abr 2026</td>
+            <td>MTY → Saltillo</td>
+            <td>$8,450.50</td>
+            <td><span class="status-pill pending">Pendiente</span></td>
+            <td><button class="row-menu">···</button></td>
+          </tr>
+          <tr>
+            <td><span class="order-id">#LM-00127</span></td>
+            <td><span class="category-chip">Textil</span></td>
+            <td>Moda Express</td>
+            <td>27 Abr 2026</td>
+            <td>CDMX → Veracruz</td>
+            <td>$2,100.00</td>
+            <td><span class="status-pill processing">Procesando</span></td>
+            <td><button class="row-menu">···</button></td>
+          </tr>
+          <tr>
+            <td><span class="order-id">#LM-00128</span></td>
+            <td><span class="category-chip">Maquinaria</span></td>
+            <td>Industrias Norte</td>
+            <td>28 Abr 2026</td>
+            <td>Querétaro → Bajío</td>
+            <td>$14,300.00</td>
+            <td><span class="status-pill delivered">Entregado</span></td>
+            <td><button class="row-menu">···</button></td>
+          </tr>
+          <tr>
+            <td><span class="order-id">#LM-00129</span></td>
+            <td><span class="category-chip">Electrónica</span></td>
+            <td>TechLogic SA</td>
+            <td>29 Abr 2026</td>
+            <td>Tijuana → Ensenada</td>
+            <td>$6,780.25</td>
+            <td><span class="status-pill in-transit">En Tránsito</span></td>
+            <td><button class="row-menu">···</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div><!-- /main -->
+
+  <script>
+    // ─── BAR CHART ───
+    const barCtx = document.getElementById('barChart').getContext('2d');
+    new Chart(barCtx, {
+      type: 'bar',
+      data: {
+        labels: ['10','11','12','13','14','15','16','17','18','19'],
+        datasets: [
+          {
+            label: 'Envío',
+            data: [48, 58, 42, 38, 20, 48, 52, 35, 58, 55],
+            backgroundColor: '#111',
+            borderRadius: 4,
+            borderSkipped: false,
+            barPercentage: 0.45,
+            categoryPercentage: 0.7
+          },
+          {
+            label: 'Entrega',
+            data: [32, 40, 30, 28, 12, 34, 38, 24, 40, 38],
+            backgroundColor: '#c7d2fe',
+            borderRadius: 4,
+            borderSkipped: false,
+            barPercentage: 0.45,
+            categoryPercentage: 0.7
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: '#111',
+            titleColor: '#fff',
+            bodyColor: '#aaa',
+            padding: 10,
+            cornerRadius: 8
+          }
+        },
+        scales: {
+          x: {
+            grid: { display: false },
+            border: { display: false },
+            ticks: { color: '#aaa', font: { size: 11 } }
+          },
+          y: {
+            grid: { color: '#f0f0f0', drawTicks: false },
+            border: { display: false, dash: [4,4] },
+            ticks: {
+              color: '#aaa',
+              font: { size: 11 },
+              callback: v => v + '%',
+              stepSize: 10
+            },
+            max: 70,
+            min: 0
+          }
+        }
+      }
+    });
+
+    // ─── GAUGE / DONUT CHART ───
+    const gaugeCtx = document.getElementById('gaugeChart').getContext('2d');
+    new Chart(gaugeCtx, {
+      type: 'doughnut',
+      data: {
+        datasets: [{
+          data: [72, 28],
+          backgroundColor: ['#111', '#e5e7eb'],
+          borderWidth: 0,
+          circumference: 240,
+          rotation: -120
+        }]
+      },
+      options: {
+        responsive: false,
+        cutout: '72%',
+        plugins: {
+          legend: { display: false },
+          tooltip: { enabled: false }
+        },
+        animation: { animateRotate: true, duration: 900 }
+      }
+    });
+
+    // ─── TAB SWITCHING ───
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+  </script>
+</body>
+</html>
