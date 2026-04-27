@@ -880,6 +880,14 @@
     .hbt-item { text-align: right; }
     .hbt-val  { font-size: 16px; font-weight: 700; color: #111; }
     .hbt-lbl  { font-size: 10px; color: #aaa; }
+
+    @media (max-width: 768px) {
+      html, body { overflow: auto; height: auto; }
+      .buses-grid { grid-template-columns: 1fr; }
+      .navbar { padding: 12px 16px; }
+      .page-header { padding: 16px; flex-direction: column; align-items: flex-start; gap: 10px; }
+      .buses-container { padding: 12px 16px; }
+    }
   </style>
 </head>
 <body>

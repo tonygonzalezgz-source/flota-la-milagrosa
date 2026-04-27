@@ -551,6 +551,12 @@
     .records-list::-webkit-scrollbar-thumb { background: #2a2a2a; border-radius: 4px; }
     .half-btm::-webkit-scrollbar { width: 4px; }
     .half-btm::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
+
+    @media (max-width: 768px) {
+      html, body { overflow: auto; height: auto; }
+      .split-wrap { display: block; height: auto; }
+      .half-top, .half-btm { height: auto; min-height: 50vh; overflow: visible; }
+    }
   </style>
 </head>
 <body>
