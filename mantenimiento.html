@@ -4,6 +4,16 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>La Milagrosa — Mantenimiento</title>
+  <script>
+    (function(){
+      document.addEventListener('contextmenu',function(e){e.preventDefault();});
+      document.addEventListener('keydown',function(e){
+        if(e.key==='F12'){e.preventDefault();return false;}
+        if(e.ctrlKey&&e.shiftKey&&['I','J','C','U'].includes(e.key.toUpperCase())){e.preventDefault();return false;}
+        if(e.ctrlKey&&e.key.toUpperCase()==='U'){e.preventDefault();return false;}
+      });
+    })();
+  </script>
   <style>
     /* ══════════════════════════════════════
        TOKENS & RESET
@@ -537,6 +547,10 @@
      API
   ═══════════════════════════════════════════ */
   const API_URL = (window.location.port === '3030') ? 'http://localhost:8001/api' : (window.location.origin + '/api');
+  function apiFetch(url, options = {}) {
+    const token = localStorage.getItem('authToken');
+    return fetch(url, { ...options, headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}), ...(options.headers || {}) } });
+  }
   let busesData       = [];  // [{id, numero, grupo, ...}]
   let tiposNovedadMap = {};  // clave → {id, label, color}
   const loadedFromDB  = new Set(); // buses cuyo estado ya se cargó de la DB
@@ -744,7 +758,7 @@
       if (busObj && novObj) {
         const userId = window.parent?.currentUser?.id ?? null;
         await Promise.all([
-          fetch(`${API_URL}/mantenimiento/estado`, {
+          apiFetch(`${API_URL}/mantenimiento/estado`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -753,7 +767,7 @@
               ultima_fecha: dateStr, ultima_obs: obs,
             }),
           }),
-          fetch(`${API_URL}/mantenimiento/registro`, {
+          apiFetch(`${API_URL}/mantenimiento/registro`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -905,7 +919,7 @@
     try {
       const busObj = busesData.find(b => b.numero === busNum);
       if (!busObj) return;
-      const res  = await fetch(`${API_URL}/mantenimiento/estado/${busObj.id}`);
+      const res  = await apiFetch(`${API_URL}/mantenimiento/estado/${busObj.id}`);
       const rows = await res.json();
       if (!rows.length) return;
 
@@ -931,8 +945,8 @@
   async function initAPI() {
     try {
       const [busRes, novRes] = await Promise.all([
-        fetch(`${API_URL}/buses`),
-        fetch(`${API_URL}/tipos-novedad`),
+        apiFetch(`${API_URL}/buses`),
+        apiFetch(`${API_URL}/tipos-novedad`),
       ]);
       busesData = await busRes.json();
       const tipos = await novRes.json();

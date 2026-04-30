@@ -6,15 +6,62 @@ Soporta SQLite (local) y PostgreSQL/Supabase (producción).
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 import os
-from datetime import date
+import time
+from datetime import date, timedelta
+from functools import wraps
 from dotenv import load_dotenv
+
+import jwt as _jwt
+from werkzeug.security import generate_password_hash, check_password_hash
 
 load_dotenv()  # carga variables desde .env si existe
 
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..")
 
+# Genera una clave secreta aleatoria si no está en el entorno (en prod se debe fijar en .env)
+SECRET_KEY = os.environ.get("SECRET_KEY") or os.urandom(32).hex()
+JWT_EXPIRY_HOURS = int(os.environ.get("JWT_EXPIRY_HOURS", "12"))
+
+# Rate limiting para el endpoint de login
+_login_attempts: dict = {}   # {ip: [timestamp, ...]}
+_LOGIN_MAX    = 10
+_LOGIN_WINDOW = 300  # segundos
+
+def _check_rate_limit(ip: str) -> bool:
+    """Devuelve True si la IP puede intentar login, False si fue bloqueada."""
+    now = time.time()
+    times = [t for t in _login_attempts.get(ip, []) if now - t < _LOGIN_WINDOW]
+    _login_attempts[ip] = times
+    if len(times) >= _LOGIN_MAX:
+        return False
+    _login_attempts[ip].append(now)
+    return True
+
 app = Flask(__name__, static_folder=None)
-CORS(app)
+
+# Orígenes permitidos: en producción ajustar ALLOWED_ORIGINS en las variables de entorno
+_allowed = os.environ.get("ALLOWED_ORIGINS", "*")
+CORS(app, origins=_allowed)
+
+
+# ── Decorador de autenticación JWT ──
+def require_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            return jsonify({"error": "No autorizado"}), 401
+        token = auth_header[7:]
+        try:
+            payload = _jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+            request.jwt_user_id  = payload.get("user_id")
+            request.jwt_user_rol = payload.get("rol")
+        except _jwt.ExpiredSignatureError:
+            return jsonify({"error": "Sesión expirada. Inicia sesión nuevamente."}), 401
+        except _jwt.InvalidTokenError:
+            return jsonify({"error": "Token inválido"}), 401
+        return f(*args, **kwargs)
+    return decorated
 
 
 # ── Servir frontend estático en producción ──
@@ -238,6 +285,10 @@ def migrate_db():
 
 @app.route("/api/login", methods=["POST"])
 def login():
+    ip = request.remote_addr or "unknown"
+    if not _check_rate_limit(ip):
+        return jsonify({"error": "Demasiados intentos. Espera 5 minutos."}), 429
+
     data = request.get_json(force=True)
     username = (data.get("username") or "").strip().lower()
     password = (data.get("password") or "").strip()
@@ -247,11 +298,28 @@ def login():
 
     db = get_db()
     user = db.execute(
-        "SELECT * FROM usuarios WHERE username = ? AND password = ? AND activo = 1",
-        (username, password),
+        "SELECT * FROM usuarios WHERE username = ? AND activo = 1",
+        (username,),
     ).fetchone()
 
     if not user:
+        db.close()
+        return jsonify({"error": "Usuario o contraseña incorrectos."}), 401
+
+    stored_pw = user["password"]
+    # Migración perezosa: si la contraseña no está hasheada, verificar en texto plano y hashear
+    if stored_pw.startswith("pbkdf2:") or stored_pw.startswith("scrypt:"):
+        valid = check_password_hash(stored_pw, password)
+    else:
+        valid = (stored_pw == password)
+        if valid:
+            # Hashear y guardar para la próxima vez
+            hashed = generate_password_hash(password, method='pbkdf2:sha256')
+            db.execute("UPDATE usuarios SET password = ? WHERE id = ?", (hashed, user["id"]))
+            db.commit()
+
+    if not valid:
+        db.close()
         return jsonify({"error": "Usuario o contraseña incorrectos."}), 401
 
     rol = user["rol"]
@@ -263,7 +331,17 @@ def login():
         bus_ids = [r["bus_id"] for r in rows]
 
     db.close()
+
+    # Generar token JWT
+    payload = {
+        "user_id": user["id"],
+        "rol":     rol,
+        "exp":     date.today() + timedelta(hours=JWT_EXPIRY_HOURS),
+    }
+    token = _jwt.encode(payload, SECRET_KEY, algorithm="HS256")
+
     return jsonify({
+        "token":        token,
         "id":           user["id"],
         "username":     user["username"],
         "nombre":       user["nombre"],
@@ -280,6 +358,7 @@ def login():
 # ──────────────────────────────────────────
 
 @app.route("/api/buses", methods=["GET"])
+@require_auth
 def get_buses():
     user_id = request.args.get("user_id", type=int)
     db = get_db()
@@ -303,6 +382,7 @@ def get_buses():
 
 
 @app.route("/api/buses/<int:bus_id>", methods=["GET"])
+@require_auth
 def get_bus(bus_id):
     db = get_db()
     row = db.execute("SELECT * FROM buses WHERE id = ?", (bus_id,)).fetchone()
@@ -313,6 +393,7 @@ def get_bus(bus_id):
 
 
 @app.route("/api/buses", methods=["POST"])
+@require_auth
 def create_bus():
     data = request.get_json(force=True)
     numero     = data.get("numero")
@@ -342,6 +423,7 @@ def create_bus():
 
 
 @app.route("/api/buses/<int:bus_id>", methods=["PUT"])
+@require_auth
 def update_bus(bus_id):
     data    = request.get_json(force=True)
     db      = get_db()
@@ -373,6 +455,7 @@ def update_bus(bus_id):
 
 
 @app.route("/api/buses/<int:bus_id>", methods=["DELETE"])
+@require_auth
 def delete_bus(bus_id):
     db = get_db()
     bus = db.execute("SELECT id FROM buses WHERE id = ?", (bus_id,)).fetchone()
@@ -400,6 +483,7 @@ def delete_bus(bus_id):
 # ──────────────────────────────────────────
 
 @app.route("/api/propietarios", methods=["GET"])
+@require_auth
 def get_propietarios():
     db = get_db()
     rows = db.execute(
@@ -416,6 +500,7 @@ def get_propietarios():
 
 
 @app.route("/api/propietarios", methods=["POST"])
+@require_auth
 def create_propietario():
     data = request.get_json(force=True)
     nombre = (data.get("nombre") or "").strip()
@@ -434,6 +519,7 @@ def create_propietario():
 
 
 @app.route("/api/propietarios/<int:prop_id>", methods=["PUT"])
+@require_auth
 def update_propietario(prop_id):
     data = request.get_json(force=True)
     db   = get_db()
@@ -452,6 +538,7 @@ def update_propietario(prop_id):
 
 
 @app.route("/api/propietarios/<int:prop_id>", methods=["DELETE"])
+@require_auth
 def delete_propietario(prop_id):
     db  = get_db()
     row = db.execute("SELECT id FROM propietarios WHERE id = ?", (prop_id,)).fetchone()
@@ -477,6 +564,7 @@ def delete_propietario(prop_id):
 # ──────────────────────────────────────────
 
 @app.route("/api/tarifas", methods=["GET"])
+@require_auth
 def get_tarifas():
     db   = get_db()
     rows = db.execute("SELECT * FROM tarifas ORDER BY id").fetchall()
@@ -485,6 +573,7 @@ def get_tarifas():
 
 
 @app.route("/api/tarifas/<int:tarifa_id>", methods=["PUT"])
+@require_auth
 def update_tarifa(tarifa_id):
     data  = request.get_json(force=True)
     db    = get_db()
@@ -507,6 +596,7 @@ def update_tarifa(tarifa_id):
 # ──────────────────────────────────────────
 
 @app.route("/api/rutas", methods=["GET"])
+@require_auth
 def get_rutas():
     db = get_db()
     rows = db.execute(
@@ -517,6 +607,7 @@ def get_rutas():
 
 
 @app.route("/api/rutas/all", methods=["GET"])
+@require_auth
 def get_rutas_all():
     db   = get_db()
     rows = db.execute("SELECT * FROM rutas ORDER BY grupo, id").fetchall()
@@ -525,6 +616,7 @@ def get_rutas_all():
 
 
 @app.route("/api/rutas", methods=["POST"])
+@require_auth
 def create_ruta():
     data   = request.get_json(force=True)
     nombre = (data.get("nombre") or "").strip()
@@ -544,6 +636,7 @@ def create_ruta():
 
 
 @app.route("/api/rutas/<int:ruta_id>", methods=["PUT"])
+@require_auth
 def update_ruta(ruta_id):
     data = request.get_json(force=True)
     db   = get_db()
@@ -563,6 +656,7 @@ def update_ruta(ruta_id):
 
 
 @app.route("/api/rutas/<int:ruta_id>", methods=["DELETE"])
+@require_auth
 def delete_ruta(ruta_id):
     db  = get_db()
     row = db.execute("SELECT id FROM rutas WHERE id = ?", (ruta_id,)).fetchone()
@@ -590,6 +684,7 @@ def delete_ruta(ruta_id):
 # ──────────────────────────────────────────
 
 @app.route("/api/tipos-novedad", methods=["GET"])
+@require_auth
 def get_tipos_novedad():
     db = get_db()
     rows = db.execute("SELECT * FROM tipos_novedad ORDER BY orden").fetchall()
@@ -602,6 +697,7 @@ def get_tipos_novedad():
 # ──────────────────────────────────────────
 
 @app.route("/api/pasajeros", methods=["POST"])
+@require_auth
 def create_pasajeros():
     data = request.get_json(force=True)
     bus_id     = data.get("bus_id")
@@ -624,6 +720,7 @@ def create_pasajeros():
 
 
 @app.route("/api/pasajeros", methods=["GET"])
+@require_auth
 def get_pasajeros():
     fecha = request.args.get("fecha", date.today().isoformat())
     db = get_db()
@@ -647,6 +744,7 @@ def get_pasajeros():
 
 
 @app.route("/api/pasajeros/stats", methods=["GET"])
+@require_auth
 def pasajeros_stats():
     """Totales por ruta para la fecha dada (default: hoy)."""
     fecha = request.args.get("fecha", date.today().isoformat())
@@ -671,6 +769,7 @@ def pasajeros_stats():
 # ──────────────────────────────────────────
 
 @app.route("/api/mantenimiento/estado/<int:bus_id>", methods=["GET"])
+@require_auth
 def get_maint_estado(bus_id):
     db = get_db()
     rows = db.execute(
@@ -687,6 +786,7 @@ def get_maint_estado(bus_id):
 
 
 @app.route("/api/mantenimiento/estado", methods=["PUT"])
+@require_auth
 def update_maint_estado():
     data = request.get_json(force=True)
     bus_id          = data.get("bus_id")
@@ -720,6 +820,7 @@ def update_maint_estado():
 
 
 @app.route("/api/mantenimiento/registro", methods=["POST"])
+@require_auth
 def create_maint_registro():
     data = request.get_json(force=True)
     bus_id          = data.get("bus_id")
@@ -742,6 +843,7 @@ def create_maint_registro():
 
 
 @app.route("/api/mantenimiento/registros", methods=["GET"])
+@require_auth
 def get_maint_registros():
     """Últimos N registros de mantenimiento (log histórico)."""
     limite = int(request.args.get("limite", 50))
@@ -770,6 +872,7 @@ def get_maint_registros():
 # ──────────────────────────────────────────
 
 @app.route("/api/dashboard/propietario", methods=["GET"])
+@require_auth
 def dashboard_propietario():
     today = date.today().isoformat()
     user_id = request.args.get("user_id", type=int)
@@ -854,6 +957,7 @@ def _bus_ids_for_user(db, user_id):
 
 
 @app.route("/api/movilidad", methods=["GET"])
+@require_auth
 def get_movilidad():
     fecha            = request.args.get("fecha", date.today().isoformat())
     user_id          = request.args.get("user_id", type=int)
@@ -890,6 +994,7 @@ def get_movilidad():
 
 
 @app.route("/api/movilidad/rango", methods=["GET"])
+@require_auth
 def get_movilidad_rango():
     desde            = request.args.get("desde", date.today().isoformat())
     hasta            = request.args.get("hasta", date.today().isoformat())
@@ -923,6 +1028,7 @@ def get_movilidad_rango():
 
 
 @app.route("/api/movilidad/batch", methods=["PUT"])
+@require_auth
 def batch_upsert_movilidad():
     data       = request.get_json(force=True)
     fecha      = data.get("fecha")
@@ -961,6 +1067,7 @@ def batch_upsert_movilidad():
 
 
 @app.route("/api/movilidad/fechas", methods=["GET"])
+@require_auth
 def get_movilidad_fechas():
     """Fechas que tienen al menos un registro (para resaltar el calendario)."""
     user_id = request.args.get("user_id", type=int)
@@ -988,6 +1095,7 @@ def get_movilidad_fechas():
 # ──────────────────────────────────────────
 
 @app.route("/api/admin/usuarios", methods=["GET"])
+@require_auth
 def admin_get_usuarios():
     db = get_db()
     rows = db.execute(
@@ -1003,6 +1111,7 @@ def admin_get_usuarios():
 
 
 @app.route("/api/admin/usuarios", methods=["POST"])
+@require_auth
 def admin_create_usuario():
     data     = request.get_json(force=True)
     nombre   = (data.get("nombre") or "").strip()
@@ -1015,11 +1124,12 @@ def admin_create_usuario():
     if not all([nombre, username, password]):
         return jsonify({"error": "Nombre, usuario y contraseña son requeridos"}), 400
 
+    hashed_pw = generate_password_hash(password, method='pbkdf2:sha256')
     db = get_db()
     try:
         cursor = db.execute(
             "INSERT INTO usuarios (username, password, nombre, rol, iniciales, color) VALUES (?,?,?,?,?,?)",
-            (username, password, nombre, rol, iniciales, color),
+            (username, hashed_pw, nombre, rol, iniciales, color),
         )
         db.commit()
         new_id = cursor.lastrowid
@@ -1031,6 +1141,7 @@ def admin_create_usuario():
 
 
 @app.route("/api/admin/usuarios/<int:uid>", methods=["PUT"])
+@require_auth
 def admin_update_usuario(uid):
     data = request.get_json(force=True)
     db   = get_db()
@@ -1046,7 +1157,7 @@ def admin_update_usuario(uid):
             values.append(data[f])
     if data.get("password"):
         updates.append("password = ?")
-        values.append(data["password"])
+        values.append(generate_password_hash(data["password"], method='pbkdf2:sha256'))
 
     if updates:
         values.append(uid)
@@ -1057,6 +1168,7 @@ def admin_update_usuario(uid):
 
 
 @app.route("/api/admin/usuarios/<int:uid>", methods=["DELETE"])
+@require_auth
 def admin_delete_usuario(uid):
     db = get_db()
     db.execute("UPDATE usuarios SET activo = 0 WHERE id = ?", (uid,))
@@ -1066,6 +1178,7 @@ def admin_delete_usuario(uid):
 
 
 @app.route("/api/admin/usuarios/<int:uid>/buses", methods=["GET"])
+@require_auth
 def admin_get_usuario_buses(uid):
     db = get_db()
     rows = db.execute(
@@ -1081,6 +1194,7 @@ def admin_get_usuario_buses(uid):
 
 
 @app.route("/api/admin/usuarios/<int:uid>/buses", methods=["PUT"])
+@require_auth
 def admin_set_usuario_buses(uid):
     data    = request.get_json(force=True)
     bus_ids = data.get("bus_ids", [])
@@ -1103,4 +1217,5 @@ def admin_set_usuario_buses(uid):
 if __name__ == "__main__":
     init_db()
     print("[API] Corriendo en http://localhost:8001")
-    app.run(debug=True, host="0.0.0.0", port=8001)
+    debug_mode = os.environ.get("FLASK_DEBUG", "0") == "1"
+    app.run(debug=debug_mode, host="0.0.0.0", port=8001)
