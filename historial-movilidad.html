@@ -4,6 +4,16 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>La Milagrosa — Movilidad Diaria</title>
+  <script>
+    (function(){
+      document.addEventListener('contextmenu',function(e){e.preventDefault();});
+      document.addEventListener('keydown',function(e){
+        if(e.key==='F12'){e.preventDefault();return false;}
+        if(e.ctrlKey&&e.shiftKey&&['I','J','C','U'].includes(e.key.toUpperCase())){e.preventDefault();return false;}
+        if(e.ctrlKey&&e.key.toUpperCase()==='U'){e.preventDefault();return false;}
+      });
+    })();
+  </script>
   <style>
     *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
 
@@ -451,6 +461,10 @@
 
 <script>
   const API = (window.location.port === '3030') ? 'http://localhost:8001/api' : (window.location.origin + '/api');
+  function apiFetch(url, options = {}) {
+    const token = localStorage.getItem('authToken');
+    return fetch(url, { ...options, headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}), ...(options.headers || {}) } });
+  }
   let currentUser = null;
   let allBuses    = [];
   let allRutas    = [];
@@ -492,7 +506,7 @@
 
   /* ── CARGAR BUSES ── */
   async function loadBuses() {
-    const res = await fetch(`${API}/buses`);
+    const res = await apiFetch(`${API}/buses`);
     allBuses = await res.json();
     document.getElementById('statTotal').textContent = allBuses.length;
   }
@@ -500,7 +514,7 @@
   /* ── CARGAR RUTAS ── */
   async function loadRutas() {
     try {
-      const res = await fetch(`${API}/rutas`);
+      const res = await apiFetch(`${API}/rutas`);
       allRutas = await res.json();
     } catch (_) { allRutas = []; }
   }
@@ -511,7 +525,7 @@
     if (!fecha) return;
     dirty.clear();
 
-    const res  = await fetch(`${API}/movilidad?fecha=${fecha}`);
+    const res  = await apiFetch(`${API}/movilidad?fecha=${fecha}`);
     const data = await res.json();
     records = {};
     data.forEach(r => { records[r.bus_id] = r; });
@@ -623,7 +637,7 @@
     btn.textContent = '…'; btn.disabled = true;
 
     try {
-      await fetch(`${API}/movilidad/batch`, {
+      await apiFetch(`${API}/movilidad/batch`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -677,7 +691,7 @@
     }
 
     try {
-      await fetch(`${API}/movilidad/batch`, {
+      await apiFetch(`${API}/movilidad/batch`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fecha, usuario_id: currentUser?.id, registros }),

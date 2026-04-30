@@ -4,6 +4,21 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>La Milagrosa — Sistema de Flota</title>
+  <!-- Protección de código fuente -->
+  <script>
+    (function(){
+      // Deshabilitar clic derecho
+      document.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+      // Deshabilitar atajos de teclado para DevTools
+      document.addEventListener('keydown', function(e){
+        if (e.key === 'F12') { e.preventDefault(); return false; }
+        if (e.ctrlKey && e.shiftKey && ['I','J','C','U'].includes(e.key.toUpperCase())) {
+          e.preventDefault(); return false;
+        }
+        if (e.ctrlKey && e.key.toUpperCase() === 'U') { e.preventDefault(); return false; }
+      });
+    })();
+  </script>
   <style>
     /* ═══════════════════════════════════════════════
        RESET & DESIGN TOKENS
@@ -960,6 +975,19 @@
   ═══════════════════════════════════════ */
   const API_URL = (window.location.port === '3030') ? 'http://localhost:8001/api' : (window.location.origin + '/api');
 
+  // Helper autenticado: incluye el token JWT en todas las peticiones
+  function apiFetch(url, options = {}) {
+    const token = localStorage.getItem('authToken');
+    return fetch(url, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        ...(options.headers || {}),
+      },
+    });
+  }
+
   const VIEW_META = {
     dashboard:   { label: 'Dashboard',          icon: 'grid',     src: 'dashboard-admin.html' },
     analista:    { label: 'Ingreso Analista',    icon: 'users',    src: 'pantalla-dividida.html' },
@@ -1030,7 +1058,10 @@
         return;
       }
 
-      // ✅ Login exitoso — mapear campos al formato que usa startSession()
+      // ✅ Login exitoso — guardar token y datos de sesión
+      if (data.token) {
+        localStorage.setItem('authToken', data.token);
+      }
       currentUser = {
         id:           data.id,
         username:     data.username,
@@ -1221,6 +1252,8 @@
   ═══════════════════════════════════════ */
   function doLogout() {
     // Reset state
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('currentUser');
     currentUser = null;
     currentView = 'welcome';
     loadedViews.clear();

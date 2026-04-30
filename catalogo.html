@@ -4,6 +4,16 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>La Milagrosa — Catálogo</title>
+  <script>
+    (function(){
+      document.addEventListener('contextmenu',function(e){e.preventDefault();});
+      document.addEventListener('keydown',function(e){
+        if(e.key==='F12'){e.preventDefault();return false;}
+        if(e.ctrlKey&&e.shiftKey&&['I','J','C','U'].includes(e.key.toUpperCase())){e.preventDefault();return false;}
+        if(e.ctrlKey&&e.key.toUpperCase()==='U'){e.preventDefault();return false;}
+      });
+    })();
+  </script>
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -759,7 +769,11 @@
   }
 
   async function apiFetch(path, opts = {}) {
-    const res = await fetch(API + path, opts);
+    const token = localStorage.getItem('authToken');
+    const res = await fetch(API + path, {
+      ...opts,
+      headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}), ...(opts.headers || {}) },
+    });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || 'Error del servidor');
     return json;

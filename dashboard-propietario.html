@@ -4,6 +4,16 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>La Milagrosa — Mis Buses</title>
+  <script>
+    (function(){
+      document.addEventListener('contextmenu',function(e){e.preventDefault();});
+      document.addEventListener('keydown',function(e){
+        if(e.key==='F12'){e.preventDefault();return false;}
+        if(e.ctrlKey&&e.shiftKey&&['I','J','C','U'].includes(e.key.toUpperCase())){e.preventDefault();return false;}
+        if(e.ctrlKey&&e.key.toUpperCase()==='U'){e.preventDefault();return false;}
+      });
+    })();
+  </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -1169,6 +1179,10 @@
 
   <script>
     const API = (window.location.port === '3030') ? 'http://localhost:8001/api' : (window.location.origin + '/api');
+    function apiFetch(url, options = {}) {
+      const token = localStorage.getItem('authToken');
+      return fetch(url, { ...options, headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}), ...(options.headers || {}) } });
+    }
     let currentUser = null;
     let busesData   = [];
     let modalBusId  = null;
@@ -1199,8 +1213,8 @@
       const qs  = uid ? `?user_id=${uid}` : '';
       try {
         const [busesRes, dashRes] = await Promise.all([
-          fetch(`${API}/buses${qs}`),
-          fetch(`${API}/dashboard/propietario${qs}`),
+          apiFetch(`${API}/buses${qs}`),
+          apiFetch(`${API}/dashboard/propietario${qs}`),
         ]);
         busesData = await busesRes.json();
         const dash = await dashRes.json();
@@ -1209,7 +1223,7 @@
         const now      = new Date();
         const primerDia = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
         const hoy      = now.toISOString().slice(0,10);
-        const movRes   = await fetch(`${API}/movilidad/rango?desde=${primerDia}&hasta=${hoy}${uid ? '&user_id='+uid : ''}`);
+        const movRes   = await apiFetch(`${API}/movilidad/rango?desde=${primerDia}&hasta=${hoy}${uid ? '&user_id='+uid : ''}`);
         const movMes   = await movRes.json();
 
         const paxMes = {};
@@ -1324,7 +1338,7 @@
 
     async function cargarMantCard(busId) {
       try {
-        const res   = await fetch(`${API}/mantenimiento/estado/${busId}`);
+        const res   = await apiFetch(`${API}/mantenimiento/estado/${busId}`);
         const items = await res.json();
         const el = document.getElementById(`mant-card-${busId}`);
         if (!el) return;
@@ -1447,9 +1461,9 @@
         const uid    = currentUser ? '&user_id='+currentUser.id : '';
 
         const [mantRes, movRes, tarifasRes] = await Promise.all([
-          fetch(`${API}/mantenimiento/estado/${bus.id}`),
-          fetch(`${API}/movilidad/rango?desde=${hace30}&hasta=${hoy}${uid}`),
-          fetch(`${API}/tarifas`),
+          apiFetch(`${API}/mantenimiento/estado/${bus.id}`),
+          apiFetch(`${API}/movilidad/rango?desde=${hace30}&hasta=${hoy}${uid}`),
+          apiFetch(`${API}/tarifas`),
         ]);
         const mantItems  = await mantRes.json();
         const movRows    = (await movRes.json())
@@ -1618,13 +1632,13 @@
         let rows = [];
         if (histMode === 'day') {
           const fecha = document.getElementById('histFecha').value;
-          const res   = await fetch(`${API}/movilidad?fecha=${fecha}${uid}`);
+          const res   = await apiFetch(`${API}/movilidad?fecha=${fecha}${uid}`);
           rows = await res.json();
           renderDia(rows, fecha);
         } else {
           const desde = document.getElementById('histDesde').value;
           const hasta = document.getElementById('histHasta').value;
-          const res   = await fetch(`${API}/movilidad/rango?desde=${desde}&hasta=${hasta}${uid}`);
+          const res   = await apiFetch(`${API}/movilidad/rango?desde=${desde}&hasta=${hasta}${uid}`);
           rows = await res.json();
           renderRango(rows, desde, hasta);
         }
