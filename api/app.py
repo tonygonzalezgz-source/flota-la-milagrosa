@@ -7,7 +7,7 @@ from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 import os
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from functools import wraps
 from dotenv import load_dotenv
 
@@ -336,7 +336,7 @@ def login():
     payload = {
         "user_id": user["id"],
         "rol":     rol,
-        "exp":     date.today() + timedelta(hours=JWT_EXPIRY_HOURS),
+        "exp":     datetime.utcnow() + timedelta(hours=JWT_EXPIRY_HOURS),
     }
     token = _jwt.encode(payload, SECRET_KEY, algorithm="HS256")
 
