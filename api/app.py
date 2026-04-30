@@ -314,7 +314,7 @@ def login():
         valid = (stored_pw == password)
         if valid:
             # Hashear y guardar para la próxima vez
-            hashed = generate_password_hash(password)
+            hashed = generate_password_hash(password, method='pbkdf2:sha256')
             db.execute("UPDATE usuarios SET password = ? WHERE id = ?", (hashed, user["id"]))
             db.commit()
 
@@ -1124,7 +1124,7 @@ def admin_create_usuario():
     if not all([nombre, username, password]):
         return jsonify({"error": "Nombre, usuario y contraseña son requeridos"}), 400
 
-    hashed_pw = generate_password_hash(password)
+    hashed_pw = generate_password_hash(password, method='pbkdf2:sha256')
     db = get_db()
     try:
         cursor = db.execute(
@@ -1157,7 +1157,7 @@ def admin_update_usuario(uid):
             values.append(data[f])
     if data.get("password"):
         updates.append("password = ?")
-        values.append(generate_password_hash(data["password"]))
+        values.append(generate_password_hash(data["password"], method='pbkdf2:sha256'))
 
     if updates:
         values.append(uid)
