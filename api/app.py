@@ -1066,6 +1066,18 @@ def batch_upsert_movilidad():
     return jsonify({"ok": True, "saved": saved})
 
 
+@app.route("/api/movilidad/fecha/<fecha>", methods=["DELETE"])
+@require_auth
+def delete_movilidad_fecha(fecha):
+    """Elimina todos los registros de movilidad para una fecha dada."""
+    db      = get_db()
+    result  = db.execute("DELETE FROM registros_movilidad WHERE fecha = ?", (fecha,))
+    deleted = result.rowcount
+    db.commit()
+    db.close()
+    return jsonify({"ok": True, "deleted": deleted})
+
+
 @app.route("/api/movilidad/fechas", methods=["GET"])
 @require_auth
 def get_movilidad_fechas():

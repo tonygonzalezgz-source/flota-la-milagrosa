@@ -357,6 +357,20 @@
     }
     .btn-import:hover { border-color: var(--green); color: var(--green); }
 
+    .btn-clear {
+      display: flex; align-items: center; gap: 7px;
+      padding: 7px 16px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--txt2);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .btn-clear:hover { border-color: var(--red); color: var(--red); }
+
     /* ── IMPORT MODAL ── */
     .modal-overlay {
       position: fixed; inset: 0;
@@ -497,6 +511,15 @@
         <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
         Guardado
       </span>
+      <button class="btn-clear" id="btnClear" onclick="limpiarFecha()" title="Eliminar todos los datos de movilidad de la fecha actual">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <polyline points="3 6 5 6 21 6"/>
+          <path d="M19 6l-1 14H6L5 6"/>
+          <path d="M10 11v6M14 11v6"/>
+          <path d="M9 6V4h6v2"/>
+        </svg>
+        Limpiar datos
+      </button>
       <button class="btn-import" id="btnImport" onclick="openImportModal()" title="Importar datos desde archivo BEA (.xlsx)">
         <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -880,6 +903,32 @@
     if (e.data?.type === 'REFRESH_ROUTES') { loadRutas().then(() => renderTable()); }
   });
 
+  /* ── LIMPIAR DATOS DE LA FECHA ── */
+  async function limpiarFecha() {
+    const fecha = document.getElementById('datePicker').value;
+    if (!fecha) return;
+
+    const conDatos = Object.keys(records).length;
+    if (conDatos === 0) { alert('No hay datos cargados para esta fecha.'); return; }
+
+    if (!confirm(`¿Eliminar todos los registros de movilidad del ${fecha}?\n\nEsta acción no se puede deshacer.`)) return;
+
+    try {
+      const res = await apiFetch(`${API}/movilidad/fecha/${fecha}`, { method: 'DELETE' });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Error del servidor');
+
+      records = {};
+      dirty.clear();
+      renderTable();
+      updateStats();
+      flashSaved();
+    } catch(err) {
+      console.error(err);
+      alert('Error al limpiar: ' + err.message);
+    }
+  }
+
   /* ═══════════════════════════════════════
      IMPORTAR EXCEL BEA
   ═══════════════════════════════════════ */
@@ -976,7 +1025,7 @@
             vueltas  : a.vueltas,
             pasajeros: a.pasajeros,
             km       : Math.round(a.km * 10) / 10,
-            novedades: [...a.nombres].join(', '),
+            novedades: '',
             ruta_id  : rutaId,
             rutaLabel: a.rutas.join(', '),
             matched  : !!bus,
