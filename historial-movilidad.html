@@ -14,6 +14,7 @@
       });
     })();
   </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
 
@@ -341,6 +342,108 @@
       font-style: italic;
     }
 
+    /* ── IMPORT BUTTON ── */
+    .btn-import {
+      display: flex; align-items: center; gap: 7px;
+      padding: 7px 16px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--txt2);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .btn-import:hover { border-color: var(--green); color: var(--green); }
+
+    /* ── IMPORT MODAL ── */
+    .modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.7);
+      backdrop-filter: blur(4px);
+      z-index: 200;
+      display: flex; align-items: center; justify-content: center;
+      padding: 20px;
+    }
+    .modal-overlay.hidden { display: none; }
+
+    .import-modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      width: 100%;
+      max-width: 860px;
+      max-height: 85vh;
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+
+    .import-modal-head {
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 12px;
+    }
+    .import-modal-head h2 { font-size: 16px; font-weight: 700; flex: 1; }
+    .import-modal-head .close-btn {
+      background: none; border: none; color: var(--txt2);
+      cursor: pointer; padding: 4px;
+      border-radius: 6px; line-height: 0;
+      transition: color .13s;
+    }
+    .import-modal-head .close-btn:hover { color: var(--txt); }
+
+    .import-modal-summary {
+      padding: 12px 22px;
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      display: flex; gap: 24px; flex-wrap: wrap;
+    }
+    .imp-stat { font-size: 12px; color: var(--txt2); }
+    .imp-stat b { color: var(--txt); }
+
+    .import-modal-body {
+      flex: 1; overflow-y: auto; padding: 16px 22px;
+    }
+
+    .import-preview-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .import-preview-table thead th {
+      background: var(--card);
+      padding: 8px 12px;
+      text-align: left;
+      font-size: 10px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .5px;
+      color: var(--txt3);
+      border-bottom: 1px solid var(--border);
+    }
+    .import-preview-table tbody tr { border-bottom: 1px solid var(--border); }
+    .import-preview-table tbody tr:last-child { border-bottom: none; }
+    .import-preview-table tbody td { padding: 7px 12px; vertical-align: middle; }
+    .import-preview-table tbody tr.row-ok  { background: rgba(34,197,94,.04); }
+    .import-preview-table tbody tr.row-err { background: rgba(239,68,68,.06); }
+
+    .tag-ok  { display:inline-block; padding:2px 7px; border-radius:20px; font-size:10px; font-weight:700; background:rgba(34,197,94,.15); color:var(--green); }
+    .tag-err { display:inline-block; padding:2px 7px; border-radius:20px; font-size:10px; font-weight:700; background:rgba(239,68,68,.15); color:var(--red); }
+
+    .import-modal-foot {
+      padding: 14px 22px;
+      border-top: 1px solid var(--border);
+      display: flex; align-items: center; gap: 10px; justify-content: flex-end;
+    }
+    .btn-cancel-imp {
+      padding: 8px 18px; border: 1px solid var(--border); border-radius: var(--radius);
+      background: none; color: var(--txt2); font-size: 13px; cursor: pointer;
+      transition: all .13s;
+    }
+    .btn-cancel-imp:hover { border-color: #555; color: var(--txt); }
+    .btn-confirm-imp {
+      padding: 8px 22px; border: none; border-radius: var(--radius);
+      background: var(--green); color: #000; font-size: 13px; font-weight: 700;
+      cursor: pointer; transition: background .15s;
+    }
+    .btn-confirm-imp:hover { background: #16a34a; }
+    .btn-confirm-imp:disabled { opacity: .5; cursor: not-allowed; }
+
     @media (max-width: 768px) {
       html { height: 100%; overflow-y: scroll; -webkit-overflow-scrolling: touch; }
       body { min-height: 100%; overflow-y: visible; }
@@ -394,6 +497,16 @@
         <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
         Guardado
       </span>
+      <button class="btn-import" id="btnImport" onclick="openImportModal()" title="Importar datos desde archivo BEA (.xlsx)">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="12" y1="18" x2="12" y2="12"/>
+          <polyline points="9 15 12 18 15 15"/>
+        </svg>
+        Importar BEA
+      </button>
+      <input type="file" id="importFileInput" accept=".xlsx,.xls" style="display:none" onchange="handleImportFile(event)">
       <button class="btn-save-all" id="btnSaveAll" onclick="saveAll()">
         <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
           <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
@@ -457,6 +570,49 @@
     </div>
   </div>
 
+</div>
+
+<!-- IMPORT MODAL -->
+<div class="modal-overlay hidden" id="importOverlay">
+  <div class="import-modal">
+    <div class="import-modal-head">
+      <svg width="18" height="18" fill="none" stroke="var(--green)" stroke-width="2" viewBox="0 0 24 24">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+        <line x1="12" y1="18" x2="12" y2="12"/>
+        <polyline points="9 15 12 18 15 15"/>
+      </svg>
+      <h2>Importar desde BEA</h2>
+      <button class="close-btn" onclick="closeImportModal()">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="import-modal-summary" id="importSummary"></div>
+    <div class="import-modal-body">
+      <table class="import-preview-table">
+        <thead>
+          <tr>
+            <th>Bus #</th>
+            <th>Fecha</th>
+            <th>Vueltas</th>
+            <th>Pasajeros</th>
+            <th>Km</th>
+            <th>Ruta BEA</th>
+            <th>Conductor</th>
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <tbody id="importTbody"></tbody>
+      </table>
+    </div>
+    <div class="import-modal-foot">
+      <span id="importWarn" style="font-size:12px;color:var(--yellow);flex:1;display:none"></span>
+      <button class="btn-cancel-imp" onclick="closeImportModal()">Cancelar</button>
+      <button class="btn-confirm-imp" id="btnConfirmImport" onclick="confirmImport()">
+        Importar registros
+      </button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -723,6 +879,203 @@
   window.addEventListener('message', e => {
     if (e.data?.type === 'REFRESH_ROUTES') { loadRutas().then(() => renderTable()); }
   });
+
+  /* ═══════════════════════════════════════
+     IMPORTAR EXCEL BEA
+  ═══════════════════════════════════════ */
+  let _importParsed = [];
+
+  function openImportModal() {
+    document.getElementById('importFileInput').click();
+  }
+
+  function closeImportModal() {
+    document.getElementById('importOverlay').classList.add('hidden');
+    _importParsed = [];
+  }
+
+  function handleImportFile(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    e.target.value = '';
+
+    const reader = new FileReader();
+    reader.onload = function(evt) {
+      try {
+        const wb   = XLSX.read(evt.target.result, { type: 'array', cellDates: true });
+        const ws   = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+        if (rows.length < 2) { alert('El archivo está vacío o no tiene datos.'); return; }
+
+        const headers = rows[0].map(h => String(h).trim());
+        const col = name => headers.indexOf(name);
+
+        const C = {
+          busNum : col('VTR_NUMECON'),
+          fecha  : col('VTR_FECHATURNO'),
+          vueltas: col('VTR_VUELTASBEA'),
+          pax    : col('VTR_PASAJEROS'),
+          km     : col('VTR_DISTANCIA'),
+          nombre : col('VTR_NOMBRE'),
+          ruta   : col('VTR_RUTADESCRIP'),
+        };
+
+        if (C.busNum < 0 || C.fecha < 0) {
+          alert('El archivo no tiene el formato BEA esperado.\nNo se encontraron las columnas VTR_NUMECON o VTR_FECHATURNO.');
+          return;
+        }
+
+        /* Agregar por bus + fecha */
+        const aggMap = {};
+        for (let i = 1; i < rows.length; i++) {
+          const r      = rows[i];
+          const busNum = r[C.busNum];
+          if (!busNum && busNum !== 0) continue;
+
+          let fechaRaw = r[C.fecha];
+          let fechaStr;
+          if (fechaRaw instanceof Date) {
+            fechaStr = fechaRaw.toISOString().slice(0, 10);
+          } else if (typeof fechaRaw === 'number') {
+            const d = XLSX.SSF.parse_date_code(fechaRaw);
+            fechaStr = `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`;
+          } else if (typeof fechaRaw === 'string' && fechaRaw.match(/\d{4}-\d{2}-\d{2}/)) {
+            fechaStr = fechaRaw.slice(0, 10);
+          } else { continue; }
+
+          const key = `${busNum}|${fechaStr}`;
+          if (!aggMap[key]) {
+            aggMap[key] = { busNum, fecha: fechaStr, vueltas: 0, pasajeros: 0, km: 0, nombres: new Set(), rutas: [] };
+          }
+          const a = aggMap[key];
+          a.vueltas   += parseInt(r[C.vueltas])  || 0;
+          a.pasajeros += parseInt(r[C.pax])       || 0;
+          a.km        += parseFloat(r[C.km])      || 0;
+          const nom = String(r[C.nombre] || '').trim();
+          if (nom) a.nombres.add(nom);
+          const rut = String(r[C.ruta] || '').trim();
+          if (rut && !a.rutas.includes(rut)) a.rutas.push(rut);
+        }
+
+        /* Cruzar con buses y rutas de la app */
+        _importParsed = Object.values(aggMap).map(a => {
+          const bus = allBuses.find(b => String(b.numero) === String(a.busNum));
+
+          let rutaId = null, rutaMatch = '';
+          for (const rn of a.rutas) {
+            const found = allRutas.find(r => r.nombre.trim().toLowerCase() === rn.toLowerCase());
+            if (found) { rutaId = found.id; rutaMatch = found.nombre; break; }
+          }
+
+          return {
+            busNum   : a.busNum,
+            bus_id   : bus?.id   || null,
+            busPlaca : bus?.placa || '—',
+            fecha    : a.fecha,
+            vueltas  : a.vueltas,
+            pasajeros: a.pasajeros,
+            km       : Math.round(a.km * 10) / 10,
+            novedades: [...a.nombres].join(', '),
+            ruta_id  : rutaId,
+            rutaLabel: a.rutas.join(', '),
+            matched  : !!bus,
+          };
+        }).sort((a, b) => a.fecha.localeCompare(b.fecha) || a.busNum - b.busNum);
+
+        showImportPreview(_importParsed);
+      } catch(err) {
+        console.error(err);
+        alert('Error leyendo el archivo: ' + err.message);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function showImportPreview(data) {
+    const total    = data.length;
+    const matched  = data.filter(d => d.matched).length;
+    const noMatch  = total - matched;
+    const fechas   = [...new Set(data.map(d => d.fecha))];
+
+    document.getElementById('importSummary').innerHTML = `
+      <span class="imp-stat">Registros: <b>${total}</b></span>
+      <span class="imp-stat">Buses encontrados: <b style="color:var(--green)">${matched}</b></span>
+      ${noMatch > 0 ? `<span class="imp-stat">No encontrados: <b style="color:var(--red)">${noMatch}</b></span>` : ''}
+      <span class="imp-stat">Fecha(s): <b>${fechas.join(', ')}</b></span>
+    `;
+
+    document.getElementById('importTbody').innerHTML = data.map(d => `
+      <tr class="${d.matched ? 'row-ok' : 'row-err'}">
+        <td><b>${d.busNum}</b>${d.busPlaca !== '—' ? `<br><small style="color:var(--txt2);font-family:monospace">${d.busPlaca}</small>` : ''}</td>
+        <td>${d.fecha}</td>
+        <td style="text-align:right">${d.vueltas}</td>
+        <td style="text-align:right">${d.pasajeros.toLocaleString()}</td>
+        <td style="text-align:right">${d.km}</td>
+        <td style="color:var(--txt2)">${d.rutaLabel || '—'}</td>
+        <td style="color:var(--txt2);font-size:11px">${d.novedades || '—'}</td>
+        <td>${d.matched ? '<span class="tag-ok">OK</span>' : '<span class="tag-err">Sin bus</span>'}</td>
+      </tr>`).join('');
+
+    const warn = document.getElementById('importWarn');
+    if (noMatch > 0) {
+      warn.textContent = `⚠ ${noMatch} bus(es) del archivo no existen en la app y serán omitidos.`;
+      warn.style.display = 'block';
+    } else {
+      warn.style.display = 'none';
+    }
+
+    const validCount = data.filter(d => d.matched).length;
+    const btn = document.getElementById('btnConfirmImport');
+    btn.textContent = `Importar ${validCount} registros`;
+    btn.disabled    = validCount === 0;
+
+    document.getElementById('importOverlay').classList.remove('hidden');
+  }
+
+  async function confirmImport() {
+    const valid = _importParsed.filter(d => d.matched);
+    if (!valid.length) return;
+
+    const btn = document.getElementById('btnConfirmImport');
+    btn.disabled = true; btn.textContent = 'Importando…';
+
+    /* Agrupar por fecha y enviar un batch por fecha */
+    const byFecha = {};
+    valid.forEach(d => {
+      if (!byFecha[d.fecha]) byFecha[d.fecha] = [];
+      byFecha[d.fecha].push({
+        bus_id       : d.bus_id,
+        vueltas      : d.vueltas,
+        pasajeros    : d.pasajeros,
+        km_recorridos: d.km,
+        novedades    : d.novedades,
+        ruta_id      : d.ruta_id,
+      });
+    });
+
+    try {
+      for (const [fecha, registros] of Object.entries(byFecha)) {
+        await apiFetch(`${API}/movilidad/batch`, {
+          method : 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body   : JSON.stringify({ fecha, usuario_id: currentUser?.id, registros }),
+        });
+      }
+
+      closeImportModal();
+
+      /* Ajustar el date picker a la primera fecha importada y recargar */
+      const primeraFecha = Object.keys(byFecha).sort()[0];
+      document.getElementById('datePicker').value = primeraFecha;
+      await loadFecha();
+      flashSaved();
+    } catch(err) {
+      console.error(err);
+      alert('Error al guardar: ' + err.message);
+      btn.disabled = false; btn.textContent = `Importar ${valid.length} registros`;
+    }
+  }
 </script>
 </body>
 </html>
