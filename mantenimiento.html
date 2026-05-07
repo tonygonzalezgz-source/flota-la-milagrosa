@@ -119,14 +119,6 @@
     .user-name { font-size:12px; font-weight:600; color:var(--txt-inv); }
     .user-role { font-size:10px; color:var(--txt-muted); }
 
-    /* Switcher button */
-    .switch-btn {
-      margin-left:6px;
-      background:none; border:1px solid #333; border-radius:6px;
-      padding:2px 8px; font-size:10px; color:var(--txt-muted);
-      cursor:pointer; font-family:inherit; transition:border-color .15s,color .15s;
-    }
-    .switch-btn:hover { border-color:#666; color:#aaa; }
 
     /* ══════════════════════════════════════
        TOP HALF — BODY
@@ -419,12 +411,11 @@
       </div>
       <!-- User chip -->
       <div class="user-chip" id="userChip">
-        <div class="user-avatar" id="avatarEl" style="background:#6366f1">JM</div>
+        <div class="user-avatar" id="avatarEl" style="background:#6366f1">?</div>
         <div>
-          <div class="user-name" id="userNameEl">Jorge Méndez</div>
-          <div class="user-role" id="userRoleEl">Buses: 12, 45, 80</div>
+          <div class="user-name" id="userNameEl">—</div>
+          <div class="user-role" id="userRoleEl">Cargando…</div>
         </div>
-        <button class="switch-btn" id="btnSwitch">Cambiar usuario</button>
       </div>
     </div>
 
@@ -556,37 +547,9 @@
   const loadedFromDB  = new Set(); // buses cuyo estado ya se cargó de la DB
 
   /* ═══════════════════════════════════════════
-     1. SIMULACIÓN DE USUARIOS Y PERMISOS
+     1. USUARIO ACTIVO (desde sesión real)
   ═══════════════════════════════════════════ */
-  const USERS = [
-    {
-      id: 'jm',
-      name: 'Jorge Méndez',
-      initials: 'JM',
-      color: '#6366f1',
-      role: 'Técnico Senior',
-      buses: [12, 45, 80],
-    },
-    {
-      id: 'rs',
-      name: 'Rosa Salinas',
-      initials: 'RS',
-      color: '#f59e0b',
-      role: 'Técnica de Turno',
-      buses: [7, 33, 60],
-    },
-    {
-      id: 'ca',
-      name: 'Carlos Armas',
-      initials: 'CA',
-      color: '#22c55e',
-      role: 'Auxiliar',
-      buses: [21, 55],
-    },
-  ];
-
-  let currentUserIdx = 0;    // usuario activo
-  let currentBusTab  = null; // bus seleccionado en panel propietario
+  let currentBusTab = null; // bus seleccionado en panel propietario
 
   /* ═══════════════════════════════════════════
      2. TIPOS DE NOVEDAD
@@ -644,45 +607,31 @@
   const avatarEl     = document.getElementById('avatarEl');
   const userNameEl   = document.getElementById('userNameEl');
   const userRoleEl   = document.getElementById('userRoleEl');
-  const btnSwitch    = document.getElementById('btnSwitch');
   const btnClearLog  = document.getElementById('btnClearLog');
 
   /* ═══════════════════════════════════════════
      5. INICIALIZAR USUARIO ACTIVO
   ═══════════════════════════════════════════ */
-  function loadUser(idx) {
-    const u = USERS[idx];
-    avatarEl.textContent  = u.initials;
-    avatarEl.style.background = u.color;
-    userNameEl.textContent = u.name;
-    userRoleEl.textContent = `Buses: ${u.buses.join(', ')}`;
+  function loadUserChip(u) {
+    if (!u) return;
+    avatarEl.textContent       = u.iniciales || u.initials || '??';
+    avatarEl.style.background  = u.color || '#6366f1';
+    userNameEl.textContent     = u.nombre || u.name || u.username || '—';
+  }
 
-    // Rebuild bus select
+  function buildBusSelector() {
     selBus.innerHTML = '<option value="">— Selecciona un bus —</option>';
-    u.buses.forEach(b => {
+    busesData.forEach(b => {
       const opt = document.createElement('option');
-      opt.value = b;
-      opt.textContent = `Bus ${String(b).padStart(2,'0')}`;
+      opt.value = b.numero;
+      opt.textContent = `Bus ${String(b.numero).padStart(2, '0')}${b.placa ? ' · ' + b.placa : ''}`;
       selBus.appendChild(opt);
     });
-
-    // Reset form
     hidNovedad.value = '';
     txtObs.value = '';
     document.querySelectorAll('.nov-pill').forEach(p => p.classList.remove('selected'));
     validate();
-
-    // Reset propietario tabs to this user's buses
-    buildOwnerTabs(u.buses);
   }
-
-  /* ═══════════════════════════════════════════
-     6. SWITCH DE USUARIO (demo)
-  ═══════════════════════════════════════════ */
-  btnSwitch.addEventListener('click', () => {
-    currentUserIdx = (currentUserIdx + 1) % USERS.length;
-    loadUser(currentUserIdx);
-  });
 
   /* ═══════════════════════════════════════════
      7. CONSTRUIR PILLS DE NOVEDAD
@@ -943,18 +892,38 @@
      15. INIT API + ARRANCAR
   ═══════════════════════════════════════════ */
   async function initAPI() {
+    // Usuario de la sesión real — localStorage es compartido (mismo origen)
+    const u = window.parent?.currentUser
+           || JSON.parse(localStorage.getItem('currentUser') || 'null');
+    loadUserChip(u);
+
     try {
-      const [busRes, novRes] = await Promise.all([
-        apiFetch(`${API_URL}/buses`),
-        apiFetch(`${API_URL}/tipos-novedad`),
-      ]);
-      busesData = await busRes.json();
-      const tipos = await novRes.json();
+      const novRes = await apiFetch(`${API_URL}/tipos-novedad`);
+      const tipos  = await novRes.json();
       tipos.forEach(t => { tiposNovedadMap[t.clave] = t; });
+
+      // Administrador ve todos los buses; los demás solo los asignados
+      const esAdmin = u && u.rol === 'Administrador';
+      const busUrl  = (u && !esAdmin) ? `${API_URL}/buses?user_id=${u.id}` : `${API_URL}/buses`;
+      const busRes  = await apiFetch(busUrl);
+      busesData     = await busRes.json();
     } catch (e) {
       console.warn('[API] Modo offline:', e.message);
+      busesData = [];
     }
-    loadUser(0);
+
+    // Mostrar conteo de unidades en el chip
+    if (u) {
+      const esAdmin = u.rol === 'Administrador';
+      userRoleEl.textContent = esAdmin
+        ? `${busesData.length} unidades en flota`
+        : `${busesData.length} unidad${busesData.length !== 1 ? 'es' : ''} asignada${busesData.length !== 1 ? 's' : ''}`;
+    }
+
+    buildBusSelector();
+    const nums = busesData.map(b => b.numero);
+    buildOwnerTabs(nums);
+    if (nums.length) loadMaintEstadoFromDB(nums[0]);
   }
 
   initAPI();

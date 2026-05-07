@@ -830,7 +830,7 @@
     }
     tbody.innerHTML = lista.map(u => {
       const badgeStyle = ROL_BADGE[u.rol] || 'background:#f3f4f6;color:#374151';
-      const esPropietario = u.rol === 'Propietario';
+      const esPropietario = u.rol === 'Propietario' || u.rol === 'Técnico Mant.';
       return `<tr>
         <td>
           <div style="display:flex;align-items:center;gap:10px;">

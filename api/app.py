@@ -126,11 +126,18 @@ if DATABASE_URL:
 
             last_id = None
             if sql_pg.strip().upper().startswith("INSERT"):
+                # SAVEPOINT evita que lastval() (que falla en tablas sin
+                # secuencia, como usuario_buses) aborte la transacción.
+                aux = self._conn.cursor()
                 try:
-                    aux = self._conn.cursor()
-                    aux.execute("SELECT lastval()")
-                    row = aux.fetchone()
-                    last_id = row[0] if row else None
+                    aux.execute("SAVEPOINT _lastval_sp")
+                    try:
+                        aux.execute("SELECT lastval()")
+                        row = aux.fetchone()
+                        last_id = row[0] if row else None
+                        aux.execute("RELEASE SAVEPOINT _lastval_sp")
+                    except Exception:
+                        aux.execute("ROLLBACK TO SAVEPOINT _lastval_sp")
                 except Exception:
                     pass
 
@@ -324,7 +331,7 @@ def login():
 
     rol = user["rol"]
     bus_ids = []
-    if rol == "Propietario":
+    if rol in ("Propietario", "Técnico Mant."):
         rows = db.execute(
             "SELECT bus_id FROM usuario_buses WHERE usuario_id = ?", (user["id"],)
         ).fetchall()
@@ -366,7 +373,7 @@ def get_buses():
         user = db.execute(
             "SELECT rol FROM usuarios WHERE id = ? AND activo = 1", (user_id,)
         ).fetchone()
-        if user and user["rol"] == "Propietario":
+        if user and user["rol"] in ("Propietario", "Técnico Mant."):
             rows = db.execute(
                 """SELECT b.* FROM buses b
                    JOIN usuario_buses ub ON ub.bus_id = b.id
