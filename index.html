@@ -57,7 +57,7 @@
     #loginScreen {
       position: fixed; inset: 0; z-index: 1000;
       display: flex; align-items: center; justify-content: center;
-      background: var(--bg-dark);
+      background: #020b16;
       transition: opacity .45s ease, transform .45s ease;
     }
 
@@ -67,87 +67,99 @@
       pointer-events: none;
     }
 
-    /* Animated grid background */
-    #loginScreen::before {
-      content: '';
+    #bgCanvas {
       position: absolute; inset: 0;
-      background-image:
-        linear-gradient(var(--border-d) 1px, transparent 1px),
-        linear-gradient(90deg, var(--border-d) 1px, transparent 1px);
-      background-size: 40px 40px;
-      opacity: .5;
-      mask-image: radial-gradient(ellipse 70% 70% at 50% 50%, black, transparent);
+      width: 100%; height: 100%;
+      z-index: 0; pointer-events: none;
+      display: block;
     }
 
-    /* Glows */
-    #loginScreen::after {
-      content: '';
+    /* ── Top header logo ── */
+    .login-header {
       position: absolute;
-      width: 600px; height: 600px;
-      border-radius: 50%;
-      background: radial-gradient(circle, rgba(99,102,241,.08) 0%, transparent 70%);
-      top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
-      pointer-events: none;
+      top: 36px; left: 50%; transform: translateX(-50%);
+      display: flex; align-items: center; gap: 20px;
+      z-index: 3; white-space: nowrap;
     }
 
+    .rg-logo-wrap {
+      display: flex; flex-direction: column; align-items: center; gap: 3px;
+    }
+
+    .rg-logo-svg { display: none; }
+
+    .rg-monogram {
+      display: flex; align-items: baseline;
+      font-size: 44px; font-weight: 900; line-height: 1;
+      font-family: 'Arial Black', 'Impact', Arial, sans-serif;
+      letter-spacing: -3px;
+      filter: drop-shadow(0 0 12px rgba(0,200,240,.45));
+    }
+
+    .rg-monogram .ltr-r {
+      background: linear-gradient(135deg, #93c5fd 0%, #3b82f6 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .rg-monogram .ltr-g {
+      background: linear-gradient(135deg, #67e8f9 0%, #06b6d4 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .rg-sub {
+      font-size: 8px; letter-spacing: 2.5px; text-transform: uppercase;
+      color: rgba(0,200,240,.55); font-weight: 600;
+    }
+
+    .logo-sep {
+      width: 1px; height: 44px;
+      background: linear-gradient(to bottom, transparent, rgba(0,200,240,.45), transparent);
+    }
+
+    .buscontrol-name {
+      font-size: 30px; font-weight: 700; letter-spacing: -.2px;
+      color: #fff;
+      text-shadow: 0 0 40px rgba(0,180,240,.35), 0 0 80px rgba(0,100,180,.2);
+    }
+
+    /* ── Glassmorphism form box ── */
     .login-box {
       position: relative; z-index: 2;
       width: 400px;
-      background: #111114;
-      border: 1px solid #222226;
-      border-radius: 20px;
-      padding: 38px 36px 32px;
-      box-shadow: 0 24px 80px rgba(0,0,0,.6);
-      animation: boxIn .5s cubic-bezier(.22,1,.36,1);
+      background: rgba(2, 20, 40, 0.70);
+      border: 1px solid rgba(0,160,210,.22);
+      border-top-color: rgba(0,200,255,.18);
+      border-radius: 18px;
+      padding: 36px 34px 30px;
+      box-shadow:
+        0 30px 80px rgba(0,0,0,.8),
+        0 0 60px rgba(0,120,200,.06),
+        inset 0 1px 0 rgba(0,220,255,.07),
+        inset 0 -1px 0 rgba(0,100,180,.05);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      animation: boxIn .55s cubic-bezier(.22,1,.36,1);
     }
 
     @keyframes boxIn {
-      from { opacity:0; transform:translateY(24px) scale(.97); }
+      from { opacity:0; transform:translateY(28px) scale(.97); }
       to   { opacity:1; transform:translateY(0) scale(1); }
     }
 
-    /* Logo */
-    .login-logo {
-      display: flex; align-items: center; justify-content: center;
-      gap: 12px; margin-bottom: 28px;
-    }
-
-    .login-logo-icon {
-      width: 44px; height: 44px;
-      background: #fff; border-radius: 12px;
-      display: flex; align-items: center; justify-content: center;
-    }
-
-    .login-logo-icon svg { width: 26px; height: 26px; }
-
-    .login-logo-name {
-      display: flex; flex-direction: column;
-    }
-
-    .login-logo-name strong {
-      font-size: 18px; font-weight: 700; letter-spacing: -.4px;
-      color: var(--txt-inv);
-    }
-
-    .login-logo-name span {
-      font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase;
-      color: var(--txt-muted);
-    }
-
-    /* Divider */
-    .login-divider {
-      height: 1px; background: #1e1e22; margin-bottom: 24px;
-    }
+    /* Logo inside box – hidden since we use the top header */
+    .login-logo { display: none; }
+    .login-divider { display: none; }
 
     /* Title */
     .login-title {
-      font-size: 15px; font-weight: 600; color: var(--txt-inv);
-      margin-bottom: 4px;
+      font-size: 15px; font-weight: 600;
+      color: rgba(200,240,255,.88); margin-bottom: 4px;
     }
 
     .login-sub {
-      font-size: 12px; color: var(--txt-muted); margin-bottom: 22px;
+      font-size: 12px; color: rgba(80,160,210,.65); margin-bottom: 22px;
     }
 
     /* Field */
@@ -155,44 +167,44 @@
 
     .lg-label {
       font-size: 10px; font-weight: 700; letter-spacing: .7px;
-      text-transform: uppercase; color: #555;
+      text-transform: uppercase; color: rgba(0,180,220,.45);
     }
 
     .lg-input-wrap { position: relative; }
 
     .lg-icon {
       position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
-      color: #444; pointer-events: none;
+      color: rgba(0,160,200,.5); pointer-events: none;
     }
 
     .lg-input {
-      width: 100%; padding: 10px 13px 10px 38px;
-      border-radius: var(--radius-sm);
-      border: 1.5px solid #222226;
-      background: #0c0c0e; color: var(--txt-inv);
+      width: 100%; padding: 11px 13px 11px 38px;
+      border-radius: 10px;
+      border: 1px solid rgba(0,150,200,.2);
+      background: rgba(0,25,55,.55); color: rgba(200,240,255,.9);
       font-size: 14px; font-family: inherit; outline: none;
       transition: border-color .2s, box-shadow .2s;
     }
 
     .lg-input:focus {
-      border-color: var(--blue);
-      box-shadow: 0 0 0 3px rgba(99,102,241,.15);
+      border-color: rgba(0,200,255,.5);
+      box-shadow: 0 0 0 3px rgba(0,180,220,.12);
     }
 
-    .lg-input::placeholder { color: #333; }
+    .lg-input::placeholder { color: rgba(80,150,200,.35); }
 
     /* Hint credentials */
     .creds-hint {
-      background: #0c0c10;
-      border: 1px solid #1e1e28;
+      background: rgba(0,18,40,.6);
+      border: 1px solid rgba(0,100,170,.15);
       border-radius: 10px;
-      padding: 12px 14px;
-      margin-bottom: 18px;
+      padding: 10px 12px;
+      margin-bottom: 16px;
     }
 
     .creds-hint-title {
       font-size: 10px; font-weight: 700; letter-spacing: .6px;
-      text-transform: uppercase; color: #444; margin-bottom: 8px;
+      text-transform: uppercase; color: rgba(0,160,200,.4); margin-bottom: 8px;
     }
 
     .creds-row {
@@ -202,20 +214,20 @@
     }
 
     .creds-row:last-child { margin-bottom: 0; }
-    .creds-row:hover { background: #1a1a1e; }
+    .creds-row:hover { background: rgba(0,70,120,.35); }
 
     .creds-badge {
       font-size: 10px; font-weight: 700; padding: 2px 7px;
       border-radius: 6px; white-space: nowrap;
     }
 
-    .badge-admin      { background: #1e1e2e; color: var(--blue); }
-    .badge-analista   { background: #1e2a1e; color: var(--green); }
-    .badge-tecnico    { background: #2a1e10; color: var(--yellow); }
-    .badge-propietario{ background: #2a2010; color: #f59e0b; }
+    .badge-admin      { background: rgba(0,70,160,.4);  color: rgba(110,190,255,.9); }
+    .badge-analista   { background: rgba(0,80,50,.4);   color: rgba(70,220,150,.9); }
+    .badge-tecnico    { background: rgba(100,55,0,.4);  color: rgba(255,180,70,.9); }
+    .badge-propietario{ background: rgba(80,50,0,.4);   color: rgba(255,190,60,.9); }
 
-    .creds-text { font-size: 11px; color: #555; }
-    .creds-text b { color: #777; }
+    .creds-text { font-size: 11px; color: rgba(120,180,210,.5); }
+    .creds-text b { color: rgba(170,220,240,.65); }
 
     /* Error message */
     .lg-error {
@@ -239,20 +251,23 @@
 
     /* Submit button */
     .lg-btn {
-      width: 100%; padding: 11px; border: none;
-      border-radius: var(--radius-sm);
-      background: var(--blue); color: #fff;
-      font-size: 14px; font-weight: 600; font-family: inherit;
+      width: 100%; padding: 12px; border: none;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #065f46 0%, #059669 50%, #10b981 100%);
+      color: #fff; font-size: 14px; font-weight: 600; font-family: inherit;
       cursor: pointer; display: flex; align-items: center;
       justify-content: center; gap: 7px;
-      transition: background .2s, transform .1s;
+      transition: opacity .2s, transform .1s, box-shadow .2s;
+      box-shadow: 0 4px 22px rgba(16,185,129,.28);
+      letter-spacing: .3px;
     }
 
-    .lg-btn:hover { background: #4f46e5; }
+    .lg-btn:hover { opacity: .9; box-shadow: 0 6px 28px rgba(16,185,129,.42); }
     .lg-btn:active { transform: scale(.98); }
 
     .lg-btn.loading {
-      background: #2c2c40; pointer-events: none; color: #555;
+      background: rgba(6,60,46,.5); pointer-events: none;
+      color: rgba(16,185,129,.5); box-shadow: none;
     }
 
     /* Spinner */
@@ -269,6 +284,14 @@
     .lg-btn.loading .btn-label { display: none; }
 
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Footer tagline */
+    .login-footer {
+      position: absolute;
+      bottom: 26px; left: 50%; transform: translateX(-50%);
+      font-size: 10px; letter-spacing: 2.5px; text-transform: uppercase;
+      color: rgba(0,160,200,.3); white-space: nowrap; z-index: 2;
+    }
 
     /* ═══════════════════════════════════════════════
        ░░  APP SHELL  ░░
@@ -640,24 +663,26 @@
      LOGIN SCREEN
 ════════════════════════════════════════════ -->
 <div id="loginScreen">
+
+  <!-- Animated canvas background (particle network + interactive G) -->
+  <canvas id="bgCanvas"></canvas>
+
+  <!-- Top header: RG logo + BusControl -->
+  <div class="login-header">
+    <div class="rg-logo-wrap">
+      <div class="rg-monogram">
+        <span class="ltr-r">R</span><span class="ltr-g">G</span>
+      </div>
+      <span class="rg-sub">Tecnología</span>
+    </div>
+    <div class="logo-sep"></div>
+    <div class="buscontrol-name">BusControl</div>
+  </div>
+
+  <!-- Glassmorphism login form -->
   <div class="login-box">
 
-    <!-- Logo -->
-    <div class="login-logo">
-      <div class="login-logo-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="1" y="3" width="15" height="13" rx="2"/>
-          <path d="M16 8h4l3 5v5h-7V8z"/>
-          <circle cx="5.5" cy="18.5" r="2.5"/>
-          <circle cx="18.5" cy="18.5" r="2.5"/>
-        </svg>
-      </div>
-      <div class="login-logo-name">
-        <strong>La Milagrosa</strong>
-        <span>Sistema de Flota</span>
-      </div>
-    </div>
-
+    <div class="login-logo"></div>
     <div class="login-divider"></div>
 
     <div class="login-title">Iniciar sesión</div>
@@ -726,11 +751,15 @@
           <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
           <polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/>
         </svg>
-        Entrar al sistema
+        Ingresar
       </span>
     </button>
 
   </div>
+
+  <!-- Footer tagline -->
+  <div class="login-footer">Gestión Vehicular Inteligente</div>
+
 </div>
 
 <!-- ════════════════════════════════════════════
@@ -1319,6 +1348,312 @@
     toast.classList.add('show');
     toastTimer = setTimeout(() => toast.classList.remove('show'), 3200);
   }
+</script>
+
+<!-- ════════════════════════════════════════════
+     LOGIN CANVAS – Particle network + Interactive G
+════════════════════════════════════════════ -->
+<script>
+(function() {
+  'use strict';
+
+  var canvas, ctx, W, H, raf;
+  var mouse = { x: -9999, y: -9999 };
+  var bgParticles = [];
+  var gParticles  = [];   // particles snapped to G letter outline
+  var trail       = [];   // cursor light trail
+  var t           = 0;    // global time
+
+  /* ── Init ────────────────────────────────── */
+  function init() {
+    canvas = document.getElementById('bgCanvas');
+    if (!canvas) return;
+    ctx = canvas.getContext('2d');
+
+    resize();
+    window.addEventListener('resize', resize);
+    document.addEventListener('mousemove', onMouse);
+
+    // Pause when login screen disappears
+    var ls = document.getElementById('loginScreen');
+    if (ls) {
+      new MutationObserver(function() {
+        if (ls.classList.contains('exit')) { cancelAnimationFrame(raf); raf = 0; }
+        else if (!raf) { raf = requestAnimationFrame(loop); }
+      }).observe(ls, { attributes: true, attributeFilter: ['class'] });
+    }
+
+    raf = requestAnimationFrame(loop);
+  }
+
+  function onMouse(e) {
+    mouse.x = e.clientX;
+    mouse.y = e.clientY;
+  }
+
+  /* ── Resize ──────────────────────────────── */
+  function resize() {
+    W = canvas.width  = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+    buildGParticles();
+    buildBgParticles();
+  }
+
+  /* ── Sample G letter from offscreen canvas ── */
+  function buildGParticles() {
+    var off = document.createElement('canvas');
+    off.width  = W;
+    off.height = H;
+    var oc  = off.getContext('2d');
+    var sz  = Math.min(W, H) * 0.78;
+    var cx  = W * 0.52;
+    var cy  = H * 0.50;
+
+    oc.clearRect(0, 0, W, H);
+    oc.fillStyle = '#fff';
+    oc.font = '900 ' + sz + 'px "Arial Black", Arial, sans-serif';
+    oc.textAlign    = 'center';
+    oc.textBaseline = 'middle';
+    oc.fillText('G', cx, cy);
+
+    var imgData = oc.getImageData(0, 0, W, H).data;
+    var step = Math.max(10, Math.round(Math.min(W, H) / 90));
+    gParticles = [];
+
+    for (var y = 0; y < H; y += step) {
+      for (var x = 0; x < W; x += step) {
+        if (imgData[(y * W + x) * 4 + 3] > 60) {
+          // Gold on bottom-right curve tail, blue everywhere else
+          var relY = (y - cy) / sz;
+          var relX = (x - cx) / sz;
+          var isGold = (relY > 0.22 && relX > 0.05);
+          gParticles.push({
+            tx: x, ty: y,           // target (G position)
+            x:  x + (Math.random() - 0.5) * step * 2,
+            y:  y + (Math.random() - 0.5) * step * 2,
+            r:  Math.random() * 0.9 + 0.4,
+            phase: Math.random() * Math.PI * 2,
+            gold: isGold
+          });
+        }
+      }
+    }
+  }
+
+  /* ── Background floating particles ───────── */
+  function buildBgParticles() {
+    var count = Math.min(90, Math.floor(W * H / 11000));
+    bgParticles = [];
+    for (var i = 0; i < count; i++) {
+      bgParticles.push({
+        x:  Math.random() * W,
+        y:  Math.random() * H,
+        vx: (Math.random() - 0.5) * 0.35,
+        vy: (Math.random() - 0.5) * 0.35,
+        r:  Math.random() * 1.1 + 0.3,
+        a:  Math.random() * 0.2 + 0.04
+      });
+    }
+  }
+
+  /* ── Main loop ───────────────────────────── */
+  function loop() {
+    t += 0.012;
+    draw();
+    raf = requestAnimationFrame(loop);
+  }
+
+  function draw() {
+    // Background
+    ctx.fillStyle = '#020b16';
+    ctx.fillRect(0, 0, W, H);
+
+    drawGrid();
+    drawBgParticles();
+    drawGParticles();
+    drawMouseGlow();
+    drawTrail();
+  }
+
+  /* ── Subtle tech grid ────────────────────── */
+  function drawGrid() {
+    var gs = 55;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(0,150,200,0.055)';
+    ctx.lineWidth   = 0.5;
+    for (var x = 0; x < W; x += gs) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+    }
+    for (var y = 0; y < H; y += gs) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /* ── Floating background particles ──────── */
+  function drawBgParticles() {
+    var maxD2 = 130 * 130;
+    for (var i = 0; i < bgParticles.length; i++) {
+      var p = bgParticles[i];
+      p.x += p.vx; p.y += p.vy;
+      if (p.x < 0) p.x = W; if (p.x > W) p.x = 0;
+      if (p.y < 0) p.y = H; if (p.y > H) p.y = 0;
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, 6.2832);
+      ctx.fillStyle = 'rgba(60,180,220,' + p.a + ')';
+      ctx.fill();
+
+      // Connections
+      for (var j = i + 1; j < bgParticles.length; j++) {
+        var q  = bgParticles[j];
+        var dx = p.x - q.x, dy = p.y - q.y;
+        var d2 = dx*dx + dy*dy;
+        if (d2 < maxD2) {
+          var alpha = (1 - Math.sqrt(d2) / 130) * 0.1;
+          ctx.beginPath();
+          ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y);
+          ctx.strokeStyle = 'rgba(40,160,210,' + alpha + ')';
+          ctx.lineWidth   = 0.5;
+          ctx.stroke();
+        }
+      }
+    }
+  }
+
+  /* ── G letter particles ──────────────────── */
+  function drawGParticles() {
+    var glowR  = 140;
+    var mx = mouse.x, my = mouse.y;
+
+    // Batch-draw the base (dim) layer in one path for performance
+    ctx.save();
+    ctx.beginPath();
+    for (var i = 0; i < gParticles.length; i++) {
+      var gp = gParticles[i];
+      // Gentle float around target
+      gp.x = gp.tx + Math.sin(t * 1.1 + gp.phase)       * 1.8;
+      gp.y = gp.ty + Math.cos(t * 0.9 + gp.phase * 1.3) * 1.8;
+      ctx.moveTo(gp.x + gp.r, gp.y);
+      ctx.arc(gp.x, gp.y, gp.r, 0, 6.2832);
+    }
+    ctx.fillStyle = 'rgba(0,180,230,0.18)';
+    ctx.fill();
+    ctx.restore();
+
+    // Individual glow for particles near mouse
+    for (var i = 0; i < gParticles.length; i++) {
+      var gp = gParticles[i];
+      var dx = gp.tx - mx, dy = gp.ty - my;
+      if (Math.abs(dx) > glowR || Math.abs(dy) > glowR) continue;
+      var dist = Math.sqrt(dx*dx + dy*dy);
+      if (dist >= glowR) continue;
+
+      var intensity = 1 - dist / glowR;
+      var r2 = gp.r + intensity * 3.5;
+
+      if (gp.gold) {
+        // Gold glow
+        ctx.beginPath();
+        ctx.arc(gp.x, gp.y, r2, 0, 6.2832);
+        ctx.fillStyle = 'rgba(255,195,40,' + (0.55 + intensity * 0.45) + ')';
+        ctx.fill();
+
+        var gg = ctx.createRadialGradient(gp.x, gp.y, 0, gp.x, gp.y, r2 * 7);
+        gg.addColorStop(0, 'rgba(255,170,0,' + (intensity * 0.35) + ')');
+        gg.addColorStop(1, 'transparent');
+        ctx.fillStyle = gg;
+        ctx.beginPath(); ctx.arc(gp.x, gp.y, r2 * 7, 0, 6.2832); ctx.fill();
+
+        // Spark burst on high intensity
+        if (intensity > 0.65 && Math.random() < 0.08) {
+          spawnSpark(gp.x, gp.y, true);
+        }
+      } else {
+        // Cyan/blue glow
+        ctx.beginPath();
+        ctx.arc(gp.x, gp.y, r2, 0, 6.2832);
+        ctx.fillStyle = 'rgba(0,225,255,' + (0.5 + intensity * 0.5) + ')';
+        ctx.fill();
+
+        var bg = ctx.createRadialGradient(gp.x, gp.y, 0, gp.x, gp.y, r2 * 6);
+        bg.addColorStop(0, 'rgba(0,210,255,' + (intensity * 0.4) + ')');
+        bg.addColorStop(0.5, 'rgba(0,140,200,' + (intensity * 0.15) + ')');
+        bg.addColorStop(1, 'transparent');
+        ctx.fillStyle = bg;
+        ctx.beginPath(); ctx.arc(gp.x, gp.y, r2 * 6, 0, 6.2832); ctx.fill();
+
+        if (intensity > 0.7 && Math.random() < 0.06) {
+          spawnSpark(gp.x, gp.y, false);
+        }
+      }
+    }
+  }
+
+  /* ── Spark particles ─────────────────────── */
+  function spawnSpark(x, y, gold) {
+    for (var i = 0; i < 3; i++) {
+      var angle = Math.random() * 6.2832;
+      var speed = Math.random() * 2.5 + 0.5;
+      trail.push({
+        x: x, y: y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 1,
+        r: Math.random() * 1.8 + 0.5,
+        gold: gold
+      });
+    }
+  }
+
+  /* ── Mouse cursor glow ───────────────────── */
+  function drawMouseGlow() {
+    if (mouse.x < 0) return;
+    var mg = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 160);
+    mg.addColorStop(0, 'rgba(0,190,240,0.07)');
+    mg.addColorStop(1, 'transparent');
+    ctx.fillStyle = mg;
+    ctx.beginPath(); ctx.arc(mouse.x, mouse.y, 160, 0, 6.2832); ctx.fill();
+
+    // Trail emission
+    if (Math.random() < 0.25) {
+      trail.push({
+        x: mouse.x + (Math.random()-0.5)*18,
+        y: mouse.y + (Math.random()-0.5)*18,
+        vx: (Math.random()-0.5)*1.2,
+        vy: (Math.random()-0.5)*1.2 - 0.4,
+        life: 1, r: Math.random()*2+0.6, gold: false
+      });
+    }
+  }
+
+  /* ── Trail / spark rendering ─────────────── */
+  function drawTrail() {
+    for (var i = trail.length - 1; i >= 0; i--) {
+      var tr = trail[i];
+      tr.x    += tr.vx;
+      tr.y    += tr.vy;
+      tr.life -= 0.035;
+      if (tr.life <= 0) { trail.splice(i, 1); continue; }
+
+      ctx.beginPath();
+      ctx.arc(tr.x, tr.y, tr.r * tr.life, 0, 6.2832);
+      if (tr.gold) {
+        ctx.fillStyle = 'rgba(255,200,60,' + (tr.life * 0.75) + ')';
+      } else {
+        ctx.fillStyle = 'rgba(100,230,255,' + (tr.life * 0.6) + ')';
+      }
+      ctx.fill();
+    }
+  }
+
+  // Boot when DOM is ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
 </script>
 
 </body>
