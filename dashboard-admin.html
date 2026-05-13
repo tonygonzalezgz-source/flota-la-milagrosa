@@ -654,9 +654,19 @@
 
     function fmtFecha(iso) {
       if (!iso) return '—';
-      const p = iso.slice(0, 10).split('-');
-      const m = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-      return `${parseInt(p[2])} ${m[parseInt(p[1])-1]} ${p[0]}`;
+      const meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+      const d = new Date(iso);
+      if (!isNaN(d.getTime())) return `${d.getUTCDate()} ${meses[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+      const p = iso.slice(0,10).split('-');
+      return `${parseInt(p[2])} ${meses[parseInt(p[1])-1]} ${p[0]}`;
+    }
+
+    function toISODate(fecha) {
+      const d = new Date(fecha);
+      if (!isNaN(d.getTime())) {
+        return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
+      }
+      return fecha.slice(0,10);
     }
 
     function escH(s) {
@@ -904,9 +914,10 @@
       /* Agrupa por fecha → suma pax y vueltas de todos los buses ese día */
       const byFecha = {};
       rangoData.forEach(r => {
-        if (!byFecha[r.fecha]) byFecha[r.fecha] = { pax: 0, vueltas: 0 };
-        byFecha[r.fecha].pax     += (r.pasajeros || 0);
-        byFecha[r.fecha].vueltas += (r.vueltas   || 0);
+        const key = toISODate(r.fecha);
+        if (!byFecha[key]) byFecha[key] = { pax: 0, vueltas: 0 };
+        byFecha[key].pax     += (r.pasajeros || 0);
+        byFecha[key].vueltas += (r.vueltas   || 0);
       });
 
       /* Genera array de las 14 fechas consecutivas */

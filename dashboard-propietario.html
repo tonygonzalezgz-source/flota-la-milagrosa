@@ -1658,9 +1658,12 @@
 
     function fmtFecha(iso) {
       if (!iso) return '—';
-      const parts = iso.slice(0,10).split('-');
       const meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-      return `${parseInt(parts[2])} ${meses[parseInt(parts[1])-1]} ${parts[0]}`;
+      // Maneja tanto ISO (2026-04-20) como RFC 2822 (Mon, 20 Apr 2026 00:00:00 GMT)
+      const d = new Date(iso);
+      if (!isNaN(d.getTime())) return `${d.getUTCDate()} ${meses[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+      const p = iso.slice(0,10).split('-');
+      return `${parseInt(p[2])} ${meses[parseInt(p[1])-1]} ${p[0]}`;
     }
 
     function renderDia(rows, fecha) {
