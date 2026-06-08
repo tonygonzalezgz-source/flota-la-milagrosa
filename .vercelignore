@@ -1,0 +1,10 @@
+api/migrate_to_supabase.py
+api/setup_db.py
+api/flota.db
+server.py
+start.sh
+Procfile
+__pycache__/
+*.pyc
+.env
+.claude/
