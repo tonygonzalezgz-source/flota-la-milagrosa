@@ -17,12 +17,16 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+    html, body { max-width: 100%; overflow-x: hidden; }
+    img, svg, video { max-width: 100%; }
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       background: #f4f4f6;
       color: #111;
       min-height: 100vh;
+      -webkit-overflow-scrolling: touch;
     }
 
     /* ─── NAVBAR ─── */
@@ -356,6 +360,43 @@
     @media (max-width: 1100px) {
       .kpi-row { grid-template-columns: repeat(2, 1fr); }
       .content-grid { grid-template-columns: 1fr; }
+      .trend-row { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 768px) {
+      .navbar { padding: 0 14px; height: 56px; gap: 10px; }
+      .navbar-logo { margin-right: 10px; }
+      .navbar-logo span { display: none; }
+      /* Nav links con scroll horizontal */
+      .navbar-nav {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        flex-wrap: nowrap;
+      }
+      .navbar-nav::-webkit-scrollbar { display: none; }
+      .navbar-nav a { padding: 6px 12px; font-size: 13px; white-space: nowrap; flex-shrink: 0; }
+      .user-info { display: none; }
+
+      .main { padding: 16px 14px; gap: 16px; }
+      .header-row { flex-direction: column; align-items: flex-start; gap: 12px; }
+      .greeting-big { font-size: 24px; letter-spacing: -.5px; }
+      .header-actions { flex-wrap: wrap; gap: 8px; width: 100%; }
+      .date-badge, .btn-outline, .btn-primary { padding: 10px 14px; font-size: 13px; min-height: 40px; }
+
+      .kpi-card { padding: 16px; gap: 12px; }
+      .kpi-value { font-size: 22px; }
+      .trend-card { padding: 18px 16px 16px; border-radius: 16px; }
+      .trend-big { font-size: 28px; letter-spacing: -1px; }
+      .chart-wrapper { height: 200px; }
+    }
+
+    @media (max-width: 480px) {
+      .kpi-row { grid-template-columns: 1fr; }
+      .resumen-stats { grid-template-columns: 1fr; }
+      .trend-stats { font-size: 12px; }
+      .greeting-big { font-size: 20px; }
+      .trend-big { font-size: 24px; }
     }
   </style>
 </head>

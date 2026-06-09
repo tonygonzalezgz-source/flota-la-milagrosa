@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>La Milagrosa — Mantenimiento</title>
+  <title>Mantenimiento — La Milagrosa</title>
   <script>
     (function(){
-      document.addEventListener('contextmenu',function(e){e.preventDefault();});
-      document.addEventListener('keydown',function(e){
-        if(e.key==='F12'){e.preventDefault();return false;}
-        if(e.ctrlKey&&e.shiftKey&&['I','J','C','U'].includes(e.key.toUpperCase())){e.preventDefault();return false;}
-        if(e.ctrlKey&&e.key.toUpperCase()==='U'){e.preventDefault();return false;}
+      document.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+      document.addEventListener('keydown', function(e){
+        if (e.key === 'F12') { e.preventDefault(); return false; }
+        if (e.ctrlKey && e.shiftKey && ['I','J','C','U'].includes(e.key.toUpperCase())) { e.preventDefault(); return false; }
+        if (e.ctrlKey && e.key.toUpperCase() === 'U') { e.preventDefault(); return false; }
       });
     })();
   </script>
@@ -19,17 +19,18 @@
        TOKENS & RESET
     ══════════════════════════════════════ */
     *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+    html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+    html, body { max-width: 100%; overflow-x: hidden; -webkit-overflow-scrolling: touch; }
+    img, svg, video { max-width: 100%; }
 
     :root {
-      --top-bg:        #0c0c0e;
-      --btm-bg:        #f1f2f6;
-      --card-dark:     #161618;
-      --card-light:    #ffffff;
-      --border-d:      #252528;
-      --border-l:      #e5e5eb;
+      --bg:            #f1f2f6;
+      --surface:       #ffffff;
+      --border:        #e5e5eb;
+      --border-2:      #d0d0d8;
       --blue:          #6366f1;
-      --blue-dim:      #4338ca;
       --blue-bg:       rgba(99,102,241,.12);
+      --blue-text:     #4338ca;
       --green:         #22c55e;
       --green-bg:      #dcfce7;
       --green-text:    #16a34a;
@@ -41,494 +42,853 @@
       --red-text:      #dc2626;
       --purple:        #a855f7;
       --teal:          #14b8a6;
-      --orange:        #fb923c;
-      --txt-inv:       #ffffff;
-      --txt-muted:     #888;
-      --txt-dim:       #555;
+      --text:          #111;
+      --text-2:        #555;
+      --text-3:        #888;
+      --text-4:        #aaa;
       --radius:        14px;
-      --radius-sm:     9px;
+      --radius-sm:     10px;
       --shadow:        0 1px 4px rgba(0,0,0,.07);
-      --shadow-md:     0 4px 20px rgba(0,0,0,.12);
+      --shadow-md:     0 4px 20px rgba(0,0,0,.10);
     }
 
-    html, body { height:100%; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Inter',sans-serif; overflow:hidden; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
 
     /* ══════════════════════════════════════
-       SPLIT LAYOUT
+       HEADER
     ══════════════════════════════════════ */
-    .split { display:grid; grid-template-rows:50vh 50vh; height:100vh; }
-
-    .half-top {
-      background: var(--top-bg);
-      overflow-y: auto;
-      scrollbar-width: thin;
-      scrollbar-color: #333 transparent;
+    .topbar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 28px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 30;
     }
-    .half-top::-webkit-scrollbar { width:4px; }
-    .half-top::-webkit-scrollbar-thumb { background:#2e2e2e; border-radius:4px; }
 
-    .half-btm {
-      background: var(--btm-bg);
-      overflow-y: auto;
-      border-top: 3px solid var(--yellow);
-      scrollbar-width: thin;
-      scrollbar-color: #ccc transparent;
+    .topbar-title {
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: -.3px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
     }
-    .half-btm::-webkit-scrollbar { width:4px; }
-    .half-btm::-webkit-scrollbar-thumb { background:#ccc; border-radius:4px; }
 
-    /* ══════════════════════════════════════
-       PANEL HEADERS
-    ══════════════════════════════════════ */
-    .ph {
-      display:flex; align-items:center; gap:12px;
-      padding:14px 26px;
-      position:sticky; top:0; z-index:20;
+    .topbar-title .ti-ico {
+      width: 32px; height: 32px;
+      border-radius: 9px;
+      background: var(--yellow-bg);
+      display: flex; align-items: center; justify-content: center;
     }
-    .ph-dark  { background:var(--top-bg); border-bottom:1px solid var(--border-d); }
-    .ph-light { background:var(--btm-bg); border-bottom:1px solid var(--border-l); }
+    .topbar-title .ti-ico svg { color: var(--yellow-text); }
 
-    .role-badge {
-      font-size:10px; font-weight:700; letter-spacing:1px;
-      text-transform:uppercase; padding:3px 10px; border-radius:20px;
-    }
-    .badge-tech  { background:#1c1c2e; color:var(--yellow); border:1px solid #3a3008; }
-    .badge-owner { background:var(--yellow-bg); color:var(--yellow-text); }
-
-    .ph-title { font-size:15px; font-weight:700; }
-    .ph-title.d { color:var(--txt-inv); }
-    .ph-title.l { color:#111; }
-    .ph-sub { font-size:11px; margin-top:1px; }
-    .ph-sub.d { color:var(--txt-muted); }
-    .ph-sub.l { color:#999; }
+    .topbar-sub { font-size: 12px; color: var(--text-3); margin-top: 2px; font-weight: 400; }
 
     /* User chip */
     .user-chip {
-      margin-left:auto;
-      display:flex; align-items:center; gap:8px;
-      padding:5px 12px 5px 6px;
-      background:var(--card-dark);
-      border:1px solid var(--border-d);
-      border-radius:20px;
+      margin-left: auto;
+      display: flex; align-items: center; gap: 8px;
+      padding: 5px 14px 5px 5px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 20px;
     }
     .user-avatar {
-      width:26px; height:26px; border-radius:50%;
-      display:flex; align-items:center; justify-content:center;
-      font-size:10px; font-weight:700; color:#fff;
+      width: 28px; height: 28px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; color: #fff;
     }
-    .user-name { font-size:12px; font-weight:600; color:var(--txt-inv); }
-    .user-role { font-size:10px; color:var(--txt-muted); }
-
+    .user-name { font-size: 12px; font-weight: 600; color: var(--text); line-height: 1.2; }
+    .user-role { font-size: 10px; color: var(--text-3); }
 
     /* ══════════════════════════════════════
-       TOP HALF — BODY
+       TABS NAVIGATION
     ══════════════════════════════════════ */
-    .top-body {
-      padding:18px 26px 24px;
-      display:grid;
-      grid-template-columns:1fr 1fr;
-      gap:16px;
+    .tabs-bar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 28px;
+      display: flex;
+      gap: 0;
+      position: sticky;
+      top: 60px;
+      z-index: 25;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    .tabs-bar::-webkit-scrollbar { display: none; }
+
+    .tab {
+      display: flex; align-items: center; gap: 8px;
+      padding: 14px 18px;
+      border: none; background: none; cursor: pointer;
+      font-family: inherit; font-size: 13px; font-weight: 500;
+      color: var(--text-3);
+      border-bottom: 2.5px solid transparent;
+      transition: color .15s, border-color .15s;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active {
+      color: var(--text);
+      border-bottom-color: var(--yellow);
+      font-weight: 600;
     }
 
-    /* ── FORM CARD ── */
-    .card-dark {
-      background:var(--card-dark);
-      border:1px solid var(--border-d);
-      border-radius:var(--radius);
-      padding:20px 22px;
-      display:flex; flex-direction:column; gap:16px;
+    .tab-badge {
+      font-size: 10px; font-weight: 700;
+      padding: 2px 7px; border-radius: 20px;
+      background: var(--bg); color: var(--text-3);
+    }
+    .tab.active .tab-badge { background: var(--yellow-bg); color: var(--yellow-text); }
+
+    /* ══════════════════════════════════════
+       PAGE CONTAINER
+    ══════════════════════════════════════ */
+    .page {
+      padding: 22px 28px 40px;
+      max-width: 1440px;
+      margin: 0 auto;
     }
 
-    .card-title-d {
-      font-size:13px; font-weight:600; color:var(--txt-inv);
-      display:flex; align-items:center; gap:8px;
+    .panel { display: none; }
+    .panel.active { display: block; animation: fadeIn .25s ease; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to   { opacity: 1; transform: translateY(0); }
     }
-    .card-title-d svg { opacity:.6; }
 
-    /* Field */
-    .field { display:flex; flex-direction:column; gap:5px; }
+    /* ══════════════════════════════════════
+       CARDS
+    ══════════════════════════════════════ */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 22px 22px 20px;
+      box-shadow: var(--shadow);
+    }
+
+    .card-title {
+      font-size: 14px; font-weight: 700; color: var(--text);
+      display: flex; align-items: center; gap: 8px;
+      margin-bottom: 16px;
+    }
+    .card-title .ct-ico {
+      width: 28px; height: 28px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--blue-bg); color: var(--blue-text);
+    }
+    .card-title .ct-ico.warn { background: var(--yellow-bg); color: var(--yellow-text); }
+    .card-title .ct-ico.alert { background: var(--red-bg); color: var(--red-text); }
+
+    .card-sub { font-size: 11px; color: var(--text-3); margin-top: -10px; margin-bottom: 14px; }
+
+    /* ══════════════════════════════════════
+       FORM ELEMENTS
+    ══════════════════════════════════════ */
+    .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
 
     label {
-      font-size:10px; font-weight:700; color:var(--txt-dim);
-      text-transform:uppercase; letter-spacing:.7px;
+      font-size: 10px; font-weight: 700;
+      color: var(--text-2); text-transform: uppercase; letter-spacing: .7px;
     }
 
-    select, textarea {
-      width:100%; font-family:inherit; outline:none;
-      border-radius:var(--radius-sm);
-      border:1.5px solid var(--border-d);
-      background:#0f0f0f; color:var(--txt-inv);
-      font-size:13px;
-      transition:border-color .2s, box-shadow .2s;
+    select, textarea, input[type="text"], input[type="date"], input[type="number"] {
+      width: 100%; font-family: inherit; outline: none;
+      border-radius: var(--radius-sm);
+      border: 1.5px solid var(--border);
+      background: #fff; color: var(--text);
+      font-size: 14px;
+      transition: border-color .2s, box-shadow .2s;
     }
-
     select {
-      padding:9px 34px 9px 13px;
-      appearance:none; -webkit-appearance:none; cursor:pointer;
-      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' fill='none' stroke='%23555' stroke-width='2' viewBox='0 0 24 24'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-      background-repeat:no-repeat; background-position:right 11px center;
+      padding: 10px 36px 10px 13px;
+      appearance: none; -webkit-appearance: none; cursor: pointer;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' fill='none' stroke='%23888' stroke-width='2' viewBox='0 0 24 24'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 12px center;
+    }
+    textarea { padding: 10px 13px; resize: none; height: 76px; line-height: 1.5; }
+    input[type="text"], input[type="date"], input[type="number"] { padding: 10px 13px; }
+
+    select:focus, textarea:focus, input:focus {
+      border-color: var(--yellow);
+      box-shadow: 0 0 0 3px rgba(245,158,11,.15);
+    }
+    select:disabled { opacity: .5; cursor: not-allowed; }
+
+    /* Pills grid (tipo de falla) */
+    .pills-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+    }
+    .pill {
+      display: flex; flex-direction: column; align-items: center; gap: 5px;
+      padding: 12px 6px;
+      border-radius: var(--radius-sm);
+      border: 1.5px solid var(--border);
+      background: #fff;
+      cursor: pointer; transition: border-color .15s, background .15s, color .15s;
+      font-size: 11px; color: var(--text-3); font-weight: 600;
+      text-align: center; user-select: none;
+    }
+    .pill:hover { background: #f8f8fb; border-color: var(--border-2); color: var(--text-2); }
+    .pill.selected {
+      border-color: var(--yellow);
+      background: var(--yellow-bg);
+      color: var(--yellow-text);
     }
 
-    textarea {
-      padding:9px 13px; resize:none; height:72px; line-height:1.5;
+    /* Severity selector */
+    .severity-row { display: flex; gap: 8px; }
+    .sev-btn {
+      flex: 1;
+      padding: 9px 6px;
+      border: 1.5px solid var(--border);
+      background: #fff;
+      border-radius: var(--radius-sm);
+      font-family: inherit; font-size: 12px; font-weight: 600;
+      cursor: pointer; transition: all .15s;
+      color: var(--text-3);
+      display: flex; align-items: center; justify-content: center; gap: 5px;
     }
-
-    select:focus, textarea:focus {
-      border-color:var(--yellow);
-      box-shadow:0 0 0 3px rgba(245,158,11,.15);
+    .sev-btn::before {
+      content: ''; width: 7px; height: 7px; border-radius: 50%;
+      background: currentColor;
     }
+    .sev-btn:hover { border-color: var(--border-2); color: var(--text-2); }
+    .sev-btn.selected.low   { background: var(--green-bg); color: var(--green-text); border-color: var(--green); }
+    .sev-btn.selected.mid   { background: var(--yellow-bg); color: var(--yellow-text); border-color: var(--yellow); }
+    .sev-btn.selected.high  { background: var(--red-bg); color: var(--red-text); border-color: var(--red); }
 
-    select:disabled { opacity:.4; cursor:not-allowed; }
-    select option { background:#1a1a1a; }
-
-    /* Novedad icon pills */
-    .novedad-grid {
-      display:grid; grid-template-columns:repeat(3,1fr); gap:6px;
+    /* Botón principal */
+    .btn-primary {
+      width: 100%;
+      padding: 12px;
+      border: none; border-radius: var(--radius-sm);
+      background: var(--text); color: #fff;
+      font-size: 14px; font-weight: 700; font-family: inherit;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      transition: background .15s, transform .1s;
+      min-height: 44px;
     }
+    .btn-primary:hover:not(:disabled) { background: #333; }
+    .btn-primary:active:not(:disabled) { transform: scale(.98); }
+    .btn-primary:disabled { opacity: .4; cursor: not-allowed; }
+    .btn-primary.success { background: var(--green); pointer-events: none; }
 
-    .nov-pill {
-      display:flex; flex-direction:column; align-items:center; gap:4px;
-      padding:8px 4px;
-      border-radius:10px;
-      border:1.5px solid var(--border-d);
-      background:#0f0f0f;
-      cursor:pointer; transition:border-color .15s, background .15s;
-      font-size:10px; color:var(--txt-muted); font-weight:600;
-      text-align:center; user-select:none;
+    .btn-secondary {
+      padding: 8px 14px;
+      border: 1.5px solid var(--border);
+      background: #fff; color: var(--text-2);
+      border-radius: 8px;
+      font-family: inherit; font-size: 12px; font-weight: 600;
+      cursor: pointer; transition: border-color .15s;
     }
+    .btn-secondary:hover { border-color: var(--border-2); color: var(--text); }
 
-    .nov-pill:hover { background:#1a1a1a; border-color:#444; color:#aaa; }
-
-    .nov-pill.selected {
-      border-color:var(--yellow);
-      background:rgba(245,158,11,.08);
-      color:var(--yellow);
-    }
-
-    /* Save button */
-    .btn-save {
-      width:100%; padding:11px; border:none; border-radius:var(--radius-sm);
-      background:var(--yellow); color:#0c0c0e;
-      font-size:13px; font-weight:700; font-family:inherit;
-      cursor:pointer; display:flex; align-items:center; justify-content:center; gap:7px;
-      transition:background .2s, transform .1s;
-    }
-    .btn-save:hover:not(:disabled) { background:#e08d00; }
-    .btn-save:active:not(:disabled) { transform:scale(.98); }
-    .btn-save:disabled { opacity:.45; cursor:not-allowed; }
-    .btn-save.success { background:var(--green); color:#fff; pointer-events:none; }
-
-    /* Success message */
     .success-msg {
-      display:none; align-items:center; gap:9px;
-      padding:9px 14px;
-      background:rgba(34,197,94,.1); border:1px solid rgba(34,197,94,.25);
-      border-radius:var(--radius-sm); color:var(--green);
-      font-size:12px; font-weight:600;
-      animation:fadeIn .25s ease;
+      display: none; align-items: center; gap: 8px;
+      padding: 10px 14px;
+      background: var(--green-bg); border: 1px solid rgba(34,197,94,.3);
+      border-radius: var(--radius-sm); color: var(--green-text);
+      font-size: 12px; font-weight: 600;
+      margin-bottom: 12px;
     }
-    .success-msg.show { display:flex; }
+    .success-msg.show { display: flex; }
 
-    @keyframes fadeIn { from{opacity:0;transform:translateY(-5px)} to{opacity:1;transform:translateY(0)} }
+    /* ══════════════════════════════════════
+       PANEL 1 — REPORTE DE FALLAS
+    ══════════════════════════════════════ */
+    .fallas-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
 
-    /* ── LOG CARD ── */
+    /* Log de sesión */
     .log-list {
-      display:flex; flex-direction:column; gap:6px;
-      max-height:200px; overflow-y:auto;
-      scrollbar-width:thin; scrollbar-color:#2a2a2a transparent;
+      display: flex; flex-direction: column; gap: 8px;
+      max-height: 380px; overflow-y: auto;
     }
-    .log-list::-webkit-scrollbar { width:3px; }
-    .log-list::-webkit-scrollbar-thumb { background:#2a2a2a; border-radius:3px; }
+    .log-list::-webkit-scrollbar { width: 4px; }
+    .log-list::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 4px; }
 
     .log-empty {
-      text-align:center; padding:24px 0;
-      color:#3a3a3a; font-size:12px;
+      text-align: center; padding: 40px 0; color: var(--text-4);
+      font-size: 13px;
     }
-    .log-empty svg { display:block; margin:0 auto 8px; opacity:.2; }
+    .log-empty svg { display: block; margin: 0 auto 10px; opacity: .3; }
 
     .log-row {
-      display:grid;
-      grid-template-columns:50px auto 1fr auto;
-      gap:8px; align-items:center;
-      padding:8px 10px;
-      background:#0f0f0f;
-      border:1px solid var(--border-d);
-      border-radius:8px;
-      font-size:12px;
-      animation:slideIn .3s ease;
+      display: grid;
+      grid-template-columns: auto auto 1fr auto;
+      gap: 10px; align-items: center;
+      padding: 10px 12px;
+      background: var(--bg);
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      animation: slideIn .3s ease;
     }
     @keyframes slideIn { from{opacity:0;transform:translateX(-8px)} to{opacity:1;transform:translateX(0)} }
 
     .log-bus {
-      font-size:11px; font-weight:700; padding:2px 7px;
-      border-radius:6px; background:#1c1c2e; color:var(--blue); text-align:center;
+      font-size: 11px; font-weight: 700; padding: 3px 9px;
+      border-radius: 6px; background: var(--blue-bg); color: var(--blue-text); white-space: nowrap;
     }
     .log-type {
-      font-size:11px; font-weight:600; padding:2px 8px;
-      border-radius:6px; white-space:nowrap;
+      font-size: 11px; font-weight: 600; padding: 3px 9px;
+      border-radius: 6px; white-space: nowrap;
     }
-    .log-obs { color:#888; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:11px; }
-    .log-time { color:#444; font-size:10px; white-space:nowrap; }
+    .log-obs { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .log-time { color: var(--text-4); font-size: 11px; white-space: nowrap; }
 
     /* ══════════════════════════════════════
-       BOTTOM HALF — PROPIETARIO
+       PANEL 2 — PREVENTIVOS
     ══════════════════════════════════════ */
-    .btm-body { padding:14px 26px 24px; display:flex; flex-direction:column; gap:14px; }
+    .prev-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
 
-    /* Bus tab selector */
+    .programados-list {
+      display: flex; flex-direction: column; gap: 10px;
+      max-height: 420px; overflow-y: auto;
+    }
+    .programados-list::-webkit-scrollbar { width: 4px; }
+    .programados-list::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 4px; }
+
+    .prog-item {
+      display: grid;
+      grid-template-columns: 36px 1fr auto;
+      gap: 12px; align-items: center;
+      padding: 12px 14px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      border-left: 3px solid var(--blue);
+      transition: box-shadow .15s;
+    }
+    .prog-item:hover { box-shadow: var(--shadow); }
+    .prog-item.due { border-left-color: var(--yellow); background: #fffaf0; }
+    .prog-item.overdue { border-left-color: var(--red); background: #fef5f5; }
+    .prog-item.done { opacity: .6; border-left-color: var(--green); }
+
+    .prog-icon {
+      width: 36px; height: 36px; border-radius: 9px;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--blue-bg); color: var(--blue-text);
+    }
+    .prog-item.due .prog-icon { background: var(--yellow-bg); color: var(--yellow-text); }
+    .prog-item.overdue .prog-icon { background: var(--red-bg); color: var(--red-text); }
+    .prog-item.done .prog-icon { background: var(--green-bg); color: var(--green-text); }
+
+    .prog-title { font-size: 13px; font-weight: 600; color: var(--text); }
+    .prog-meta { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+
+    .prog-status {
+      font-size: 10px; font-weight: 700; padding: 4px 10px;
+      border-radius: 20px; white-space: nowrap; text-transform: uppercase; letter-spacing: .4px;
+    }
+    .prog-status.scheduled { background: var(--blue-bg); color: var(--blue-text); }
+    .prog-status.due       { background: var(--yellow-bg); color: var(--yellow-text); }
+    .prog-status.overdue   { background: var(--red-bg); color: var(--red-text); }
+    .prog-status.done      { background: var(--green-bg); color: var(--green-text); }
+
+    .prev-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+    /* ══════════════════════════════════════
+       PANEL 3 — ESTADO Y HISTORIAL
+    ══════════════════════════════════════ */
     .bus-tabs {
-      display:flex; gap:6px; align-items:center;
-      padding:4px 0;
+      display: flex; gap: 6px; flex-wrap: wrap;
+      margin-bottom: 18px;
     }
-
     .bus-tab {
-      display:flex; align-items:center; gap:6px;
-      padding:6px 14px; border-radius:20px;
-      border:1.5px solid var(--border-l);
-      background:#fff; cursor:pointer;
-      font-size:12px; font-weight:600; color:#888;
-      font-family:inherit; transition:all .15s;
+      display: flex; align-items: center; gap: 6px;
+      padding: 7px 14px; border-radius: 20px;
+      border: 1.5px solid var(--border);
+      background: #fff; cursor: pointer;
+      font-size: 12px; font-weight: 600; color: var(--text-3);
+      font-family: inherit; transition: all .15s;
+      position: relative;
     }
-    .bus-tab:hover { border-color:#aaa; color:#444; }
-    .bus-tab.active { background:#111; color:#fff; border-color:#111; }
+    .bus-tab:hover { border-color: var(--border-2); color: var(--text-2); }
+    .bus-tab.active { background: var(--text); color: #fff; border-color: var(--text); }
     .bus-tab .bus-dot {
-      width:6px; height:6px; border-radius:50%;
-      background:var(--green); display:none;
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--green); display: none;
     }
-    .bus-tab.has-updates .bus-dot { display:block; }
+    .bus-tab.has-updates .bus-dot { display: block; }
 
-    /* Maintenance grid */
+    .estado-grid {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: 18px;
+      align-items: start;
+    }
+
     .maint-grid {
-      display:grid; grid-template-columns:repeat(3,1fr); gap:12px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
     }
 
     .maint-card {
-      background:var(--card-light);
-      border-radius:var(--radius);
-      border:1.5px solid var(--border-l);
-      padding:16px 16px 14px;
-      box-shadow:var(--shadow);
-      display:flex; flex-direction:column; gap:11px;
-      position:relative; overflow:hidden;
-      transition:box-shadow .2s, border-color .3s;
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 16px 14px;
+      box-shadow: var(--shadow);
+      display: flex; flex-direction: column; gap: 11px;
+      position: relative; overflow: hidden;
+      transition: box-shadow .2s, border-color .3s;
     }
-    .maint-card:hover { box-shadow:var(--shadow-md); }
+    .maint-card:hover { box-shadow: var(--shadow-md); }
 
-    /* Accent stripe left */
     .maint-card::after {
-      content:''; position:absolute;
-      left:0; top:14px; bottom:14px;
-      width:3px; border-radius:0 3px 3px 0;
-      transition:background .4s;
+      content: ''; position: absolute;
+      left: 0; top: 14px; bottom: 14px;
+      width: 3px; border-radius: 0 3px 3px 0;
+      transition: background .4s;
     }
-    .maint-card.ok::after     { background:var(--green); }
-    .maint-card.warn::after   { background:var(--yellow); }
-    .maint-card.alert::after  { background:var(--red); }
+    .maint-card.ok::after    { background: var(--green); }
+    .maint-card.warn::after  { background: var(--yellow); }
+    .maint-card.alert::after { background: var(--red); }
 
-    /* Flash animation when updated */
-    .maint-card.flash {
-      animation:cardFlash .6s ease;
-    }
+    .maint-card.flash { animation: cardFlash .6s ease; }
     @keyframes cardFlash {
-      0%   { border-color:var(--green); box-shadow:0 0 0 3px rgba(34,197,94,.25); }
-      100% { border-color:var(--border-l); box-shadow:var(--shadow); }
+      0%   { border-color: var(--green); box-shadow: 0 0 0 3px rgba(34,197,94,.25); }
+      100% { border-color: var(--border); box-shadow: var(--shadow); }
     }
 
-    .mc-top { display:flex; align-items:center; justify-content:space-between; }
+    .mc-top { display: flex; align-items: center; justify-content: space-between; }
 
     .mc-icon {
-      width:40px; height:40px; border-radius:11px;
-      display:flex; align-items:center; justify-content:center;
-      transition:background .4s;
+      width: 40px; height: 40px; border-radius: 11px;
+      display: flex; align-items: center; justify-content: center;
     }
-    .mc-icon.ok   { background:var(--green-bg); }
-    .mc-icon.warn { background:var(--yellow-bg); }
-    .mc-icon.alert{ background:var(--red-bg); }
+    .mc-icon.ok    { background: var(--green-bg); }
+    .mc-icon.warn  { background: var(--yellow-bg); }
+    .mc-icon.alert { background: var(--red-bg); }
 
     .mc-chip {
-      display:flex; align-items:center; gap:4px;
-      font-size:10px; font-weight:700; padding:3px 9px; border-radius:20px;
-      transition:background .4s, color .4s;
+      display: flex; align-items: center; gap: 4px;
+      font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 20px;
     }
     .mc-chip::before {
-      content:''; width:5px; height:5px; border-radius:50%; background:currentColor;
+      content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor;
     }
-    .mc-chip.ok   { background:var(--green-bg); color:var(--green-text); }
-    .mc-chip.warn { background:var(--yellow-bg); color:var(--yellow-text); }
-    .mc-chip.alert{ background:var(--red-bg); color:var(--red-text); }
+    .mc-chip.ok    { background: var(--green-bg); color: var(--green-text); }
+    .mc-chip.warn  { background: var(--yellow-bg); color: var(--yellow-text); }
+    .mc-chip.alert { background: var(--red-bg); color: var(--red-text); }
 
-    .mc-name { font-size:14px; font-weight:700; color:#111; }
-    .mc-desc { font-size:11px; color:#aaa; margin-top:1px; }
+    .mc-name { font-size: 14px; font-weight: 700; color: var(--text); }
+    .mc-desc { font-size: 11px; color: var(--text-4); margin-top: 2px; }
 
-    /* Progress */
-    .mc-prog { display:flex; flex-direction:column; gap:5px; }
-    .prog-labels { display:flex; justify-content:space-between; font-size:10px; color:#aaa; }
+    .mc-prog { display: flex; flex-direction: column; gap: 5px; }
+    .prog-labels { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-4); }
     .prog-bar {
-      height:6px; background:#f0f0f4; border-radius:20px; overflow:hidden;
+      height: 6px; background: #f0f0f4; border-radius: 20px; overflow: hidden;
     }
     .prog-fill {
-      height:100%; border-radius:20px;
-      transition:width .6s cubic-bezier(.4,0,.2,1), background .4s;
+      height: 100%; border-radius: 20px;
+      transition: width .6s cubic-bezier(.4,0,.2,1);
     }
-    .prog-fill.ok   { background:linear-gradient(90deg,#22c55e,#4ade80); }
-    .prog-fill.warn { background:linear-gradient(90deg,#f59e0b,#fbbf24); }
-    .prog-fill.alert{ background:linear-gradient(90deg,#ef4444,#f87171); }
+    .prog-fill.ok    { background: linear-gradient(90deg,#22c55e,#4ade80); }
+    .prog-fill.warn  { background: linear-gradient(90deg,#f59e0b,#fbbf24); }
+    .prog-fill.alert { background: linear-gradient(90deg,#ef4444,#f87171); }
 
-    /* Footer */
     .mc-footer {
-      display:flex; justify-content:space-between; align-items:center;
-      padding-top:8px; border-top:1px solid #f4f4f6;
+      display: flex; justify-content: space-between; align-items: center;
+      padding-top: 8px; border-top: 1px solid #f4f4f6;
     }
-    .mc-footer-lbl { font-size:10px; color:#aaa; }
-    .mc-footer-val { font-size:11px; font-weight:600; color:#111; margin-top:1px; }
-    .mc-obs {
-      font-size:10px; color:#aaa; font-style:italic;
-      max-width:100px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    .mc-footer-lbl { font-size: 10px; color: var(--text-4); }
+    .mc-footer-val { font-size: 11px; font-weight: 600; color: var(--text); margin-top: 1px; }
+
+    /* Historial cronológico */
+    .hist-list {
+      display: flex; flex-direction: column; gap: 8px;
+      max-height: 540px; overflow-y: auto;
+    }
+    .hist-list::-webkit-scrollbar { width: 4px; }
+    .hist-list::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 4px; }
+
+    .hist-item {
+      display: grid;
+      grid-template-columns: 4px 1fr;
+      gap: 12px;
+      padding: 10px 12px 10px 0;
+      border-bottom: 1px solid #f4f4f6;
+    }
+    .hist-item:last-child { border-bottom: none; }
+
+    .hist-bar { width: 3px; border-radius: 2px; margin-left: 1px; }
+    .hist-bar.falla     { background: var(--red); }
+    .hist-bar.preventivo { background: var(--blue); }
+
+    .hist-head { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; flex-wrap: wrap; }
+    .hist-type-chip {
+      font-size: 10px; font-weight: 700; padding: 2px 8px;
+      border-radius: 6px; text-transform: uppercase; letter-spacing: .3px;
+    }
+    .hist-type-chip.falla     { background: var(--red-bg); color: var(--red-text); }
+    .hist-type-chip.preventivo { background: var(--blue-bg); color: var(--blue-text); }
+    .hist-comp { font-size: 12px; font-weight: 600; color: var(--text); }
+    .hist-date { font-size: 11px; color: var(--text-4); margin-left: auto; white-space: nowrap; }
+    .hist-obs { font-size: 12px; color: var(--text-2); line-height: 1.4; }
+
+    .hist-empty {
+      text-align: center; padding: 50px 0; color: var(--text-4); font-size: 13px;
+    }
+    .hist-empty svg { display: block; margin: 0 auto 12px; opacity: .3; }
+
+    /* Live indicator */
+    .live-chip {
+      display: flex; align-items: center; gap: 7px;
+      font-size: 11px; font-weight: 600;
+      color: var(--green-text); background: var(--green-bg);
+      padding: 5px 12px; border-radius: 20px;
+    }
+    .live-chip .live-dot {
+      width: 6px; height: 6px; border-radius: 50%; background: var(--green);
+      animation: pulse 1.8s infinite;
+    }
+    @keyframes pulse {
+      0%,100% { opacity: 1; transform: scale(1); }
+      50%     { opacity: .5; transform: scale(.75); }
     }
 
+    /* ══════════════════════════════════════
+       RESPONSIVE
+    ══════════════════════════════════════ */
+    @media (max-width: 1100px) {
+      .fallas-grid, .prev-grid { grid-template-columns: 1fr; }
+      .estado-grid { grid-template-columns: 1fr; }
+      .maint-grid { grid-template-columns: repeat(3, 1fr); }
+    }
     @media (max-width: 768px) {
-      html { height: 100%; overflow-y: scroll; -webkit-overflow-scrolling: touch; }
-      body { min-height: 100%; overflow-y: visible; }
-      .split { display: block; height: auto; }
-      .half-top, .half-btm { height: auto; min-height: 50vh; overflow: visible; }
+      .topbar { padding: 12px 14px; flex-wrap: wrap; gap: 10px; }
+      .topbar-title { font-size: 15px; }
+      .tabs-bar { padding: 0 14px; top: 64px; }
+      .tab { padding: 12px 14px; font-size: 12px; }
+      .page { padding: 16px 14px 32px; }
+      .card { padding: 18px 16px; }
+      .pills-grid { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+      .pill { padding: 10px 4px; font-size: 10px; }
+      .maint-grid { grid-template-columns: repeat(2, 1fr); }
+      .prev-form-row { grid-template-columns: 1fr; }
+      .user-chip { margin-left: 0; }
+    }
+    @media (max-width: 480px) {
+      .topbar-title .ti-ico { width: 28px; height: 28px; }
+      .topbar-title { font-size: 14px; }
+      .topbar-sub { display: none; }
+      .maint-grid { grid-template-columns: 1fr; }
+      .log-row { grid-template-columns: auto 1fr; row-gap: 4px; }
+      .log-row .log-obs, .log-row .log-time { grid-column: 1 / -1; white-space: normal; }
+      .prog-item { grid-template-columns: 32px 1fr; }
+      .prog-status { grid-column: 1 / -1; justify-self: start; }
     }
   </style>
 </head>
 <body>
 
-<div class="split">
-
   <!-- ════════════════════════════
-       MITAD SUPERIOR — TÉCNICO
+       TOPBAR
   ════════════════════════════ -->
-  <div class="half-top">
-
-    <div class="ph ph-dark">
-      <span class="role-badge badge-tech">Técnico</span>
-      <div>
-        <div class="ph-title d">Registro de Novedades</div>
-        <div class="ph-sub d">Solo puedes registrar tus unidades asignadas</div>
+  <header class="topbar">
+    <div class="topbar-title">
+      <div class="ti-ico">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+        </svg>
       </div>
-      <!-- User chip -->
-      <div class="user-chip" id="userChip">
-        <div class="user-avatar" id="avatarEl" style="background:#6366f1">?</div>
-        <div>
-          <div class="user-name" id="userNameEl">—</div>
-          <div class="user-role" id="userRoleEl">Cargando…</div>
-        </div>
+      <div>
+        <div>Mantenimiento</div>
+        <div class="topbar-sub">Fallas reportadas · preventivos · estado por bus</div>
       </div>
     </div>
 
-    <div class="top-body">
-
-      <!-- FORMULARIO -->
-      <div class="card-dark">
-        <div class="card-title-d">
-          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
-          </svg>
-          Nueva Novedad
-        </div>
-
-        <!-- Bus -->
-        <div class="field">
-          <label>Bus asignado</label>
-          <select id="selBus">
-            <option value="">— Selecciona un bus —</option>
-          </select>
-        </div>
-
-        <!-- Tipo de novedad (visual pills) -->
-        <div class="field">
-          <label>Tipo de novedad</label>
-          <div class="novedad-grid" id="novedadGrid">
-            <!-- populated by JS -->
-          </div>
-          <input type="hidden" id="hiddenNovedad" value="" />
-        </div>
-
-        <!-- Observaciones -->
-        <div class="field">
-          <label>Observaciones</label>
-          <textarea id="txtObs" placeholder="Describe brevemente la condición observada…" maxlength="120"></textarea>
-        </div>
-
-        <!-- Feedback -->
-        <div class="success-msg" id="successMsg">
-          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
-          Novedad registrada — panel del propietario actualizado
-        </div>
-
-        <!-- Botón -->
-        <button class="btn-save" id="btnSave" disabled>
-          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-            <polyline points="17 21 17 13 7 13 7 21"/>
-          </svg>
-          <span id="btnTxt">Registrar Novedad</span>
-        </button>
+    <div class="user-chip" id="userChip">
+      <div class="user-avatar" id="avatarEl" style="background:#6366f1">?</div>
+      <div>
+        <div class="user-name" id="userNameEl">—</div>
+        <div class="user-role" id="userRoleEl">Cargando…</div>
       </div>
+    </div>
+  </header>
 
-      <!-- LOG DE REGISTROS -->
-      <div class="card-dark">
-        <div class="card-title-d" style="justify-content:space-between;">
-          <span style="display:flex;align-items:center;gap:8px;">
-            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-            Historial de sesión
-          </span>
-          <button id="btnClearLog" style="background:none;border:1px solid #2a2a2a;border-radius:6px;padding:2px 8px;font-size:10px;color:#555;cursor:pointer;font-family:inherit;">
-            Limpiar
+  <!-- ════════════════════════════
+       TABS
+  ════════════════════════════ -->
+  <nav class="tabs-bar">
+    <button class="tab active" data-tab="fallas" onclick="showTab('fallas', this)">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+        <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+      Reporte de Fallas
+      <span class="tab-badge" id="badgeFallas">0</span>
+    </button>
+    <button class="tab" data-tab="preventivos" onclick="showTab('preventivos', this)">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <rect x="3" y="4" width="18" height="18" rx="2"/>
+        <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
+        <line x1="3" y1="10" x2="21" y2="10"/>
+      </svg>
+      Mantenimientos Preventivos
+      <span class="tab-badge" id="badgePrev">0</span>
+    </button>
+    <button class="tab" data-tab="estado" onclick="showTab('estado', this)">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+      </svg>
+      Estado e Historial
+    </button>
+  </nav>
+
+  <div class="page">
+
+    <!-- ════════════════════════════
+         PANEL 1 — REPORTE DE FALLAS
+    ════════════════════════════ -->
+    <section class="panel active" id="panel-fallas">
+      <div class="fallas-grid">
+
+        <!-- FORMULARIO -->
+        <div class="card">
+          <div class="card-title">
+            <div class="ct-ico alert">
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+            </div>
+            Registrar Falla
+          </div>
+          <div class="card-sub">Reporta una novedad detectada en un bus para que el propietario la vea de inmediato.</div>
+
+          <div class="field">
+            <label>Bus asignado</label>
+            <select id="selBus">
+              <option value="">— Selecciona un bus —</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label>Componente afectado</label>
+            <div class="pills-grid" id="novedadGrid"></div>
+            <input type="hidden" id="hiddenNovedad" value="" />
+          </div>
+
+          <div class="field">
+            <label>Severidad</label>
+            <div class="severity-row" id="severityRow">
+              <button type="button" class="sev-btn low"  data-sev="low">Leve</button>
+              <button type="button" class="sev-btn mid"  data-sev="mid">Media</button>
+              <button type="button" class="sev-btn high" data-sev="high">Urgente</button>
+            </div>
+            <input type="hidden" id="hiddenSeverity" value="" />
+          </div>
+
+          <div class="field">
+            <label>Observaciones</label>
+            <textarea id="txtObs" placeholder="Describe brevemente la condición observada…" maxlength="160"></textarea>
+          </div>
+
+          <div class="success-msg" id="successMsg">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+            Falla registrada — estado del bus actualizado
+          </div>
+
+          <button class="btn-primary" id="btnSave" disabled>
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+              <polyline points="17 21 17 13 7 13 7 21"/>
+            </svg>
+            <span id="btnTxt">Registrar Falla</span>
           </button>
         </div>
-        <div class="log-list" id="logList">
-          <div class="log-empty" id="logEmpty">
-            <svg width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 10h8M8 14h5"/></svg>
-            Sin novedades registradas aún
+
+        <!-- LOG DE SESIÓN -->
+        <div class="card">
+          <div class="card-title" style="justify-content:space-between;">
+            <span style="display:flex;align-items:center;gap:8px;">
+              <div class="ct-ico">
+                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+              </div>
+              Fallas registradas en esta sesión
+            </span>
+            <button class="btn-secondary" id="btnClearLog">Limpiar</button>
+          </div>
+          <div class="log-list" id="logList">
+            <div class="log-empty" id="logEmpty">
+              <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 10h8M8 14h5"/></svg>
+              Aún no has reportado fallas en esta sesión
+            </div>
           </div>
         </div>
+
+      </div>
+    </section>
+
+    <!-- ════════════════════════════
+         PANEL 2 — PREVENTIVOS
+    ════════════════════════════ -->
+    <section class="panel" id="panel-preventivos">
+      <div class="prev-grid">
+
+        <!-- FORMULARIO PREVENTIVO -->
+        <div class="card">
+          <div class="card-title">
+            <div class="ct-ico warn">
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+                <rect x="3" y="4" width="18" height="18" rx="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
+                <line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+            </div>
+            Programar Preventivo
+          </div>
+          <div class="card-sub">Agenda un servicio planificado: cambio de aceite, rotación, revisión periódica, etc.</div>
+
+          <div class="field">
+            <label>Bus</label>
+            <select id="prevBus"><option value="">— Selecciona un bus —</option></select>
+          </div>
+
+          <div class="field">
+            <label>Tipo de servicio</label>
+            <select id="prevTipo">
+              <option value="">— Selecciona el servicio —</option>
+              <option value="aceite">Cambio de aceite</option>
+              <option value="llantas">Rotación de llantas</option>
+              <option value="bateria">Revisión de batería</option>
+              <option value="luces">Revisión de luces</option>
+              <option value="frenos">Cambio de pastillas / frenos</option>
+              <option value="motor">Afinación de motor</option>
+              <option value="revision_general">Revisión general</option>
+            </select>
+          </div>
+
+          <div class="prev-form-row">
+            <div class="field">
+              <label>Fecha programada</label>
+              <input type="date" id="prevFecha" />
+            </div>
+            <div class="field">
+              <label>Kilometraje objetivo</label>
+              <input type="number" id="prevKm" placeholder="Ej: 50000" min="0" />
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Notas (opcional)</label>
+            <textarea id="prevNotas" placeholder="Ej: usar aceite 15W-40, revisar también filtro de aire…" maxlength="160"></textarea>
+          </div>
+
+          <div class="success-msg" id="prevSuccessMsg">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+            Preventivo programado correctamente
+          </div>
+
+          <button class="btn-primary" id="btnPrevSave" disabled>
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <span>Programar Servicio</span>
+          </button>
+        </div>
+
+        <!-- LISTA DE PROGRAMADOS -->
+        <div class="card">
+          <div class="card-title">
+            <div class="ct-ico warn">
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+              </svg>
+            </div>
+            Preventivos Programados
+          </div>
+          <div class="card-sub">Servicios próximos y vencidos para toda la flota.</div>
+
+          <div class="programados-list" id="programadosList">
+            <div class="log-empty">
+              <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              No hay servicios programados aún
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ════════════════════════════
+         PANEL 3 — ESTADO E HISTORIAL
+    ════════════════════════════ -->
+    <section class="panel" id="panel-estado">
+
+      <div class="card" style="margin-bottom:18px;">
+        <div class="card-title" style="justify-content:space-between; margin-bottom: 10px;">
+          <span style="display:flex;align-items:center;gap:8px;">
+            <div class="ct-ico">
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <rect x="1" y="3" width="15" height="13" rx="2"/><path d="M16 8h4l3 5v5h-7V8z"/>
+                <circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
+              </svg>
+            </div>
+            Selecciona un bus
+          </span>
+          <div class="live-chip">
+            <div class="live-dot"></div>
+            En vivo
+          </div>
+        </div>
+        <div class="bus-tabs" id="busTabs"></div>
       </div>
 
-    </div>
+      <div class="estado-grid">
+
+        <!-- COLUMNA IZQUIERDA: CARDS DE ESTADO -->
+        <div>
+          <div class="card-title" style="padding:0 4px 12px;">
+            <div class="ct-ico"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+            Estado actual de componentes
+          </div>
+          <div class="maint-grid" id="maintGrid"></div>
+        </div>
+
+        <!-- COLUMNA DERECHA: HISTORIAL -->
+        <div class="card">
+          <div class="card-title" style="justify-content:space-between;">
+            <span style="display:flex;align-items:center;gap:8px;">
+              <div class="ct-ico"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9"/><polyline points="3 5 3 12 10 12"/><polyline points="12 7 12 12 16 14"/></svg></div>
+              Historial de mantenimientos
+            </span>
+          </div>
+          <div class="hist-list" id="histList">
+            <div class="hist-empty">
+              <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              Sin historial registrado para este bus
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
   </div>
-
-  <!-- ════════════════════════════
-       MITAD INFERIOR — PROPIETARIO
-  ════════════════════════════ -->
-  <div class="half-btm">
-
-    <div class="ph ph-light">
-      <span class="role-badge badge-owner">Propietario</span>
-      <div>
-        <div class="ph-title l">Estado de Mantenimiento</div>
-        <div class="ph-sub l">Se actualiza en tiempo real al registrar novedades</div>
-      </div>
-      <!-- Live indicator -->
-      <div style="margin-left:auto;display:flex;align-items:center;gap:7px;font-size:11px;font-weight:600;color:var(--green-text);background:var(--green-bg);padding:5px 12px;border-radius:20px;">
-        <div style="width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 1.8s infinite;"></div>
-        En vivo
-      </div>
-    </div>
-
-    <div class="btm-body">
-      <!-- Bus tabs -->
-      <div class="bus-tabs" id="busTabs">
-        <!-- populated by JS -->
-      </div>
-      <!-- Cards -->
-      <div class="maint-grid" id="maintGrid">
-        <!-- populated by JS -->
-      </div>
-    </div>
-
-  </div>
-</div><!-- /split -->
-
-<style>
-  @keyframes pulse {
-    0%,100%{opacity:1;transform:scale(1)}
-    50%{opacity:.5;transform:scale(.75)}
-  }
-</style>
 
 <!-- ════════════════════════════════════════
      JAVASCRIPT
@@ -542,17 +902,14 @@
     const token = localStorage.getItem('authToken');
     return fetch(url, { ...options, headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}), ...(options.headers || {}) } });
   }
-  let busesData       = [];  // [{id, numero, grupo, ...}]
-  let tiposNovedadMap = {};  // clave → {id, label, color}
-  const loadedFromDB  = new Set(); // buses cuyo estado ya se cargó de la DB
+
+  let busesData       = [];
+  let tiposNovedadMap = {};
+  const loadedFromDB  = new Set();
+  let currentBusTab   = null;
 
   /* ═══════════════════════════════════════════
-     1. USUARIO ACTIVO (desde sesión real)
-  ═══════════════════════════════════════════ */
-  let currentBusTab = null; // bus seleccionado en panel propietario
-
-  /* ═══════════════════════════════════════════
-     2. TIPOS DE NOVEDAD
+     TIPOS DE NOVEDAD / COMPONENTES
   ═══════════════════════════════════════════ */
   const NOVEDADES = [
     { key: 'aceite',  label: 'Aceite',   icon: `<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M20 11.08V8l-6-6H6a2 2 0 0 0-2 2v16c0 1.1.9 2 2 2h6"/><path d="M14 3v5h5M18 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M18 15v3l2 1"/></svg>`, color: '#6366f1' },
@@ -563,12 +920,16 @@
     { key: 'motor',   label: 'Motor',    icon: `<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 6V4M10 6V4M14 6V4M18 6V4M6 18v2M10 18v2M14 18v2M18 18v2"/></svg>`, color: '#a855f7' },
   ];
 
-  /* ═══════════════════════════════════════════
-     3. ESTADO DE MANTENIMIENTO POR BUS
-     Estructura: mainState[busNum][novedadKey]
-  ═══════════════════════════════════════════ */
+  const TIPO_SERVICIO_LABELS = {
+    aceite: 'Cambio de aceite', llantas: 'Rotación de llantas',
+    bateria: 'Revisión de batería', luces: 'Revisión de luces',
+    frenos: 'Cambio de frenos', motor: 'Afinación de motor',
+    revision_general: 'Revisión general',
+  };
 
-  // Estado inicial por defecto para un bus
+  /* ═══════════════════════════════════════════
+     ESTADO LOCAL
+  ═══════════════════════════════════════════ */
   function defaultBusState() {
     return {
       aceite:  { status: 'ok',   progress: 82, lastDate: '02 Abr 2026', lastObs: 'Cambio rutinario' },
@@ -579,23 +940,31 @@
       motor:   { status: 'warn', progress: 63, lastDate: '20 Mar 2026', lastObs: 'Temperatura elevada' },
     };
   }
-
-  const mainState = {};  // populated per bus on demand
-
+  const mainState = {};
   function getOrInitBus(busNum) {
     if (!mainState[busNum]) mainState[busNum] = defaultBusState();
     return mainState[busNum];
   }
-
-  /* Track which buses have had updates this session (for dot indicator) */
   const updatedBuses = new Set();
 
+  /* Historial cronológico (en memoria — se siembra y se acumula) */
+  const histByBus = {}; // { busNum: [{tipo:'falla'|'preventivo', comp, obs, date}] }
+  function getHist(busNum) {
+    if (!histByBus[busNum]) histByBus[busNum] = [];
+    return histByBus[busNum];
+  }
+
+  /* Preventivos programados */
+  const programados = []; // [{id, bus, tipo, fecha, km, notas, status}]
+  let prevCounter = 0;
+
   /* ═══════════════════════════════════════════
-     4. DOM REFS
+     DOM REFS
   ═══════════════════════════════════════════ */
   const selBus       = document.getElementById('selBus');
   const novedadGrid  = document.getElementById('novedadGrid');
   const hidNovedad   = document.getElementById('hiddenNovedad');
+  const hidSeverity  = document.getElementById('hiddenSeverity');
   const txtObs       = document.getElementById('txtObs');
   const btnSave      = document.getElementById('btnSave');
   const btnTxt       = document.getElementById('btnTxt');
@@ -608,9 +977,32 @@
   const userNameEl   = document.getElementById('userNameEl');
   const userRoleEl   = document.getElementById('userRoleEl');
   const btnClearLog  = document.getElementById('btnClearLog');
+  const badgeFallas  = document.getElementById('badgeFallas');
+  const badgePrev    = document.getElementById('badgePrev');
+  const histList     = document.getElementById('histList');
+
+  const prevBus      = document.getElementById('prevBus');
+  const prevTipo     = document.getElementById('prevTipo');
+  const prevFecha    = document.getElementById('prevFecha');
+  const prevKm       = document.getElementById('prevKm');
+  const prevNotas    = document.getElementById('prevNotas');
+  const btnPrevSave  = document.getElementById('btnPrevSave');
+  const programadosList = document.getElementById('programadosList');
+  const prevSuccessMsg  = document.getElementById('prevSuccessMsg');
 
   /* ═══════════════════════════════════════════
-     5. INICIALIZAR USUARIO ACTIVO
+     TAB SWITCHING
+  ═══════════════════════════════════════════ */
+  function showTab(name, btn) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('panel-' + name).classList.add('active');
+  }
+  window.showTab = showTab;
+
+  /* ═══════════════════════════════════════════
+     USUARIO ACTIVO
   ═══════════════════════════════════════════ */
   function loadUserChip(u) {
     if (!u) return;
@@ -621,89 +1013,119 @@
 
   function buildBusSelector() {
     selBus.innerHTML = '<option value="">— Selecciona un bus —</option>';
+    prevBus.innerHTML = '<option value="">— Selecciona un bus —</option>';
     busesData.forEach(b => {
-      const opt = document.createElement('option');
-      opt.value = b.numero;
-      opt.textContent = `Bus ${String(b.numero).padStart(2, '0')}${b.placa ? ' · ' + b.placa : ''}`;
-      selBus.appendChild(opt);
+      const label = `Bus ${String(b.numero).padStart(2, '0')}${b.placa ? ' · ' + b.placa : ''}`;
+      const opt1 = document.createElement('option');
+      opt1.value = b.numero; opt1.textContent = label;
+      selBus.appendChild(opt1);
+      const opt2 = opt1.cloneNode(true);
+      prevBus.appendChild(opt2);
     });
     hidNovedad.value = '';
+    hidSeverity.value = '';
     txtObs.value = '';
-    document.querySelectorAll('.nov-pill').forEach(p => p.classList.remove('selected'));
+    document.querySelectorAll('.pill').forEach(p => p.classList.remove('selected'));
+    document.querySelectorAll('.sev-btn').forEach(b => b.classList.remove('selected'));
     validate();
+    validatePrev();
   }
 
   /* ═══════════════════════════════════════════
-     7. CONSTRUIR PILLS DE NOVEDAD
+     PILLS DE COMPONENTE
   ═══════════════════════════════════════════ */
   NOVEDADES.forEach(n => {
     const pill = document.createElement('div');
-    pill.className = 'nov-pill';
+    pill.className = 'pill';
     pill.dataset.key = n.key;
-    pill.style.setProperty('--pill-color', n.color);
     pill.innerHTML = n.icon + `<span>${n.label}</span>`;
-
     pill.addEventListener('click', () => {
-      document.querySelectorAll('.nov-pill').forEach(p => p.classList.remove('selected'));
+      document.querySelectorAll('#novedadGrid .pill').forEach(p => p.classList.remove('selected'));
       pill.classList.add('selected');
       hidNovedad.value = n.key;
       validate();
     });
-
     novedadGrid.appendChild(pill);
   });
 
+  /* Severidad */
+  document.querySelectorAll('.sev-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.sev-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      hidSeverity.value = btn.dataset.sev;
+      validate();
+    });
+  });
+
   /* ═══════════════════════════════════════════
-     8. VALIDACIÓN EN TIEMPO REAL
+     VALIDACIÓN
   ═══════════════════════════════════════════ */
   selBus.addEventListener('change', validate);
   txtObs.addEventListener('input', validate);
-
   function validate() {
-    const ok = selBus.value && hidNovedad.value && txtObs.value.trim().length >= 3;
+    const ok = selBus.value && hidNovedad.value && hidSeverity.value && txtObs.value.trim().length >= 3;
     btnSave.disabled = !ok;
   }
 
+  prevBus.addEventListener('change', validatePrev);
+  prevTipo.addEventListener('change', validatePrev);
+  prevFecha.addEventListener('change', validatePrev);
+  function validatePrev() {
+    const ok = prevBus.value && prevTipo.value && prevFecha.value;
+    btnPrevSave.disabled = !ok;
+  }
+
   /* ═══════════════════════════════════════════
-     9. GUARDAR NOVEDAD
+     GUARDAR FALLA
   ═══════════════════════════════════════════ */
   btnSave.addEventListener('click', async () => {
     const busNum  = parseInt(selBus.value);
     const novKey  = hidNovedad.value;
+    const sev     = hidSeverity.value;
     const obs     = txtObs.value.trim();
     const now     = new Date();
     const timeStr = now.toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit' });
     const dateStr = now.toLocaleDateString('es-MX', { day:'2-digit', month:'short', year:'numeric' });
 
-    // ── Actualizar estado local ──
+    // Mapear severidad → estado
+    const statusMap = { low: 'ok', mid: 'warn', high: 'alert' };
+    const progressMap = { low: 100, mid: 55, high: 15 };
+
     const state = getOrInitBus(busNum);
-    state[novKey] = { status:'ok', progress:100, lastDate:dateStr, lastObs:obs };
+    state[novKey] = { status: statusMap[sev], progress: progressMap[sev], lastDate: dateStr, lastObs: obs };
     updatedBuses.add(busNum);
 
-    // ── UX ──
+    // Historial
+    getHist(busNum).unshift({ tipo: 'falla', comp: novKey, obs, date: dateStr, time: timeStr, severity: sev });
+
+    // UX
     btnSave.classList.add('success');
     btnTxt.textContent = '¡Registrado! ✓';
     successMsg.classList.add('show');
-    appendLogRow(busNum, novKey, obs, timeStr);
+    appendLogRow(busNum, novKey, obs, timeStr, sev);
+    updateBadges();
 
     selBus.value = '';
     hidNovedad.value = '';
+    hidSeverity.value = '';
     txtObs.value = '';
-    document.querySelectorAll('.nov-pill').forEach(p => p.classList.remove('selected'));
+    document.querySelectorAll('#novedadGrid .pill').forEach(p => p.classList.remove('selected'));
+    document.querySelectorAll('.sev-btn').forEach(b => b.classList.remove('selected'));
     btnSave.disabled = true;
 
     setTimeout(() => {
       btnSave.classList.remove('success');
-      btnTxt.textContent = 'Registrar Novedad';
+      btnTxt.textContent = 'Registrar Falla';
       successMsg.classList.remove('show');
     }, 1700);
 
     refreshOwnerPanel(busNum, novKey);
 
-    // ── Persistir en base de datos ──
+    // Persistir en DB
     try {
-      const busObj  = busesData.find(b => b.numero === busNum);
-      const novObj  = tiposNovedadMap[novKey];
+      const busObj = busesData.find(b => b.numero === busNum);
+      const novObj = tiposNovedadMap[novKey];
       if (busObj && novObj) {
         const userId = window.parent?.currentUser?.id ?? null;
         await Promise.all([
@@ -712,7 +1134,7 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               bus_id: busObj.id, tipo_novedad_id: novObj.id,
-              estado: 'ok', progreso: 100,
+              estado: statusMap[sev], progreso: progressMap[sev],
               ultima_fecha: dateStr, ultima_obs: obs,
             }),
           }),
@@ -732,17 +1154,17 @@
   });
 
   /* ═══════════════════════════════════════════
-     10. LOG VISUAL
+     LOG DE SESIÓN
   ═══════════════════════════════════════════ */
-  function appendLogRow(busNum, novKey, obs, time) {
+  function appendLogRow(busNum, novKey, obs, time, sev) {
     if (logEmpty) logEmpty.style.display = 'none';
-
     const nov = NOVEDADES.find(n => n.key === novKey);
+    const sevLabel = { low: 'Leve', mid: 'Media', high: 'Urgente' }[sev];
     const row = document.createElement('div');
     row.className = 'log-row';
     row.innerHTML = `
       <span class="log-bus">Bus ${String(busNum).padStart(2,'0')}</span>
-      <span class="log-type" style="background:${nov.color}22;color:${nov.color}">${nov.label}</span>
+      <span class="log-type" style="background:${nov.color}22;color:${nov.color}">${nov.label} · ${sevLabel}</span>
       <span class="log-obs">${obs}</span>
       <span class="log-time">${time}</span>
     `;
@@ -752,13 +1174,109 @@
   btnClearLog.addEventListener('click', () => {
     logList.innerHTML = `
       <div class="log-empty" id="logEmpty">
-        <svg width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 10h8M8 14h5"/></svg>
-        Sin novedades registradas aún
+        <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 10h8M8 14h5"/></svg>
+        Aún no has reportado fallas en esta sesión
       </div>`;
   });
 
   /* ═══════════════════════════════════════════
-     11. PANEL PROPIETARIO — TABS
+     PREVENTIVOS — GUARDAR
+  ═══════════════════════════════════════════ */
+  btnPrevSave.addEventListener('click', () => {
+    const busNum = parseInt(prevBus.value);
+    const tipo   = prevTipo.value;
+    const fecha  = prevFecha.value;
+    const km     = prevKm.value;
+    const notas  = prevNotas.value.trim();
+
+    const item = {
+      id: ++prevCounter,
+      bus: busNum,
+      tipo,
+      fecha,
+      km: km || null,
+      notas: notas || '',
+      status: computePrevStatus(fecha),
+    };
+    programados.unshift(item);
+
+    // Historial: registrar como programación
+    const dateStr = new Date(fecha + 'T00:00:00').toLocaleDateString('es-MX', { day:'2-digit', month:'short', year:'numeric' });
+    getHist(busNum).unshift({
+      tipo: 'preventivo',
+      comp: tipo,
+      obs: notas || `Programado: ${TIPO_SERVICIO_LABELS[tipo]}${km ? ` (km ${km})` : ''}`,
+      date: dateStr,
+    });
+
+    renderProgramados();
+    updateBadges();
+    if (currentBusTab === busNum) renderHist(busNum);
+
+    // Reset
+    prevBus.value = ''; prevTipo.value = '';
+    prevFecha.value = ''; prevKm.value = ''; prevNotas.value = '';
+    btnPrevSave.disabled = true;
+
+    prevSuccessMsg.classList.add('show');
+    setTimeout(() => prevSuccessMsg.classList.remove('show'), 1700);
+  });
+
+  function computePrevStatus(fechaStr) {
+    if (!fechaStr) return 'scheduled';
+    const today = new Date(); today.setHours(0,0,0,0);
+    const f = new Date(fechaStr + 'T00:00:00');
+    const diff = Math.round((f - today) / (1000*60*60*24));
+    if (diff < 0) return 'overdue';
+    if (diff <= 7) return 'due';
+    return 'scheduled';
+  }
+
+  function renderProgramados() {
+    if (!programados.length) {
+      programadosList.innerHTML = `
+        <div class="log-empty">
+          <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          No hay servicios programados aún
+        </div>`;
+      return;
+    }
+    // Orden: overdue → due → scheduled → done
+    const order = { overdue: 0, due: 1, scheduled: 2, done: 3 };
+    const sorted = [...programados].sort((a,b) => order[a.status] - order[b.status]);
+
+    programadosList.innerHTML = sorted.map(p => {
+      const fecha = new Date(p.fecha + 'T00:00:00').toLocaleDateString('es-MX', { day:'2-digit', month:'short', year:'numeric' });
+      const statusLabel = { scheduled: 'Programado', due: 'Próximo', overdue: 'Vencido', done: 'Hecho' }[p.status];
+      const tipoIco = NOVEDADES.find(n => n.key === p.tipo)?.icon
+        || `<svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>`;
+      return `
+        <div class="prog-item ${p.status}">
+          <div class="prog-icon">${tipoIco}</div>
+          <div>
+            <div class="prog-title">${TIPO_SERVICIO_LABELS[p.tipo] || p.tipo} · Bus ${String(p.bus).padStart(2,'0')}</div>
+            <div class="prog-meta">📅 ${fecha}${p.km ? ` · 🚌 ${p.km} km` : ''}${p.notas ? ` · ${escapeHtml(p.notas)}` : ''}</div>
+          </div>
+          <span class="prog-status ${p.status}">${statusLabel}</span>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  /* ═══════════════════════════════════════════
+     BADGES DE TABS
+  ═══════════════════════════════════════════ */
+  function updateBadges() {
+    const totalFallas = Object.values(histByBus).reduce((a, arr) => a + arr.filter(h => h.tipo === 'falla').length, 0);
+    badgeFallas.textContent = totalFallas;
+    const pendientes = programados.filter(p => p.status !== 'done').length;
+    badgePrev.textContent = pendientes;
+  }
+
+  /* ═══════════════════════════════════════════
+     PANEL ESTADO — TABS DE BUS
   ═══════════════════════════════════════════ */
   function buildOwnerTabs(buses) {
     busTabs.innerHTML = '';
@@ -774,32 +1292,28 @@
         tab.querySelector('.bus-dot').style.display = 'none';
         currentBusTab = b;
         renderMaintGrid(b);
+        renderHist(b);
         loadMaintEstadoFromDB(b);
       });
       busTabs.appendChild(tab);
     });
-
-    // Activate first bus
     currentBusTab = buses[0];
     renderMaintGrid(buses[0]);
+    renderHist(buses[0]);
   }
 
   /* ═══════════════════════════════════════════
-     12. RENDERIZAR GRID DE MANTENIMIENTO
+     CARDS DE ESTADO
   ═══════════════════════════════════════════ */
   function renderMaintGrid(busNum, flashKey = null) {
     const state = getOrInitBus(busNum);
     maintGrid.innerHTML = '';
-
     NOVEDADES.forEach(n => {
       const s = state[n.key];
       const card = document.createElement('div');
       card.className = `maint-card ${s.status}`;
-      card.id = `mc-${busNum}-${n.key}`;
       if (flashKey === n.key) card.classList.add('flash');
-
-      const chipLabel  = { ok:'Al día', warn:'Revisar', alert:'Urgente' }[s.status];
-
+      const chipLabel = { ok: 'Al día', warn: 'Revisar', alert: 'Urgente' }[s.status];
       card.innerHTML = `
         <div class="mc-top">
           <div class="mc-icon ${s.status}">${n.icon.replace('stroke="currentColor"', `stroke="${iconColor(s.status)}"`)}</div>
@@ -828,40 +1342,57 @@
       maintGrid.appendChild(card);
     });
   }
-
-  function iconColor(status) {
-    return { ok: '#16a34a', warn: '#b45309', alert: '#dc2626' }[status];
-  }
-
+  function iconColor(status) { return { ok: '#16a34a', warn: '#b45309', alert: '#dc2626' }[status]; }
   function progLabel(key) {
-    return {
-      aceite:'Vida útil', llantas:'Desgaste',
-      bateria:'Capacidad', luces:'Funcionamiento',
-      frenos:'Vida útil', motor:'Estado'
-    }[key] || 'Estado';
+    return { aceite:'Vida útil', llantas:'Desgaste', bateria:'Capacidad', luces:'Funcionamiento', frenos:'Vida útil', motor:'Estado' }[key] || 'Estado';
   }
 
   /* ═══════════════════════════════════════════
-     13. ACTUALIZACIÓN REACTIVA
-     Cuando el técnico guarda, si el propietario
-     está viendo ese bus → redibuja con flash.
-     Si no, muestra dot de notificación en la tab.
+     HISTORIAL CRONOLÓGICO
   ═══════════════════════════════════════════ */
+  function renderHist(busNum) {
+    const hist = getHist(busNum);
+    if (!hist.length) {
+      histList.innerHTML = `
+        <div class="hist-empty">
+          <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          Sin historial registrado para este bus
+        </div>`;
+      return;
+    }
+    histList.innerHTML = hist.map(h => {
+      const compLabel = NOVEDADES.find(n => n.key === h.comp)?.label
+                     || TIPO_SERVICIO_LABELS[h.comp]
+                     || h.comp;
+      const tipoLabel = h.tipo === 'falla' ? 'Falla' : 'Preventivo';
+      return `
+        <div class="hist-item">
+          <div class="hist-bar ${h.tipo}"></div>
+          <div>
+            <div class="hist-head">
+              <span class="hist-type-chip ${h.tipo}">${tipoLabel}</span>
+              <span class="hist-comp">${compLabel}</span>
+              <span class="hist-date">${h.date}${h.time ? ' · ' + h.time : ''}</span>
+            </div>
+            <div class="hist-obs">${escapeHtml(h.obs)}</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
   function refreshOwnerPanel(busNum, novKey) {
     if (currentBusTab === busNum) {
-      // El propietario está mirando este bus → actualizar en vivo con flash
       renderMaintGrid(busNum, novKey);
+      renderHist(busNum);
     } else {
-      // El propietario está en otra tab → mostrar dot de alerta
       const tab = busTabs.querySelector(`[data-bus="${busNum}"]`);
-      if (tab) {
-        tab.classList.add('has-updates');
-      }
+      if (tab) tab.classList.add('has-updates');
     }
   }
 
   /* ═══════════════════════════════════════════
-     14. CARGAR ESTADO DE MANTENIMIENTO DESDE API
+     CARGAR ESTADO DESDE API
   ═══════════════════════════════════════════ */
   async function loadMaintEstadoFromDB(busNum) {
     if (loadedFromDB.has(busNum)) return;
@@ -871,7 +1402,6 @@
       const res  = await apiFetch(`${API_URL}/mantenimiento/estado/${busObj.id}`);
       const rows = await res.json();
       if (!rows.length) return;
-
       const state = getOrInitBus(busNum);
       rows.forEach(r => {
         state[r.clave] = {
@@ -889,10 +1419,9 @@
   }
 
   /* ═══════════════════════════════════════════
-     15. INIT API + ARRANCAR
+     INIT
   ═══════════════════════════════════════════ */
   async function initAPI() {
-    // Usuario de la sesión real — localStorage es compartido (mismo origen)
     const u = window.parent?.currentUser
            || JSON.parse(localStorage.getItem('currentUser') || 'null');
     loadUserChip(u);
@@ -902,7 +1431,6 @@
       const tipos  = await novRes.json();
       tipos.forEach(t => { tiposNovedadMap[t.clave] = t; });
 
-      // Administrador ve todos los buses; los demás solo los asignados
       const esAdmin = u && u.rol === 'Administrador';
       const busUrl  = (u && !esAdmin) ? `${API_URL}/buses?user_id=${u.id}` : `${API_URL}/buses`;
       const busRes  = await apiFetch(busUrl);
@@ -912,7 +1440,6 @@
       busesData = [];
     }
 
-    // Mostrar conteo de unidades en el chip
     if (u) {
       const esAdmin = u.rol === 'Administrador';
       userRoleEl.textContent = esAdmin
@@ -922,8 +1449,12 @@
 
     buildBusSelector();
     const nums = busesData.map(b => b.numero);
-    buildOwnerTabs(nums);
-    if (nums.length) loadMaintEstadoFromDB(nums[0]);
+    if (nums.length) {
+      buildOwnerTabs(nums);
+      loadMaintEstadoFromDB(nums[0]);
+    }
+    renderProgramados();
+    updateBadges();
   }
 
   initAPI();
