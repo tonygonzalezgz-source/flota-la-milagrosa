@@ -826,11 +826,20 @@
     }
   }
 
-  async function apiFetch(path, opts = {}) {
-    const res = await fetch(API + path, opts);
+   async function apiFetch(path, opts = {}) {
+    const token = localStorage.getItem('authToken');
+    const res = await fetch(API + path, {
+      ...opts,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        ...(opts.headers || {}),
+      },
+    });
     const json = await res.json();
     if (!res.ok) throw new Error(json.error || 'Error del servidor');
     return json;
+  }
   }
 
   /* ─── TABS ─── */
