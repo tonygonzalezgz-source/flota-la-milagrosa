@@ -356,6 +356,125 @@
       text-align: center; padding: 40px; color: #aaa; font-size: 13px;
     }
 
+    /* ─── ALERTAS CRÍTICAS ─── */
+    .alertas-panel {
+      background: #fff;
+      border-radius: 16px;
+      padding: 18px 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06);
+      border-left: 4px solid #dc2626;
+    }
+    .alertas-panel.empty { border-left-color: #16a34a; }
+
+    .alertas-head {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; margin-bottom: 14px;
+    }
+    .alertas-head-left {
+      display: flex; align-items: center; gap: 10px;
+    }
+    .alertas-title {
+      font-size: 15px; font-weight: 700; color: #111;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .alertas-sub { font-size: 11px; color: #888; margin-top: 2px; }
+
+    .badge-conteo {
+      background: #dc2626; color: #fff;
+      min-width: 24px; height: 24px; padding: 0 8px;
+      border-radius: 12px;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700;
+    }
+    .badge-conteo.zero { background: #16a34a; }
+
+    .alertas-list {
+      list-style: none; display: flex; flex-direction: column; gap: 10px;
+      max-height: 360px; overflow-y: auto; padding-right: 4px;
+    }
+    .alertas-list::-webkit-scrollbar { width: 6px; }
+    .alertas-list::-webkit-scrollbar-thumb { background: #ddd; border-radius: 3px; }
+
+    .alerta-card {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; padding: 12px 14px; border-radius: 12px;
+      transition: opacity .2s, filter .2s;
+    }
+
+    /* Ventana 2 días — pulso rojo */
+    .alerta-card[data-ventana="2_DIAS"] {
+      background: linear-gradient(90deg, #fff5f5 0%, #ffeaea 100%);
+      border-left: 4px solid #dc2626;
+      animation: pulseRed 2.6s ease-in-out infinite;
+    }
+    @keyframes pulseRed {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,0.0); }
+      50%      { box-shadow: 0 0 0 6px rgba(220,38,38,0.18); }
+    }
+
+    /* Ventana 7 días — ámbar estático */
+    .alerta-card[data-ventana="7_DIAS"] {
+      background: #fffaf0;
+      border-left: 4px solid #f59e0b;
+    }
+
+    /* FALLA HIGH — rojo intenso */
+    .alerta-card[data-tipo="FALLA"] {
+      background: linear-gradient(90deg, #fff5f5 0%, #ffe4e4 100%);
+      border-left: 4px solid #b91c1c;
+      animation: pulseRed 2.6s ease-in-out infinite;
+    }
+
+    .alerta-card.confirmada {
+      opacity: 0.45;
+      filter: grayscale(0.75);
+      animation: none;
+      background: #f8f8f8;
+      border-left-color: #16a34a;
+    }
+
+    .alerta-info { flex: 1; min-width: 0; }
+    .alerta-bus  { font-size: 13px; font-weight: 700; color: #111; }
+    .alerta-meta { font-size: 11px; color: #666; margin-top: 2px; }
+    .alerta-tag {
+      display: inline-block; font-size: 10px; font-weight: 700;
+      padding: 2px 7px; border-radius: 8px; margin-right: 6px;
+      text-transform: uppercase; letter-spacing: 0.4px;
+    }
+    .alerta-tag.SOAT          { background: #dbeafe; color: #1d4ed8; }
+    .alerta-tag.TECNOMECANICA { background: #f3e8ff; color: #7c3aed; }
+    .alerta-tag.PREVENTIVO    { background: #fef3c7; color: #92400e; }
+    .alerta-tag.FALLA         { background: #fee2e2; color: #991b1b; }
+
+    .alerta-dias {
+      display: inline-block;
+      font-size: 11px; font-weight: 700;
+      padding: 2px 8px; border-radius: 10px;
+      background: #fee2e2; color: #991b1b;
+    }
+    .alerta-card[data-ventana="7_DIAS"] .alerta-dias {
+      background: #fef3c7; color: #92400e;
+    }
+
+    .btn-confirmar {
+      background: #16a34a; color: #fff; border: none;
+      padding: 8px 14px; border-radius: 10px;
+      font-size: 12px; font-weight: 600; cursor: pointer;
+      min-height: 36px; white-space: nowrap;
+      transition: transform .12s, background .15s;
+    }
+    .btn-confirmar:hover { background: #15803d; }
+    .btn-confirmar:active { transform: scale(0.96); }
+    .btn-confirmar:disabled {
+      background: #d1d5db; cursor: default; transform: none;
+    }
+
+    .alertas-empty {
+      text-align: center; padding: 28px 16px; color: #16a34a;
+      font-size: 13px; font-weight: 500;
+    }
+    .alertas-empty svg { opacity: 0.8; margin-bottom: 8px; }
+
     /* ─── RESPONSIVE ─── */
     @media (max-width: 1100px) {
       .kpi-row { grid-template-columns: repeat(2, 1fr); }
@@ -391,12 +510,21 @@
       .chart-wrapper { height: 200px; }
     }
 
+    @media (max-width: 768px) {
+      .alerta-card {
+        flex-wrap: wrap;
+        padding: 12px;
+      }
+      .btn-confirmar { width: 100%; margin-top: 8px; }
+    }
+
     @media (max-width: 480px) {
       .kpi-row { grid-template-columns: 1fr; }
       .resumen-stats { grid-template-columns: 1fr; }
       .trend-stats { font-size: 12px; }
       .greeting-big { font-size: 20px; }
       .trend-big { font-size: 24px; }
+      .alertas-title { font-size: 14px; }
     }
   </style>
 </head>
@@ -480,6 +608,29 @@
         </button>
       </div>
     </div>
+
+    <!-- ALERTAS CRÍTICAS -->
+    <section class="alertas-panel" id="alertasPanel">
+      <div class="alertas-head">
+        <div class="alertas-head-left">
+          <div>
+            <div class="alertas-title">
+              <svg width="18" height="18" fill="none" stroke="#dc2626" stroke-width="2.2" viewBox="0 0 24 24">
+                <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                <line x1="12" y1="9" x2="12" y2="13"/>
+                <line x1="12" y1="17" x2="12.01" y2="17"/>
+              </svg>
+              Alertas Críticas
+            </div>
+            <div class="alertas-sub" id="alertasSub">Vencimientos, mantenimientos y fallas activas</div>
+          </div>
+        </div>
+        <span class="badge-conteo zero" id="alertasCount">0</span>
+      </div>
+      <ul class="alertas-list" id="alertasList">
+        <div class="alertas-empty">Cargando alertas…</div>
+      </ul>
+    </section>
 
     <!-- KPI CARDS -->
     <div class="kpi-row">
@@ -731,7 +882,138 @@
       document.getElementById('fechaLabel').textContent = `Ayer · ${fmtFecha(fechaAyer)}`;
 
       await cargarDashboard();
+      await cargarAlertas();
+      setInterval(cargarAlertas, 60_000);
     });
+
+    /* ─────── ALERTAS CRÍTICAS ─────── */
+    function mockAlertas() {
+      const hoy = new Date();
+      const f = (d) => {
+        const x = new Date(hoy); x.setDate(x.getDate() + d);
+        return x.toISOString().slice(0,10);
+      };
+      return [
+        { id: 'm1', bus_id: 1, placa: 'XYZ-123', numero: 12, tipo: 'SOAT',
+          ventana: '2_DIAS', fecha_objetivo: f(2), confirmada: false },
+        { id: 'm2', bus_id: 2, placa: 'ABC-456', numero: 8,  tipo: 'TECNOMECANICA',
+          ventana: '7_DIAS', fecha_objetivo: f(7), confirmada: false },
+        { id: 'm3', bus_id: 3, placa: 'DEF-789', numero: 21, tipo: 'PREVENTIVO',
+          ventana: '7_DIAS', fecha_objetivo: f(7), confirmada: false },
+        { id: 'm4', bus_id: 4, placa: 'GHI-012', numero: 15, tipo: 'FALLA',
+          ventana: '7_DIAS', fecha_objetivo: f(0), confirmada: false,
+          extra: 'Frenos · severidad alta' },
+      ];
+    }
+
+    async function cargarAlertas() {
+      let data = [];
+      try {
+        const r = await apiFetch(`${API}/alertas?pendientes=1`);
+        if (r.ok) data = await r.json();
+        else throw new Error('not implemented');
+      } catch (_) {
+        data = mockAlertas();
+        document.getElementById('alertasSub').textContent =
+          'Demo · endpoint /alertas pendiente de implementar';
+      }
+      renderAlertas(Array.isArray(data) ? data : []);
+    }
+
+    function diasFaltantes(isoFecha) {
+      const hoy = new Date(); hoy.setHours(0,0,0,0);
+      const objetivo = new Date(isoFecha);
+      return Math.round((objetivo - hoy) / 86400000);
+    }
+
+    const TIPO_LABEL = {
+      SOAT: 'SOAT',
+      TECNOMECANICA: 'Téc. Mecánica',
+      PREVENTIVO: 'Preventivo',
+      FALLA: 'Falla activa'
+    };
+
+    function renderAlertas(alertas) {
+      const lista  = document.getElementById('alertasList');
+      const panel  = document.getElementById('alertasPanel');
+      const badge  = document.getElementById('alertasCount');
+      const notif  = document.getElementById('notifDot');
+
+      const pendientes = alertas.filter(a => !a.confirmada);
+      badge.textContent = pendientes.length;
+      badge.classList.toggle('zero', pendientes.length === 0);
+      panel.classList.toggle('empty', pendientes.length === 0);
+      if (notif) notif.style.display = pendientes.length > 0 ? '' : 'none';
+
+      if (!alertas.length) {
+        lista.innerHTML = `
+          <div class="alertas-empty">
+            <svg width="36" height="36" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+            <div>Sin alertas pendientes. Todo en orden.</div>
+          </div>`;
+        return;
+      }
+
+      /* Orden: 2_DIAS primero, luego FALLA, luego 7_DIAS por fecha */
+      const orden = a => (a.tipo === 'FALLA' ? 0 : (a.ventana === '2_DIAS' ? 1 : 2));
+      const sorted = [...alertas].sort((a,b) => {
+        if (a.confirmada !== b.confirmada) return a.confirmada ? 1 : -1;
+        const dx = orden(a) - orden(b);
+        if (dx !== 0) return dx;
+        return new Date(a.fecha_objetivo) - new Date(b.fecha_objetivo);
+      });
+
+      lista.innerHTML = sorted.map(a => {
+        const d = diasFaltantes(a.fecha_objetivo);
+        const diasTxt = a.tipo === 'FALLA' ? 'Activa hoy'
+                      : d <= 0   ? 'Vence hoy'
+                      : d === 1  ? 'Vence mañana'
+                      : `${d} días`;
+        const extra = a.extra ? ` · ${escH(a.extra)}` : '';
+        const placa = a.placa || `Bus ${a.numero || a.bus_id}`;
+        const interno = a.numero ? `Interno ${a.numero}` : '';
+        return `
+          <li class="alerta-card ${a.confirmada ? 'confirmada' : ''}"
+              data-ventana="${a.ventana}" data-tipo="${a.tipo}">
+            <div class="alerta-info">
+              <div class="alerta-bus">
+                <span class="alerta-tag ${a.tipo}">${TIPO_LABEL[a.tipo] || a.tipo}</span>
+                ${escH(placa)} ${interno ? `· <span style="color:#888;font-weight:400">${escH(interno)}</span>` : ''}
+              </div>
+              <div class="alerta-meta">Objetivo: ${fmtFecha(a.fecha_objetivo)}${extra}</div>
+            </div>
+            <span class="alerta-dias">${diasTxt}</span>
+            <button class="btn-confirmar" data-id="${a.id}" ${a.confirmada ? 'disabled' : ''}>
+              ${a.confirmada ? '✓ Confirmada' : 'Confirmar'}
+            </button>
+          </li>`;
+      }).join('');
+
+      lista.querySelectorAll('.btn-confirmar').forEach(b => {
+        b.addEventListener('click', () => confirmarAlerta(b.dataset.id, b));
+      });
+    }
+
+    async function confirmarAlerta(id, btn) {
+      btn.disabled = true;
+      btn.textContent = '…';
+      try {
+        const r = await apiFetch(`${API}/alertas/${id}/confirmar`, { method: 'POST' });
+        if (!r.ok) throw new Error('endpoint pendiente');
+      } catch (_) { /* en modo mock: continuamos visualmente */ }
+
+      const card = btn.closest('.alerta-card');
+      card.classList.add('confirmada');
+      btn.textContent = '✓ Confirmada';
+
+      const restantes = document.querySelectorAll('.alerta-card:not(.confirmada)').length;
+      const badge = document.getElementById('alertasCount');
+      badge.textContent = restantes;
+      badge.classList.toggle('zero', restantes === 0);
+      document.getElementById('alertasPanel').classList.toggle('empty', restantes === 0);
+    }
 
     async function cargarDashboard() {
       try {
