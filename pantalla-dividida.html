@@ -20,6 +20,8 @@
        RESET & TOKENS
     ══════════════════════════════════════════ */
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+    img, svg, video { max-width: 100%; }
 
     :root {
       --bg-top:      #0f0f0f;
@@ -562,11 +564,28 @@
     .half-btm::-webkit-scrollbar { width: 4px; }
     .half-btm::-webkit-scrollbar-thumb { background: #ccc; border-radius: 4px; }
 
+    @media (max-width: 1024px) {
+      .form-body { grid-template-columns: 1fr; }
+      .chart-body { grid-template-columns: 1fr; }
+    }
+
     @media (max-width: 768px) {
-      html { height: 100%; overflow-y: scroll; -webkit-overflow-scrolling: touch; }
-      body { min-height: 100%; overflow-y: visible; }
+      html { height: 100%; overflow-y: scroll; overflow-x: hidden; -webkit-overflow-scrolling: touch; }
+      body { min-height: 100%; overflow-y: visible; overflow-x: hidden; max-width: 100%; }
       .split-wrap { display: block; height: auto; }
       .half-top, .half-btm { height: auto; min-height: 50vh; overflow: visible; }
+      .panel-header { padding: 12px 14px; flex-wrap: wrap; gap: 8px; }
+      .form-body { padding: 14px; gap: 14px; }
+      .chart-body { padding: 14px; gap: 14px; }
+
+      /* Botones e inputs touch-friendly */
+      button { min-height: 40px; }
+      input, select, textarea { font-size: 16px; min-height: 40px; }
+    }
+
+    @media (max-width: 480px) {
+      .panel-header { padding: 10px 12px; }
+      .form-body, .chart-body { padding: 12px; }
     }
   </style>
 </head>

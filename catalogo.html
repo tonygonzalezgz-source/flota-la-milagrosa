@@ -29,12 +29,17 @@
       --shadow-m: 0 4px 20px rgba(0,0,0,.12);
     }
 
+    html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
     html, body {
       height: 100%;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
       background: var(--bg);
       color: var(--txt);
+      max-width: 100%;
+      overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
     }
+    img, svg, video { max-width: 100%; height: auto; }
 
     /* ── PAGE LAYOUT ── */
     .page {
@@ -155,12 +160,14 @@
       background: var(--white);
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      overflow: hidden;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
       box-shadow: var(--shadow);
     }
 
     table {
       width: 100%;
+      min-width: 560px;
       border-collapse: collapse;
     }
 
@@ -510,6 +517,60 @@
       padding: 32px;
       color: var(--txt3);
       font-size: 13px;
+    }
+
+    /* ═══════════════════════════════════════════════
+       ░░  RESPONSIVE  ░░
+    ═══════════════════════════════════════════════ */
+
+    @media (max-width: 1024px) {
+      .page-header { padding: 16px 20px 0; }
+      .panel { padding: 20px; }
+      .page-title { font-size: 20px; }
+    }
+
+    @media (max-width: 768px) {
+      .page-header { padding: 14px 14px 0; }
+      .panel { padding: 14px; }
+      .page-header-top { flex-direction: column; align-items: flex-start; gap: 8px; }
+      .page-title { font-size: 18px; }
+      .page-sub { font-size: 12px; }
+
+      /* Tabs con scroll horizontal en móvil */
+      .tabs {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        margin: 0 -14px;
+        padding: 0 14px;
+      }
+      .tabs::-webkit-scrollbar { display: none; }
+      .tab { padding: 10px 14px; font-size: 13px; flex-shrink: 0; min-height: 44px; }
+
+      .sec-header { flex-direction: column; align-items: flex-start; gap: 10px; }
+      .sec-title { font-size: 15px; }
+
+      /* Botones touch-friendly */
+      .btn { padding: 10px 16px; font-size: 14px; min-height: 40px; }
+      .btn-sm { padding: 7px 12px; font-size: 12px; min-height: 32px; }
+
+      /* Tabla — celdas un poco más compactas */
+      thead th { padding: 8px 12px; }
+      tbody td { padding: 10px 12px; font-size: 12px; }
+      .td-actions { gap: 4px; }
+      .icon-btn { padding: 6px 8px; min-height: 32px; min-width: 32px; }
+
+      .toast { left: 14px; right: 14px; transform: none; bottom: 16px; white-space: normal; text-align: center; }
+      @keyframes toastIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to   { opacity: 1; transform: translateY(0); }
+      }
+    }
+
+    @media (max-width: 480px) {
+      .page-title { font-size: 17px; }
+      .tab { padding: 9px 12px; font-size: 12px; }
+      .btn { font-size: 13px; }
     }
   </style>
 </head>
