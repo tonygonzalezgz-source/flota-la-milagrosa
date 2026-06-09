@@ -602,6 +602,90 @@
       .prog-item { grid-template-columns: 32px 1fr; }
       .prog-status { grid-column: 1 / -1; justify-self: start; }
     }
+
+    /* ══════════════════════════════════════
+       PANEL 4 — CATÁLOGO & ALARMAS
+    ══════════════════════════════════════ */
+    .cm-toolbar { display:flex; flex-wrap:wrap; gap:14px; align-items:flex-end; margin-top:6px; }
+    .cm-grupos  { display:flex; flex-direction:column; gap:10px; margin-top:10px; }
+    .cm-sys {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: #fafafb;
+      overflow: hidden;
+    }
+    .cm-sys-head {
+      padding: 12px 14px;
+      display: flex; align-items: center; justify-content: space-between;
+      cursor: pointer;
+      font-weight: 700;
+      font-size: 13px;
+      letter-spacing: .3px;
+      color: var(--text);
+    }
+    .cm-sys-head:hover { background: #f3f3f7; }
+    .cm-sys-head .cm-chev {
+      width: 16px; height: 16px; transition: transform .2s;
+    }
+    .cm-sys.open .cm-chev { transform: rotate(90deg); }
+    .cm-sys-body { display: none; padding: 0 14px 12px; }
+    .cm-sys.open .cm-sys-body { display: block; }
+    .cm-item {
+      display: grid;
+      grid-template-columns: 1.4fr repeat(5, 1fr) auto;
+      gap: 8px;
+      align-items: end;
+      padding: 10px 0;
+      border-top: 1px dashed var(--border);
+    }
+    .cm-item:first-child { border-top: none; }
+    .cm-item .cm-it-name { font-size: 13px; font-weight: 600; color: var(--text); }
+    .cm-item .cm-it-meta { font-size: 11px; color: var(--text-3); margin-top: 2px; font-weight: 400; }
+    .cm-item input[type="number"] {
+      width: 100%; padding: 6px 8px; font-size: 12px;
+      border: 1px solid var(--border-2); border-radius: 6px; background: var(--surface);
+    }
+    .cm-item-lbl { font-size: 10px; color: var(--text-3); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 3px; display:block; }
+    .cm-it-hecho {
+      padding: 6px 10px; font-size: 11px; font-weight: 700;
+      border: 1px solid var(--green); color: var(--green-text); background: var(--green-bg);
+      border-radius: 6px; cursor: pointer;
+    }
+    .cm-it-hecho:hover { background: var(--green); color: #fff; }
+    .cm-it-tag {
+      display:inline-block; font-size:10px; font-weight:700; letter-spacing:.4px;
+      padding:2px 6px; border-radius:4px; margin-left:6px;
+    }
+    .cm-it-tag.km    { background: #e0e7ff; color: #4338ca; }
+    .cm-it-tag.fecha { background: #fef3c7; color: #b45309; }
+
+    .cm-alertas-list { display:flex; flex-direction:column; gap:8px; margin-top:8px; }
+    .cm-alerta-row {
+      display: grid;
+      grid-template-columns: auto 1fr auto auto;
+      gap: 12px; align-items: center;
+      padding: 10px 14px;
+      border-radius: var(--radius-sm);
+      border-left: 4px solid var(--border-2);
+      background: var(--surface);
+      border: 1px solid var(--border);
+    }
+    .cm-alerta-row.rojo     { border-left-color: var(--red);    background: #fff5f5; }
+    .cm-alerta-row.amarillo { border-left-color: var(--yellow); background: #fffbeb; }
+    .cm-alerta-nivel {
+      font-size: 10px; font-weight: 800; letter-spacing: .5px;
+      padding: 3px 8px; border-radius: 4px;
+    }
+    .cm-alerta-row.rojo     .cm-alerta-nivel { background: var(--red-bg);    color: var(--red-text); }
+    .cm-alerta-row.amarillo .cm-alerta-nivel { background: var(--yellow-bg); color: var(--yellow-text); }
+    .cm-alerta-bus  { font-weight: 700; font-size: 13px; }
+    .cm-alerta-item { font-size: 12px; color: var(--text-2); }
+    .cm-alerta-urg  { font-size: 12px; font-weight: 700; color: var(--text); white-space: nowrap; }
+
+    @media (max-width: 760px) {
+      .cm-item { grid-template-columns: 1fr 1fr; }
+      .cm-alerta-row { grid-template-columns: 1fr auto; }
+    }
   </style>
 </head>
 <body>
@@ -657,6 +741,14 @@
         <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
       </svg>
       Estado e Historial
+    </button>
+    <button class="tab" data-tab="catalogo" onclick="showTab('catalogo', this); cmInit();">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/>
+        <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+      </svg>
+      Catálogo &amp; Alarmas
+      <span class="tab-badge" id="badgeAlertas">0</span>
     </button>
   </nav>
 
@@ -886,6 +978,64 @@
         </div>
 
       </div>
+    </section>
+
+    <!-- ════════════════════════════
+         PANEL 4 — CATÁLOGO & ALARMAS
+    ════════════════════════════ -->
+    <section class="panel" id="panel-catalogo">
+
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-title" style="justify-content:space-between;">
+          <span style="display:flex;align-items:center;gap:8px;">
+            <div class="ct-ico"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
+            Configuración de mantenimiento por bus
+          </span>
+        </div>
+        <div class="card-sub">Define los intervalos y umbrales de alarma por ítem. Las alarmas se calculan automáticamente con el kilometraje real importado del Excel BEA.</div>
+
+        <div class="cm-toolbar">
+          <div class="field" style="flex:1; min-width:220px;">
+            <label>Bus</label>
+            <select id="cmBus"><option value="">— Selecciona un bus —</option></select>
+          </div>
+          <div class="field" style="width:160px;">
+            <label>Km inicial</label>
+            <input type="number" id="cmKmInicial" min="0" placeholder="0" />
+          </div>
+          <div class="field" style="width:160px;">
+            <label>Km actuales</label>
+            <input type="text" id="cmKmActual" disabled style="background:#f5f5f7" />
+          </div>
+          <button class="btn-primary" id="cmBtnGuardar" disabled style="align-self:flex-end;">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/></svg>
+            Guardar configuración
+          </button>
+        </div>
+      </div>
+
+      <div class="card" id="cmCfgWrap" style="margin-bottom:16px; display:none;">
+        <div class="card-title">
+          <div class="ct-ico"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></div>
+          Ítems por sistema
+        </div>
+        <div class="card-sub">Click en un sistema para expandir sus partes.</div>
+        <div id="cmGrupos" class="cm-grupos"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title" style="justify-content:space-between;">
+          <span style="display:flex;align-items:center;gap:8px;">
+            <div class="ct-ico alert"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+            Alarmas activas — toda la flota
+          </span>
+          <button class="btn-secondary" id="cmBtnReload">Actualizar</button>
+        </div>
+        <div class="cm-alertas-list" id="cmAlertasList">
+          <div class="log-empty">Sin alarmas activas</div>
+        </div>
+      </div>
+
     </section>
 
   </div>
@@ -1458,6 +1608,207 @@
   }
 
   initAPI();
+
+  /* ═══════════════════════════════════════════
+     PANEL 4 — CATÁLOGO & ALARMAS DE MANTENIMIENTO
+  ═══════════════════════════════════════════ */
+  const cmBusSel    = document.getElementById('cmBus');
+  const cmKmIni     = document.getElementById('cmKmInicial');
+  const cmKmAct     = document.getElementById('cmKmActual');
+  const cmBtnSave   = document.getElementById('cmBtnGuardar');
+  const cmCfgWrap   = document.getElementById('cmCfgWrap');
+  const cmGrupos    = document.getElementById('cmGrupos');
+  const cmAlertList = document.getElementById('cmAlertasList');
+  const cmBtnReload = document.getElementById('cmBtnReload');
+  const cmBadge     = document.getElementById('badgeAlertas');
+
+  let cmInitialized = false;
+  let cmItems       = [];       // items con cfg + último historial
+  let cmCurrentBus  = null;     // id del bus seleccionado
+
+  async function cmInit() {
+    if (!cmInitialized) {
+      cmInitialized = true;
+      // poblar selector con buses ya cargados
+      cmBusSel.innerHTML = '<option value="">— Selecciona un bus —</option>';
+      busesData.forEach(b => {
+        const opt = document.createElement('option');
+        opt.value = b.id;
+        opt.textContent = `Bus ${String(b.numero).padStart(2,'0')}${b.placa ? ' · ' + b.placa : ''}`;
+        cmBusSel.appendChild(opt);
+      });
+      cmBusSel.addEventListener('change', cmLoadBus);
+      cmBtnSave.addEventListener('click', cmSaveConfig);
+      cmBtnReload.addEventListener('click', cmLoadAlertas);
+    }
+    cmLoadAlertas();
+  }
+  window.cmInit = cmInit;
+
+  async function cmLoadBus() {
+    const busId = parseInt(cmBusSel.value);
+    if (!busId) {
+      cmCfgWrap.style.display = 'none';
+      cmBtnSave.disabled = true;
+      cmKmIni.value = ''; cmKmAct.value = '';
+      cmCurrentBus = null;
+      return;
+    }
+    cmCurrentBus = busId;
+    try {
+      const res = await apiFetch(`${API_URL}/mantenimiento/config/${busId}`);
+      const j   = await res.json();
+      if (!res.ok) throw new Error(j.error || 'Error');
+      cmItems = j.items || [];
+      cmKmIni.value = j.bus?.km_inicial ?? 0;
+      cmKmAct.value = (j.bus?.km_actuales ?? 0).toLocaleString();
+      cmRenderGrupos();
+      cmCfgWrap.style.display = 'block';
+      cmBtnSave.disabled = false;
+    } catch (e) {
+      alert('Error cargando config: ' + e.message);
+    }
+  }
+
+  function cmRenderGrupos() {
+    const bySys = {};
+    cmItems.forEach(it => { (bySys[it.sistema] ||= []).push(it); });
+
+    cmGrupos.innerHTML = Object.entries(bySys).map(([sys, items]) => {
+      const cfgCount = items.filter(i => i.intervalo_km || i.intervalo_dias).length;
+      const isKm = items.some(i => i.tipo_intervalo === 'KM');
+      return `
+        <div class="cm-sys" data-sys="${sys}">
+          <div class="cm-sys-head" onclick="cmToggleSys('${sys.replace(/'/g,"\\'")}')">
+            <span>${sys} <span style="color:var(--text-3);font-weight:400;font-size:12px">· ${items.length} ítems · ${cfgCount} configurados</span></span>
+            <svg class="cm-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+          <div class="cm-sys-body">
+            ${items.map(it => cmRenderItem(it)).join('')}
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function cmRenderItem(it) {
+    const isKm  = it.tipo_intervalo === 'KM';
+    const ultimo = it.ultima_fecha
+      ? `Último: ${it.ultima_fecha}${it.ultimo_km != null ? ' · ' + Number(it.ultimo_km).toLocaleString() + ' km' : ''}`
+      : 'Sin registros';
+    return `
+      <div class="cm-item" data-iid="${it.item_id}">
+        <div>
+          <div class="cm-it-name">${it.nombre}<span class="cm-it-tag ${isKm ? 'km' : 'fecha'}">${isKm ? 'KM' : 'FECHA'}</span></div>
+          <div class="cm-it-meta">${ultimo}</div>
+        </div>
+        ${isKm ? `
+          <div><label class="cm-item-lbl">Intervalo (km)</label><input type="number" min="0" data-f="intervalo_km" value="${it.intervalo_km ?? ''}"></div>
+          <div><label class="cm-item-lbl">Aviso ⚠️ (km antes)</label><input type="number" min="0" data-f="umbral_amarillo_km" value="${it.umbral_amarillo_km ?? ''}"></div>
+          <div><label class="cm-item-lbl">Urgente 🔴 (km antes)</label><input type="number" min="0" data-f="umbral_rojo_km" value="${it.umbral_rojo_km ?? ''}"></div>
+          <div></div><div></div>
+        ` : `
+          <div><label class="cm-item-lbl">Intervalo (días)</label><input type="number" min="0" data-f="intervalo_dias" value="${it.intervalo_dias ?? ''}"></div>
+          <div><label class="cm-item-lbl">Aviso ⚠️ (días antes)</label><input type="number" min="0" data-f="umbral_amarillo_dias" value="${it.umbral_amarillo_dias ?? ''}"></div>
+          <div><label class="cm-item-lbl">Urgente 🔴 (días antes)</label><input type="number" min="0" data-f="umbral_rojo_dias" value="${it.umbral_rojo_dias ?? ''}"></div>
+          <div></div><div></div>
+        `}
+        <button class="cm-it-hecho" onclick="cmMarcarHecho(${it.item_id}, '${(it.nombre||'').replace(/'/g,"\\'")}')">✓ Hecho hoy</button>
+      </div>
+    `;
+  }
+
+  window.cmToggleSys = function(sys) {
+    const el = cmGrupos.querySelector(`.cm-sys[data-sys="${CSS.escape(sys)}"]`);
+    if (el) el.classList.toggle('open');
+  };
+
+  async function cmSaveConfig() {
+    if (!cmCurrentBus) return;
+    const items = [];
+    cmGrupos.querySelectorAll('.cm-item').forEach(row => {
+      const iid = parseInt(row.dataset.iid);
+      const obj = { item_id: iid };
+      row.querySelectorAll('input[data-f]').forEach(inp => {
+        const v = inp.value === '' ? null : parseInt(inp.value);
+        obj[inp.dataset.f] = (v != null && !isNaN(v)) ? v : null;
+      });
+      items.push(obj);
+    });
+    const km_inicial = cmKmIni.value === '' ? null : parseInt(cmKmIni.value);
+
+    cmBtnSave.disabled = true;
+    try {
+      const res = await apiFetch(`${API_URL}/mantenimiento/config`, {
+        method: 'POST',
+        body: JSON.stringify({ bus_id: cmCurrentBus, km_inicial, items }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || 'Error');
+      await cmLoadBus();
+      await cmLoadAlertas();
+      alert('Configuración guardada');
+    } catch (e) {
+      alert('Error al guardar: ' + e.message);
+    } finally {
+      cmBtnSave.disabled = false;
+    }
+  }
+
+  window.cmMarcarHecho = async function(itemId, nombre) {
+    if (!cmCurrentBus) return;
+    const obs = prompt(`Registrar "${nombre}" como realizado hoy. Observaciones (opcional):`, '');
+    if (obs === null) return;
+    try {
+      const res = await apiFetch(`${API_URL}/mantenimiento/historial`, {
+        method: 'POST',
+        body: JSON.stringify({ bus_id: cmCurrentBus, item_id: itemId, observaciones: obs }),
+      });
+      const j = await res.json();
+      if (!res.ok) throw new Error(j.error || 'Error');
+      await cmLoadBus();
+      await cmLoadAlertas();
+    } catch (e) {
+      alert('Error: ' + e.message);
+    }
+  };
+
+  async function cmLoadAlertas() {
+    try {
+      const res = await apiFetch(`${API_URL}/mantenimiento/alertas`);
+      const arr = await res.json();
+      if (!Array.isArray(arr)) throw new Error('Respuesta inválida');
+      cmRenderAlertas(arr);
+      cmBadge.textContent = arr.length;
+    } catch (e) {
+      cmAlertList.innerHTML = `<div class="log-empty" style="color:var(--red-text)">Error: ${e.message}</div>`;
+    }
+  }
+
+  function cmRenderAlertas(arr) {
+    if (!arr.length) {
+      cmAlertList.innerHTML = `<div class="log-empty">Sin alarmas activas — todo al día ✓</div>`;
+      return;
+    }
+    cmAlertList.innerHTML = arr.map(a => {
+      const nivelCls = a.nivel === 'ROJO' ? 'rojo' : 'amarillo';
+      const urg = a.tipo === 'KM'
+        ? `${Number(a.km_restante).toLocaleString()} km`
+        : `${a.dias_restantes} días`;
+      const urgLabel = (a.tipo === 'KM' ? a.km_restante : a.dias_restantes) < 0 ? 'VENCIDO hace ' : 'Faltan ';
+      return `
+        <div class="cm-alerta-row ${nivelCls}">
+          <span class="cm-alerta-nivel">${a.nivel}</span>
+          <div>
+            <div class="cm-alerta-bus">Bus ${String(a.bus_numero).padStart(2,'0')}${a.bus_placa ? ' · ' + a.bus_placa : ''}</div>
+            <div class="cm-alerta-item">${a.sistema} — ${a.nombre}</div>
+          </div>
+          <div class="cm-alerta-urg">${urgLabel}${urg.replace('-','')}</div>
+          <div style="font-size:11px;color:var(--text-3);text-align:right">${a.ultima_fecha || 'sin historial'}</div>
+        </div>
+      `;
+    }).join('');
+  }
 </script>
 
 </body>
