@@ -211,9 +211,52 @@ def migrate_db():
         for col_sql in [
             "ALTER TABLE buses ADD COLUMN IF NOT EXISTS propietario_id INTEGER REFERENCES propietarios(id)",
             "ALTER TABLE registros_movilidad ADD COLUMN IF NOT EXISTS ruta_id INTEGER REFERENCES rutas(id)",
+            "ALTER TABLE buses ADD COLUMN IF NOT EXISTS km_inicial INTEGER NOT NULL DEFAULT 0",
         ]:
             try:
                 db.execute(col_sql)
+            except Exception:
+                pass
+        # Tablas del módulo de mantenimiento preventivo
+        for tbl_sql in [
+            """CREATE TABLE IF NOT EXISTS catalogo_mantenimiento (
+                id              SERIAL PRIMARY KEY,
+                sistema         TEXT    NOT NULL,
+                nombre          TEXT    NOT NULL,
+                tipo_intervalo  TEXT    NOT NULL CHECK (tipo_intervalo IN ('KM','FECHA')),
+                orden           INTEGER NOT NULL DEFAULT 0,
+                activo          INTEGER NOT NULL DEFAULT 1,
+                created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(sistema, nombre)
+            )""",
+            """CREATE TABLE IF NOT EXISTS bus_mantenimiento_config (
+                id                    SERIAL PRIMARY KEY,
+                bus_id                INTEGER NOT NULL REFERENCES buses(id) ON DELETE CASCADE,
+                item_id               INTEGER NOT NULL REFERENCES catalogo_mantenimiento(id) ON DELETE CASCADE,
+                intervalo_km          INTEGER,
+                intervalo_dias        INTEGER,
+                umbral_amarillo_km    INTEGER,
+                umbral_rojo_km        INTEGER,
+                umbral_amarillo_dias  INTEGER,
+                umbral_rojo_dias      INTEGER,
+                activo                INTEGER NOT NULL DEFAULT 1,
+                created_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(bus_id, item_id)
+            )""",
+            """CREATE TABLE IF NOT EXISTS bus_mantenimiento_historial (
+                id              SERIAL PRIMARY KEY,
+                bus_id          INTEGER NOT NULL REFERENCES buses(id) ON DELETE CASCADE,
+                item_id         INTEGER NOT NULL REFERENCES catalogo_mantenimiento(id),
+                fecha_realizado DATE    NOT NULL,
+                km_realizado    INTEGER,
+                realizado_por   TEXT,
+                observaciones   TEXT,
+                created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )""",
+        ]:
+            try:
+                db.execute(tbl_sql)
             except Exception:
                 pass
     else:
@@ -260,9 +303,51 @@ def migrate_db():
                 UNIQUE(bus_id, fecha)
             )
         """)
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS catalogo_mantenimiento (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                sistema         TEXT    NOT NULL,
+                nombre          TEXT    NOT NULL,
+                tipo_intervalo  TEXT    NOT NULL CHECK (tipo_intervalo IN ('KM','FECHA')),
+                orden           INTEGER NOT NULL DEFAULT 0,
+                activo          INTEGER NOT NULL DEFAULT 1,
+                created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(sistema, nombre)
+            )
+        """)
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS bus_mantenimiento_config (
+                id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+                bus_id                INTEGER NOT NULL REFERENCES buses(id) ON DELETE CASCADE,
+                item_id               INTEGER NOT NULL REFERENCES catalogo_mantenimiento(id) ON DELETE CASCADE,
+                intervalo_km          INTEGER,
+                intervalo_dias        INTEGER,
+                umbral_amarillo_km    INTEGER,
+                umbral_rojo_km        INTEGER,
+                umbral_amarillo_dias  INTEGER,
+                umbral_rojo_dias      INTEGER,
+                activo                INTEGER NOT NULL DEFAULT 1,
+                created_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(bus_id, item_id)
+            )
+        """)
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS bus_mantenimiento_historial (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                bus_id          INTEGER NOT NULL REFERENCES buses(id) ON DELETE CASCADE,
+                item_id         INTEGER NOT NULL REFERENCES catalogo_mantenimiento(id),
+                fecha_realizado DATE    NOT NULL,
+                km_realizado    INTEGER,
+                realizado_por   TEXT,
+                observaciones   TEXT,
+                created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
         for col_sql in [
             "ALTER TABLE buses ADD COLUMN propietario_id INTEGER REFERENCES propietarios(id)",
             "ALTER TABLE registros_movilidad ADD COLUMN ruta_id INTEGER REFERENCES rutas(id)",
+            "ALTER TABLE buses ADD COLUMN km_inicial INTEGER NOT NULL DEFAULT 0",
         ]:
             try:
                 db.execute(col_sql)
@@ -281,6 +366,48 @@ def migrate_db():
                 ("adulto_mayor", "Adulto Mayor",     1500),
             ],
         )
+
+    # Seed catálogo de mantenimiento si está vacío (33 ítems del Excel BEA)
+    try:
+        cnt_cat = db.execute("SELECT COUNT(*) FROM catalogo_mantenimiento").fetchone()
+        cat_total = list(cnt_cat.values())[0] if isinstance(cnt_cat, dict) else cnt_cat[0]
+    except Exception:
+        cat_total = -1
+    if cat_total == 0:
+        seed = [
+            ('MOTOR', 'Kit Cambio de aceite motor y filtro', 'KM', 10),
+            ('MOTOR', 'Correas Alternador',                  'KM', 20),
+            ('MOTOR', 'Filtro Aire (motor)',                 'KM', 30),
+            ('MOTOR', 'Filtro Combustible',                  'KM', 40),
+            ('MOTOR', 'Afinacion motor (Calibrar Valvulas)', 'KM', 50),
+            ('MOTOR', 'Casquetes',                           'KM', 60),
+            ('CARDAN/EJE CENTRAL', 'Cardan',            'KM', 10),
+            ('CARDAN/EJE CENTRAL', 'Cruceta cardan',    'KM', 20),
+            ('CARDAN/EJE CENTRAL', 'Soportes y caucho', 'KM', 30),
+            ('CARDAN/EJE CENTRAL', 'Tornilleria',       'KM', 40),
+            ('FRENOS', 'Revision de Bandas, rodamientos y retenedores', 'KM',    10),
+            ('FRENOS', 'Fugas de Aire',                                 'FECHA', 20),
+            ('FRENOS', 'Manguera Freno',                                'KM',    30),
+            ('SUSPENSION', 'Cambio de bujes de Muelle', 'KM', 10),
+            ('SUSPENSION', 'Bujes y Pasadores',         'KM', 20),
+            ('SUSPENSION', 'Grapas',                    'KM', 30),
+            ('SUSPENSION', 'Amortiguadores',            'KM', 40),
+            ('SUSPENSION', 'Barra Estabilizadora',      'KM', 50),
+            ('ELECTRICO', 'Luces',   'FECHA', 10),
+            ('ELECTRICO', 'Bateria', 'FECHA', 20),
+            ('REFRIGERACION', 'Mangueras',   'KM', 10),
+            ('REFRIGERACION', 'Radiador',    'KM', 20),
+            ('REFRIGERACION', 'Intercooler', 'KM', 30),
+            ('LUBRICACION', 'Engrase general (niveles aceite, transmision, diferencial y motor; refrigerante y liquidos de freno)', 'KM', 10),
+            ('ACEITE', 'Cambio de aceite de motor', 'KM', 10),
+        ]
+        try:
+            db.executemany(
+                "INSERT INTO catalogo_mantenimiento (sistema, nombre, tipo_intervalo, orden) VALUES (?,?,?,?)",
+                seed,
+            )
+        except Exception:
+            pass
 
     db.commit()
     db.close()
@@ -1047,6 +1174,7 @@ def batch_upsert_movilidad():
 
     db    = get_db()
     saved = 0
+    buses_afectados = set()
     for r in registros:
         bus_id = r.get("bus_id")
         if not bus_id:
@@ -1067,7 +1195,23 @@ def batch_upsert_movilidad():
              r.get("km_recorridos", 0), r.get("novedades", ""),
              r.get("ruta_id") or None, usuario_id),
         )
+        buses_afectados.add(bus_id)
         saved += 1
+
+    # Recalcula km_actuales para cada bus afectado: idempotente.
+    # km_actuales = km_inicial + SUM(km_recorridos de registros_movilidad)
+    for bid in buses_afectados:
+        try:
+            db.execute(
+                """UPDATE buses
+                       SET km_actuales = COALESCE(km_inicial,0) +
+                           COALESCE((SELECT SUM(km_recorridos) FROM registros_movilidad WHERE bus_id = ?), 0)
+                     WHERE id = ?""",
+                (bid, bid),
+            )
+        except Exception:
+            pass
+
     db.commit()
     db.close()
     return jsonify({"ok": True, "saved": saved})
@@ -1227,6 +1371,310 @@ def admin_set_usuario_buses(uid):
     db.commit()
     db.close()
     return jsonify({"ok": True})
+
+
+# ══════════════════════════════════════════
+#  Mantenimiento preventivo
+# ══════════════════════════════════════════
+
+@app.route("/api/mantenimiento/catalogo", methods=["GET"])
+@require_auth
+def get_catalogo_mant():
+    db = get_db()
+    rows = db.execute(
+        """SELECT id, sistema, nombre, tipo_intervalo, orden, activo
+             FROM catalogo_mantenimiento
+            WHERE activo = 1
+         ORDER BY sistema, orden, nombre"""
+    ).fetchall()
+    db.close()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/mantenimiento/config/<int:bus_id>", methods=["GET"])
+@require_auth
+def get_bus_mant_config(bus_id):
+    """Devuelve los ítems del catálogo con la config y último historial para un bus."""
+    db = get_db()
+    bus = db.execute(
+        "SELECT id, numero, placa, km_actuales, km_inicial FROM buses WHERE id = ?",
+        (bus_id,),
+    ).fetchone()
+    if not bus:
+        db.close()
+        return jsonify({"error": "Bus no encontrado"}), 404
+
+    rows = db.execute(
+        """SELECT c.id AS item_id, c.sistema, c.nombre, c.tipo_intervalo, c.orden,
+                  cfg.intervalo_km, cfg.intervalo_dias,
+                  cfg.umbral_amarillo_km, cfg.umbral_rojo_km,
+                  cfg.umbral_amarillo_dias, cfg.umbral_rojo_dias,
+                  h.fecha_realizado AS ultima_fecha,
+                  h.km_realizado    AS ultimo_km
+             FROM catalogo_mantenimiento c
+             LEFT JOIN bus_mantenimiento_config cfg
+                    ON cfg.item_id = c.id AND cfg.bus_id = ? AND cfg.activo = 1
+             LEFT JOIN LATERAL (
+                  SELECT fecha_realizado, km_realizado
+                    FROM bus_mantenimiento_historial
+                   WHERE bus_id = ? AND item_id = c.id
+                ORDER BY fecha_realizado DESC, id DESC
+                   LIMIT 1
+             ) h ON TRUE
+            WHERE c.activo = 1
+         ORDER BY c.sistema, c.orden, c.nombre""",
+        (bus_id, bus_id),
+    ).fetchall() if DATABASE_URL else None
+
+    if rows is None:
+        # SQLite no soporta LATERAL — usar consulta separada
+        items = db.execute(
+            """SELECT c.id AS item_id, c.sistema, c.nombre, c.tipo_intervalo, c.orden,
+                      cfg.intervalo_km, cfg.intervalo_dias,
+                      cfg.umbral_amarillo_km, cfg.umbral_rojo_km,
+                      cfg.umbral_amarillo_dias, cfg.umbral_rojo_dias
+                 FROM catalogo_mantenimiento c
+                 LEFT JOIN bus_mantenimiento_config cfg
+                        ON cfg.item_id = c.id AND cfg.bus_id = ? AND cfg.activo = 1
+                WHERE c.activo = 1
+             ORDER BY c.sistema, c.orden, c.nombre""",
+            (bus_id,),
+        ).fetchall()
+        rows = []
+        for it in items:
+            d = dict(it)
+            last = db.execute(
+                """SELECT fecha_realizado, km_realizado
+                     FROM bus_mantenimiento_historial
+                    WHERE bus_id = ? AND item_id = ?
+                 ORDER BY fecha_realizado DESC, id DESC LIMIT 1""",
+                (bus_id, d["item_id"]),
+            ).fetchone()
+            d["ultima_fecha"] = last["fecha_realizado"] if last else None
+            d["ultimo_km"]    = last["km_realizado"]    if last else None
+            rows.append(d)
+
+    db.close()
+    return jsonify({"bus": dict(bus), "items": [dict(r) for r in rows]})
+
+
+@app.route("/api/mantenimiento/config", methods=["POST"])
+@require_auth
+def upsert_bus_mant_config():
+    """Bulk upsert de la config de un bus.
+    Body: { bus_id, km_inicial, items: [{ item_id, intervalo_km, intervalo_dias,
+            umbral_amarillo_km, umbral_rojo_km, umbral_amarillo_dias, umbral_rojo_dias }] }
+    """
+    data = request.get_json(force=True)
+    bus_id = data.get("bus_id")
+    items  = data.get("items", [])
+    km_inicial = data.get("km_inicial")
+    if not bus_id:
+        return jsonify({"error": "bus_id requerido"}), 400
+
+    db = get_db()
+    if km_inicial is not None:
+        try:
+            ki = int(km_inicial)
+            db.execute(
+                """UPDATE buses
+                       SET km_inicial = ?,
+                           km_actuales = ? + COALESCE((SELECT SUM(km_recorridos) FROM registros_movilidad WHERE bus_id = ?), 0)
+                     WHERE id = ?""",
+                (ki, ki, bus_id, bus_id),
+            )
+        except Exception:
+            pass
+
+    saved = 0
+    for it in items:
+        item_id = it.get("item_id")
+        if not item_id:
+            continue
+        existing = db.execute(
+            "SELECT id FROM bus_mantenimiento_config WHERE bus_id = ? AND item_id = ?",
+            (bus_id, item_id),
+        ).fetchone()
+        params = (
+            it.get("intervalo_km"), it.get("intervalo_dias"),
+            it.get("umbral_amarillo_km"), it.get("umbral_rojo_km"),
+            it.get("umbral_amarillo_dias"), it.get("umbral_rojo_dias"),
+        )
+        if existing:
+            db.execute(
+                """UPDATE bus_mantenimiento_config
+                       SET intervalo_km = ?, intervalo_dias = ?,
+                           umbral_amarillo_km = ?, umbral_rojo_km = ?,
+                           umbral_amarillo_dias = ?, umbral_rojo_dias = ?,
+                           activo = 1, updated_at = CURRENT_TIMESTAMP
+                     WHERE bus_id = ? AND item_id = ?""",
+                params + (bus_id, item_id),
+            )
+        else:
+            db.execute(
+                """INSERT INTO bus_mantenimiento_config
+                       (bus_id, item_id, intervalo_km, intervalo_dias,
+                        umbral_amarillo_km, umbral_rojo_km,
+                        umbral_amarillo_dias, umbral_rojo_dias)
+                   VALUES (?,?,?,?,?,?,?,?)""",
+                (bus_id, item_id) + params,
+            )
+        saved += 1
+    db.commit()
+    db.close()
+    return jsonify({"ok": True, "saved": saved})
+
+
+@app.route("/api/mantenimiento/historial", methods=["POST"])
+@require_auth
+def add_mant_historial():
+    """Registra un mantenimiento realizado (rol mecánico/admin)."""
+    data = request.get_json(force=True)
+    bus_id  = data.get("bus_id")
+    item_id = data.get("item_id")
+    fecha   = data.get("fecha_realizado") or date.today().isoformat()
+    km      = data.get("km_realizado")
+    obs     = data.get("observaciones", "")
+    if not bus_id or not item_id:
+        return jsonify({"error": "bus_id e item_id requeridos"}), 400
+
+    db = get_db()
+    user = db.execute(
+        "SELECT nombre FROM usuarios WHERE id = ?", (request.jwt_user_id,)
+    ).fetchone()
+    realizado_por = (user and user["nombre"]) or "—"
+
+    # Si no se pasa km, usa el actual del bus
+    if km is None:
+        b = db.execute("SELECT km_actuales FROM buses WHERE id = ?", (bus_id,)).fetchone()
+        km = b["km_actuales"] if b else 0
+
+    db.execute(
+        """INSERT INTO bus_mantenimiento_historial
+               (bus_id, item_id, fecha_realizado, km_realizado, realizado_por, observaciones)
+           VALUES (?,?,?,?,?,?)""",
+        (bus_id, item_id, fecha, km, realizado_por, obs),
+    )
+    db.commit()
+    db.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/mantenimiento/historial/<int:bus_id>", methods=["GET"])
+@require_auth
+def get_mant_historial(bus_id):
+    db = get_db()
+    rows = db.execute(
+        """SELECT h.id, h.item_id, c.sistema, c.nombre, h.fecha_realizado,
+                  h.km_realizado, h.realizado_por, h.observaciones, h.created_at
+             FROM bus_mantenimiento_historial h
+             JOIN catalogo_mantenimiento c ON c.id = h.item_id
+            WHERE h.bus_id = ?
+         ORDER BY h.fecha_realizado DESC, h.id DESC
+            LIMIT 200""",
+        (bus_id,),
+    ).fetchall()
+    db.close()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/mantenimiento/alertas", methods=["GET"])
+@require_auth
+def get_mant_alertas():
+    """Calcula on-the-fly las alarmas (amarillas/rojas) de toda la flota."""
+    db    = get_db()
+    today = date.today()
+    rows = db.execute(
+        """SELECT cfg.bus_id, b.numero AS bus_numero, b.placa AS bus_placa, b.km_actuales,
+                  cfg.item_id, c.sistema, c.nombre, c.tipo_intervalo,
+                  cfg.intervalo_km, cfg.intervalo_dias,
+                  cfg.umbral_amarillo_km, cfg.umbral_rojo_km,
+                  cfg.umbral_amarillo_dias, cfg.umbral_rojo_dias
+             FROM bus_mantenimiento_config cfg
+             JOIN buses b                ON b.id = cfg.bus_id
+             JOIN catalogo_mantenimiento c ON c.id = cfg.item_id
+            WHERE cfg.activo = 1 AND c.activo = 1"""
+    ).fetchall()
+
+    alertas = []
+    for r in rows:
+        d = dict(r)
+        bus_id  = d["bus_id"]
+        item_id = d["item_id"]
+        tipo    = d["tipo_intervalo"]
+
+        last = db.execute(
+            """SELECT fecha_realizado, km_realizado
+                 FROM bus_mantenimiento_historial
+                WHERE bus_id = ? AND item_id = ?
+             ORDER BY fecha_realizado DESC, id DESC LIMIT 1""",
+            (bus_id, item_id),
+        ).fetchone()
+
+        nivel = None
+        info  = {}
+
+        if tipo == "KM":
+            intervalo = d.get("intervalo_km")
+            uy        = d.get("umbral_amarillo_km")
+            ur        = d.get("umbral_rojo_km")
+            if not intervalo:
+                continue
+            km_actual = d.get("km_actuales") or 0
+            km_base   = (last["km_realizado"] if last else None) or 0
+            proximo   = km_base + intervalo
+            restante  = proximo - km_actual
+            info = {"proximo_km": proximo, "km_restante": restante,
+                    "ultimo_km": km_base, "ultima_fecha": (last["fecha_realizado"] if last else None)}
+            if ur is not None and restante <= ur:
+                nivel = "ROJO"
+            elif uy is not None and restante <= uy:
+                nivel = "AMARILLO"
+        else:  # FECHA
+            intervalo = d.get("intervalo_dias")
+            uy        = d.get("umbral_amarillo_dias")
+            ur        = d.get("umbral_rojo_dias")
+            if not intervalo:
+                continue
+            fecha_base = last["fecha_realizado"] if last else None
+            if fecha_base:
+                if isinstance(fecha_base, str):
+                    try:
+                        fecha_base = datetime.strptime(fecha_base[:10], "%Y-%m-%d").date()
+                    except Exception:
+                        continue
+                proxima = fecha_base + timedelta(days=intervalo)
+            else:
+                proxima = today + timedelta(days=intervalo)
+            restante = (proxima - today).days
+            info = {"proxima_fecha": proxima.isoformat(), "dias_restantes": restante,
+                    "ultima_fecha": fecha_base.isoformat() if fecha_base else None}
+            if ur is not None and restante <= ur:
+                nivel = "ROJO"
+            elif uy is not None and restante <= uy:
+                nivel = "AMARILLO"
+
+        if nivel:
+            alertas.append({
+                "bus_id":     bus_id,
+                "bus_numero": d["bus_numero"],
+                "bus_placa":  d["bus_placa"],
+                "item_id":    item_id,
+                "sistema":    d["sistema"],
+                "nombre":     d["nombre"],
+                "tipo":       tipo,
+                "nivel":      nivel,
+                **info,
+            })
+
+    db.close()
+    # Ordena: ROJO primero, luego AMARILLO; dentro de cada uno, más urgente primero
+    def sort_key(a):
+        rank = 0 if a["nivel"] == "ROJO" else 1
+        urg  = a.get("km_restante") if a["tipo"] == "KM" else a.get("dias_restantes")
+        return (rank, urg if urg is not None else 999999)
+    alertas.sort(key=sort_key)
+    return jsonify(alertas)
 
 
 # ──────────────────────────────────────────
