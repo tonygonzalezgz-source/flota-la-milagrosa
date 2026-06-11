@@ -1348,7 +1348,7 @@
                 <div class="bus-stat-sub">acumulado este mes</div>
               </div>
               <div class="bus-stat">
-                <div class="bus-stat-label">Recorridas Ayer</div>
+                <div class="bus-stat-label">Vueltas</div>
                 <div class="bus-stat-value" id="vueltas-${bus.id}">—</div>
                 <div class="bus-stat-sub">día anterior</div>
               </div>
@@ -1374,12 +1374,26 @@
 
     async function cargarVueltas(busId) {
       try {
-        const ayer = new Date();
+        // Calcular ayer en formato YYYY-MM-DD
+        const hoy = new Date();
+        const ayer = new Date(hoy);
         ayer.setDate(ayer.getDate() - 1);
-        const fechaAyer = ayer.toISOString().split('T')[0];
+        
+        // Convertir a string ISO y extraer la fecha
+        const año = ayer.getFullYear();
+        const mes = String(ayer.getMonth() + 1).padStart(2, '0');
+        const día = String(ayer.getDate()).padStart(2, '0');
+        const fechaAyer = `${año}-${mes}-${día}`;
+        
+        console.log(`Cargando vueltas bus ${busId} para fecha ${fechaAyer}`);
+        
         const res = await apiFetch(`${API}/movilidad?fecha=${fechaAyer}`);
         const registros = await res.json();
+        console.log(`Registros obtenidos para ${fechaAyer}:`, registros.length);
+        
         const vueltas = registros.filter(r => r.bus_id === busId).length;
+        console.log(`Vueltas para bus ${busId}: ${vueltas}`);
+        
         const el = document.getElementById(`vueltas-${busId}`);
         if (el) el.textContent = vueltas.toString();
       } catch(e) {
