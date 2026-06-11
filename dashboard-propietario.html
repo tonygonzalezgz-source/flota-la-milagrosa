@@ -1348,9 +1348,9 @@
                 <div class="bus-stat-sub">acumulado este mes</div>
               </div>
               <div class="bus-stat">
-                <div class="bus-stat-label">Vueltas</div>
+                <div class="bus-stat-label">Recorridas Ayer</div>
                 <div class="bus-stat-value" id="vueltas-${bus.id}">—</div>
-                <div class="bus-stat-sub">recorridas hoy</div>
+                <div class="bus-stat-sub">día anterior</div>
               </div>
             </div>
           </div>
@@ -1374,8 +1374,10 @@
 
     async function cargarVueltas(busId) {
       try {
-        const hoy = new Date().toISOString().split('T')[0];
-        const res = await apiFetch(`${API}/registros?fecha=${hoy}&bus_id=${busId}`);
+        const ayer = new Date();
+        ayer.setDate(ayer.getDate() - 1);
+        const fechaAyer = ayer.toISOString().split('T')[0];
+        const res = await apiFetch(`${API}/registros?fecha=${fechaAyer}&bus_id=${busId}`);
         const registros = await res.json();
         const vueltas = registros.filter(r => r.bus_id === busId).length;
         const el = document.getElementById(`vueltas-${busId}`);
