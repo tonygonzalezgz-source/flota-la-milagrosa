@@ -1302,6 +1302,7 @@
 
     // ── RENDER TARJETAS DE BUSES ──
     function renderBuses(lista) {
+      console.log('🚌 renderBuses llamado con:', lista);
       const grid = document.getElementById('busGrid');
       if (!lista.length) {
         grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
@@ -1374,6 +1375,7 @@
     }
 
     async function cargarVueltasParaTodos(buses) {
+      console.log('📞 cargarVueltasParaTodos llamado con buses:', buses);
       try {
         // Calcular ayer
         const hoy = new Date();
