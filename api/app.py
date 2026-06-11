@@ -488,6 +488,45 @@ def login():
 
 
 # ──────────────────────────────────────────
+#  Verificar sesión actual
+# ──────────────────────────────────────────
+
+@app.route("/api/me", methods=["GET"])
+@require_auth
+def get_current_user():
+    db = get_db()
+    user = db.execute(
+        "SELECT id, username, nombre, rol, iniciales, color FROM usuarios WHERE id = ? AND activo = 1",
+        (request.jwt_user_id,),
+    ).fetchone()
+    db.close()
+
+    if not user:
+        return jsonify({"error": "Usuario no encontrado"}), 404
+
+    rol = user["rol"]
+    allowed_views = []
+    if rol == "Administrador":
+        allowed_views = ["dashboard", "analista", "historial", "mant", "catalogo"]
+    elif rol == "Propietario":
+        allowed_views = ["propietario", "historial", "mant"]
+    elif rol == "Técnico Mant.":
+        allowed_views = ["mant", "historial"]
+    elif rol == "Analista":
+        allowed_views = ["analista", "historial"]
+
+    return jsonify({
+        "id": user["id"],
+        "username": user["username"],
+        "nombre": user["nombre"],
+        "rol": rol,
+        "iniciales": user["iniciales"],
+        "color": user["color"],
+        "allowedViews": allowed_views,
+    })
+
+
+# ──────────────────────────────────────────
 #  Buses
 # ──────────────────────────────────────────
 
