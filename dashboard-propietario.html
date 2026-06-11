@@ -1395,12 +1395,14 @@
         console.log(`🚌 Buses en sistema: ${buses.length}`);
         console.log('Registros cargados:', registros);
         
-        // Contar vueltas por bus_id
+        // SUMAR vueltas por bus_id (campo 'vueltas' en registros_movilidad)
         const vueltasPorBus = {};
         registros.forEach(r => {
-          const bid = r.bus_id || r.id; // Intentar ambos campos
-          if (bid) {
-            vueltasPorBus[bid] = (vueltasPorBus[bid] || 0) + 1;
+          const bid = r.bus_id;
+          if (bid !== null && bid !== undefined) {
+            // Sumar el campo 'vueltas' del registro, no contar registros
+            const vultas = parseInt(r.vueltas) || 0;
+            vueltasPorBus[bid] = (vueltasPorBus[bid] || 0) + vultas;
           }
         });
         
