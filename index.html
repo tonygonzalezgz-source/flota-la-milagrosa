@@ -1063,6 +1063,37 @@
   const loadedViews = new Set();  // lazy-load tracking
 
   /* ═══════════════════════════════════════
+     1.5. VERIFICAR SESIÓN AL CARGAR
+  ═══════════════════════════════════════ */
+  function restoreSessionFromStorage() {
+    const token = localStorage.getItem('authToken');
+    const userStr = localStorage.getItem('currentUser');
+    if (token && userStr) {
+      try {
+        currentUser = JSON.parse(userStr);
+        // Validar que el token aún sea válido llamando a /api/me
+        apiFetch(`${API_URL}/me`)
+          .then(r => r.json())
+          .then(data => {
+            if (data.id && currentUser) {
+              // Token válido, iniciar sesión
+              startSession();
+            }
+          })
+          .catch(() => {
+            // Token expirado o inválido, ir a login
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('currentUser');
+            currentUser = null;
+          });
+      } catch (e) {
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('currentUser');
+      }
+    }
+  }
+
+  /* ═══════════════════════════════════════
      2. AUTOFILL CREDENTIALS (demo hint)
   ═══════════════════════════════════════ */
   function fillCreds(user, pass) {
@@ -1681,9 +1712,13 @@
 
   // Boot when DOM is ready
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+    document.addEventListener('DOMContentLoaded', () => {
+      init();
+      restoreSessionFromStorage();
+    });
   } else {
     init();
+    restoreSessionFromStorage();
   }
 })();
 </script>

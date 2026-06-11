@@ -14,6 +14,18 @@
       });
     })();
   </script>
+  <script>
+    // Verificar sesión al cargar esta página directamente
+    (function() {
+      if (window.location === window.parent.location) {
+        // Se cargó directamente, no dentro de un iframe
+        const token = localStorage.getItem('authToken');
+        if (!token) {
+          window.location.href = '/index.html';
+        }
+      }
+    })();
+  </script>
   <style>
     /* ══════════════════════════════════════
        TOKENS & RESET
