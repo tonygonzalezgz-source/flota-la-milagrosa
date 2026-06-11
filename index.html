@@ -1068,24 +1068,50 @@
   function restoreSessionFromStorage() {
     const token = localStorage.getItem('authToken');
     const userStr = localStorage.getItem('currentUser');
+
     if (token && userStr) {
       try {
         currentUser = JSON.parse(userStr);
-        // Validar que el token aún sea válido llamando a /api/me
-        apiFetch(`${API_URL}/me`)
-          .then(r => r.json())
-          .then(data => {
-            if (data.id && currentUser) {
-              // Token válido, iniciar sesión
-              startSession();
-            }
-          })
-          .catch(() => {
-            // Token expirado o inválido, ir a login
-            localStorage.removeItem('authToken');
-            localStorage.removeItem('currentUser');
-            currentUser = null;
-          });
+        // Restaurar sesión directamente sin parpadeo
+        const ls = document.getElementById('loginScreen');
+        ls.style.display = 'none';
+
+        // Mostrar app shell con datos del localStorage
+        const avatarEl = document.getElementById('sbAvatar');
+        avatarEl.textContent = currentUser.iniciales;
+        avatarEl.style.background = currentUser.color;
+        document.getElementById('sbName').textContent = currentUser.nombre;
+        document.getElementById('sbRole').textContent = currentUser.rol;
+
+        applyRoleAccess();
+        buildWelcomeCards();
+
+        const shell = document.getElementById('appShell');
+        shell.style.display = 'flex';
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => shell.classList.add('visible'));
+        });
+
+        // Auto-navegar a primer view
+        if (currentUser.allowedViews && currentUser.allowedViews.length > 0) {
+          const firstViewId = `nav-${currentUser.allowedViews[0]}`;
+          const firstBtn = document.getElementById(firstViewId);
+          if (firstBtn) {
+            setTimeout(() => switchView(firstBtn), 200);
+          }
+        }
+
+        // Validar token en background (sin bloquear UI)
+        setTimeout(() => {
+          apiFetch(`${API_URL}/me`)
+            .catch(() => {
+              // Token inválido, cerrar sesión
+              localStorage.removeItem('authToken');
+              localStorage.removeItem('currentUser');
+              currentUser = null;
+              doLogout();
+            });
+        }, 500);
       } catch (e) {
         localStorage.removeItem('authToken');
         localStorage.removeItem('currentUser');
