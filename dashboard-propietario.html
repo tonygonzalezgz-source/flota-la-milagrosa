@@ -1377,12 +1377,13 @@
         const ayer = new Date();
         ayer.setDate(ayer.getDate() - 1);
         const fechaAyer = ayer.toISOString().split('T')[0];
-        const res = await apiFetch(`${API}/registros?fecha=${fechaAyer}&bus_id=${busId}`);
+        const res = await apiFetch(`${API}/movilidad?fecha=${fechaAyer}`);
         const registros = await res.json();
         const vueltas = registros.filter(r => r.bus_id === busId).length;
         const el = document.getElementById(`vueltas-${busId}`);
-        if (el) el.textContent = vueltas || '0';
+        if (el) el.textContent = vueltas.toString();
       } catch(e) {
+        console.error('Error cargarVueltas:', e);
         const el = document.getElementById(`vueltas-${busId}`);
         if (el) el.textContent = '—';
       }
