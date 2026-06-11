@@ -1377,48 +1377,49 @@
     async function cargarVueltasParaTodos(buses) {
       console.log('📞 cargarVueltasParaTodos llamado con buses:', buses);
       try {
-        // Calcular ayer
-        const hoy = new Date();
-        const ayer = new Date(hoy);
-        ayer.setDate(ayer.getDate() - 1);
+        // Cargar ÚLTIMAS FECHAS disponibles
+        const res = await apiFetch(`${API}/movilidad/fechas`);
+        const fechas = await res.json();
+        console.log('📅 Fechas disponibles:', fechas);
         
-        const año = ayer.getFullYear();
-        const mes = String(ayer.getMonth() + 1).padStart(2, '0');
-        const día = String(ayer.getDate()).padStart(2, '0');
-        const fechaAyer = `${año}-${mes}-${día}`;
+        if (!fechas.length) {
+          console.log('❌ No hay fechas disponibles');
+          document.querySelectorAll('[id^="vueltas-"]').forEach(el => el.textContent = '—');
+          return;
+        }
         
-        console.log(`📅 Cargando vueltas para fecha: ${fechaAyer}`);
+        // Usar la fecha más reciente disponible
+        const fechaMasReciente = fechas[0];
+        console.log(`📅 Usando fecha más reciente: ${fechaMasReciente}`);
         
-        // UNA SOLA LLAMADA para todos los registros
-        const res = await apiFetch(`${API}/movilidad?fecha=${fechaAyer}`);
-        const registros = await res.json();
+        // Cargar registros de esa fecha
+        const movRes = await apiFetch(`${API}/movilidad?fecha=${fechaMasReciente}`);
+        const registros = await movRes.json();
         
-        console.log(`📊 Total registros para ${fechaAyer}: ${registros.length}`);
-        console.log(`🚌 Buses en sistema: ${buses.length}`);
-        console.log('Registros cargados:', registros);
+        console.log(`📊 Registros para ${fechaMasReciente}: ${registros.length}`);
+        console.log('Registros:', registros);
         
-        // SUMAR vueltas por bus_id (campo 'vueltas' en registros_movilidad)
+        // SUMAR vueltas por bus_id
         const vueltasPorBus = {};
         registros.forEach(r => {
           const bid = r.bus_id;
           if (bid !== null && bid !== undefined) {
-            // Sumar el campo 'vueltas' del registro, no contar registros
-            const vultas = parseInt(r.vueltas) || 0;
-            vueltasPorBus[bid] = (vueltasPorBus[bid] || 0) + vultas;
+            const vueltas = parseInt(r.vueltas) || 0;
+            vueltasPorBus[bid] = (vueltasPorBus[bid] || 0) + vueltas;
           }
         });
         
-        console.log('Vueltas por bus_id:', vueltasPorBus);
+        console.log('Resumen vueltas por bus:', vueltasPorBus);
         
         // Llenar cada bus
         buses.forEach(bus => {
           const vueltas = vueltasPorBus[bus.id] || 0;
           const el = document.getElementById(`vueltas-${bus.id}`);
-          console.log(`Bus ${bus.numero} (id=${bus.id}): ${vueltas} vueltas`);
+          console.log(`✅ Bus ${bus.numero} (id=${bus.id}): ${vueltas} vueltas`);
           if (el) el.textContent = vueltas.toString();
         });
       } catch(e) {
-        console.error('Error cargarVueltasParaTodos:', e);
+        console.error('❌ Error cargarVueltasParaTodos:', e);
         document.querySelectorAll('[id^="vueltas-"]').forEach(el => el.textContent = '—');
       }
     }
