@@ -632,6 +632,14 @@
         <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
         Acceso Mecánicos
       </button>
+      <button class="tab" onclick="showTab('conductores')">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        Conductores
+      </button>
+      <button class="tab" onclick="showTab('despachadores')">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        Acceso Despachadores
+      </button>
     </div>
   </div>
 
@@ -847,6 +855,67 @@
     </div>
   </div>
 
+  <!-- ── TAB: CONDUCTORES ── -->
+  <div id="panel-conductores" class="panel hidden">
+    <div class="sec-header">
+      <div>
+        <div class="sec-title">Conductores</div>
+        <div class="sec-sub">Administra los conductores que los despachadores asignan a cada unidad</div>
+      </div>
+      <button class="btn btn-primary" onclick="openModal('conductor')">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Nuevo Conductor
+      </button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Nombre</th>
+            <th>Cédula</th>
+            <th>Teléfono</th>
+            <th>Estado</th>
+            <th style="text-align:right">Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-conductores">
+          <tr class="loading-row"><td colspan="5">Cargando…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── TAB: DESPACHADORES ── -->
+  <div id="panel-despachadores" class="panel hidden">
+    <div class="sec-header">
+      <div>
+        <div class="sec-title">Acceso Despachadores</div>
+        <div class="sec-sub">Crea cuentas de despachador y asigna las rutas que administrará cada uno</div>
+      </div>
+      <button class="btn btn-primary" onclick="openModal('despachador')">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Nueva Cuenta
+      </button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Usuario</th>
+            <th>Nombre</th>
+            <th>Rol</th>
+            <th>Rutas Asignadas</th>
+            <th>Estado</th>
+            <th style="text-align:right">Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-despachadores">
+          <tr class="loading-row"><td colspan="6">Cargando…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
 </div><!-- /page -->
 
 <!-- ── MODAL ── -->
@@ -870,28 +939,31 @@
 <script>
   const API = (window.location.port === '3030') ? 'http://localhost:8001' : window.location.origin;
 
-  let buses = [], propietarios = [], tarifas = [], rutas = [], usuarios = [];
+  let buses = [], propietarios = [], tarifas = [], rutas = [], usuarios = [], conductores = [];
   let modalType = null, modalId = null;
   let currentTab = 'buses';
   let busAssignUserId = null;
+  let rutaAssignUserId = null;
 
   /* ─── INIT ─── */
   document.addEventListener('DOMContentLoaded', loadAll);
 
   async function loadAll() {
     try {
-      const [b, p, t, r, u] = await Promise.all([
+      const [b, p, t, r, u, c] = await Promise.all([
         apiFetch('/api/buses'),
         apiFetch('/api/propietarios'),
         apiFetch('/api/tarifas'),
         apiFetch('/api/rutas/all'),
         apiFetch('/api/admin/usuarios'),
+        apiFetch('/api/conductores'),
       ]);
       buses        = b;
       propietarios = p;
       tarifas      = t;
       rutas        = r;
       usuarios     = u;
+      conductores  = c;
       renderAll();
     } catch (e) {
       showToast('Error al conectar con el servidor', 'error');
@@ -917,7 +989,7 @@
   function showTab(tab) {
     currentTab = tab;
     document.querySelectorAll('.tab').forEach((el, i) => {
-      const ids = ['buses', 'propietarios', 'tarifas', 'rutas', 'placas', 'usuarios', 'analistas', 'mecanicos'];
+      const ids = ['buses', 'propietarios', 'tarifas', 'rutas', 'placas', 'usuarios', 'analistas', 'mecanicos', 'conductores', 'despachadores'];
       el.classList.toggle('active', ids[i] === tab);
     });
     document.querySelectorAll('.panel').forEach(el => el.classList.add('hidden'));
@@ -934,6 +1006,68 @@
     renderUsuarios();
     renderAnalistas();
     renderMecanicos();
+    renderConductores();
+    renderDespachadores();
+  }
+
+  /* ─── RENDER: CONDUCTORES ─── */
+  function renderConductores() {
+    const tbody = document.getElementById('tbody-conductores');
+    if (!tbody) return;
+    if (!conductores.length) {
+      tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><p>No hay conductores registrados</p></div></td></tr>`;
+      return;
+    }
+    tbody.innerHTML = conductores.map(c => `<tr>
+      <td><strong>${c.nombre}</strong></td>
+      <td>${c.cedula || '<span style="color:var(--txt3)">—</span>'}</td>
+      <td>${c.telefono || '<span style="color:var(--txt3)">—</span>'}</td>
+      <td><span class="badge badge-${c.activo ? 'activo' : 'inactivo'}">${c.activo ? 'Activo' : 'Inactivo'}</span></td>
+      <td><div class="td-actions">
+        <button class="icon-btn" onclick="openModal('conductor', ${c.id})" title="Editar">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </button>
+        <button class="icon-btn del" onclick="deleteItem('conductor', ${c.id})" title="Desactivar">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+        </button>
+      </div></td>
+    </tr>`).join('');
+  }
+
+  /* ─── RENDER: DESPACHADORES ─── */
+  function renderDespachadores() {
+    const tbody = document.getElementById('tbody-despachadores');
+    if (!tbody) return;
+    const lista = usuarios.filter(u => u.rol === 'Despachador');
+    if (!lista.length) {
+      tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><p>No hay cuentas de despachador registradas</p></div></td></tr>`;
+      return;
+    }
+    tbody.innerHTML = lista.map(u => `<tr>
+      <td>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="width:32px;height:32px;border-radius:50%;background:${u.color};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0">${u.iniciales}</div>
+          <div style="font-weight:600;font-size:13px">${u.username}</div>
+        </div>
+      </td>
+      <td>${u.nombre}</td>
+      <td><span class="badge" style="background:#dcfce7;color:#16a34a">${u.rol}</span></td>
+      <td>
+        <button class="btn btn-outline btn-sm" onclick="openRutaAssign(${u.id},'${u.nombre.replace(/'/g,"\\'")}')">
+          <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+          Asignar rutas
+        </button>
+      </td>
+      <td><span class="badge badge-${u.activo ? 'activo' : 'inactivo'}">${u.activo ? 'Activo' : 'Inactivo'}</span></td>
+      <td><div class="td-actions">
+        <button class="icon-btn" onclick="openModal('despachador', ${u.id})" title="Editar">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        </button>
+        <button class="icon-btn del" onclick="deleteItem('despachador', ${u.id})" title="Desactivar">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+        </button>
+      </div></td>
+    </tr>`).join('');
   }
 
   /* ─── RENDER: USUARIOS PROPIETARIO ─── */
@@ -1168,6 +1302,8 @@
       usuario:     id ? 'Editar Cuenta Propietario' : 'Nueva Cuenta Propietario',
       analista:    id ? 'Editar Cuenta Analista'    : 'Nueva Cuenta Analista',
       mecanico:    id ? 'Editar Cuenta Mecánico'    : 'Nueva Cuenta Mecánico',
+      despachador: id ? 'Editar Cuenta Despachador' : 'Nueva Cuenta Despachador',
+      conductor:   id ? 'Editar Conductor'          : 'Nuevo Conductor',
     };
     return map[type] || 'Formulario';
   }
@@ -1177,7 +1313,8 @@
     if (type === 'propietario') return propietarios.find(x => x.id === id);
     if (type === 'tarifa')      return tarifas.find(x => x.id === id);
     if (type === 'ruta')        return rutas.find(x => x.id === id);
-    if (type === 'usuario' || type === 'analista' || type === 'mecanico')
+    if (type === 'conductor')   return conductores.find(x => x.id === id);
+    if (type === 'usuario' || type === 'analista' || type === 'mecanico' || type === 'despachador')
       return usuarios.find(x => x.id === id);
     return null;
   }
@@ -1312,7 +1449,33 @@
       `;
     }
 
-    if (type === 'usuario' || type === 'analista' || type === 'mecanico') {
+    if (type === 'conductor') {
+      return `
+        <div class="field full">
+          <label>Nombre completo *</label>
+          <input type="text" id="f-nombre" value="${d ? d.nombre : ''}" placeholder="Ej: Pedro Gómez" required />
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label>Cédula</label>
+            <input type="text" id="f-cedula" value="${d ? (d.cedula||'') : ''}" placeholder="0000000000" />
+          </div>
+          <div class="field">
+            <label>Teléfono</label>
+            <input type="tel" id="f-telefono" value="${d ? (d.telefono||'') : ''}" placeholder="+593 999 999 999" />
+          </div>
+        </div>
+        <div class="field full">
+          <label>Estado</label>
+          <select id="f-activo">
+            <option value="1" ${!d || d.activo ? 'selected' : ''}>Activo</option>
+            <option value="0" ${d && !d.activo ? 'selected' : ''}>Inactivo</option>
+          </select>
+        </div>
+      `;
+    }
+
+    if (type === 'usuario' || type === 'analista' || type === 'mecanico' || type === 'despachador') {
       const colores = ['#f59e0b','#6366f1','#22c55e','#ef4444','#3b82f6','#ec4899','#14b8a6','#8b5cf6'];
       const colorOpts = colores.map(c =>
         `<div class="color-opt ${d && d.color === c ? 'selected' : ''}" style="background:${c}" data-color="${c}" onclick="selectColor(this)"></div>`
@@ -1356,6 +1519,7 @@
     modalType = null;
     modalId   = null;
     busAssignUserId = null;
+    rutaAssignUserId = null;
   }
 
   function handleOverlayClick(e) {
@@ -1423,7 +1587,20 @@
         method = modalId ? 'PUT' : 'POST';
       }
 
-      else if (modalType === 'usuario' || modalType === 'analista' || modalType === 'mecanico') {
+      else if (modalType === 'conductor') {
+        const nombre = document.getElementById('f-nombre').value.trim();
+        if (!nombre) { showToast('El nombre es requerido', 'error'); return; }
+        body   = {
+          nombre,
+          cedula:   document.getElementById('f-cedula').value.trim(),
+          telefono: document.getElementById('f-telefono').value.trim(),
+          activo:   parseInt(document.getElementById('f-activo').value),
+        };
+        url    = modalId ? `/api/conductores/${modalId}` : '/api/conductores';
+        method = modalId ? 'PUT' : 'POST';
+      }
+
+      else if (modalType === 'usuario' || modalType === 'analista' || modalType === 'mecanico' || modalType === 'despachador') {
         const nombre   = document.getElementById('f-nombre').value.trim();
         const username = document.getElementById('f-username').value.trim();
         const password = document.getElementById('f-password').value;
@@ -1431,7 +1608,7 @@
         const color    = document.getElementById('f-color').value;
         if (!nombre || !username) { showToast('Nombre y usuario son requeridos', 'error'); return; }
         if (!modalId && !password) { showToast('La contraseña es requerida', 'error'); return; }
-        const rolMap = { usuario: 'Propietario', analista: 'Analista', mecanico: 'Técnico Mant.' };
+        const rolMap = { usuario: 'Propietario', analista: 'Analista', mecanico: 'Técnico Mant.', despachador: 'Despachador' };
         body   = { nombre, username, iniciales, color, rol: rolMap[modalType] };
         if (password) body.password = password;
         url    = modalId ? `/api/admin/usuarios/${modalId}` : '/api/admin/usuarios';
@@ -1459,7 +1636,7 @@
 
   /* ─── DELETE ─── */
   async function deleteItem(type, id) {
-    const labels = { bus: 'bus', propietario: 'propietario', ruta: 'ruta', usuario: 'cuenta de acceso', analista: 'cuenta de analista', mecanico: 'cuenta de mecánico' };
+    const labels = { bus: 'bus', propietario: 'propietario', ruta: 'ruta', usuario: 'cuenta de acceso', analista: 'cuenta de analista', mecanico: 'cuenta de mecánico', conductor: 'conductor', despachador: 'cuenta de despachador' };
     if (!confirm(`¿Seguro que deseas eliminar este ${labels[type]}?`)) return;
 
     try {
@@ -1470,6 +1647,8 @@
         usuario:     `/api/admin/usuarios/${id}`,
         analista:    `/api/admin/usuarios/${id}`,
         mecanico:    `/api/admin/usuarios/${id}`,
+        conductor:   `/api/conductores/${id}`,
+        despachador: `/api/admin/usuarios/${id}`,
       };
       const result = await apiFetch(urls[type], { method: 'DELETE' });
       await loadAll();
@@ -1544,6 +1723,65 @@
       closeModal();
       await loadAll();
       showToast(`${bus_ids.length} bus${bus_ids.length !== 1 ? 'es' : ''} asignado${bus_ids.length !== 1 ? 's' : ''} correctamente`);
+    } catch (e) {
+      showToast(e.message, 'error');
+    } finally {
+      btn.disabled = false; btn.textContent = 'Guardar';
+      document.getElementById('btn-save').onclick = saveModal;
+    }
+  }
+
+  /* ─── ASIGNACIÓN DE RUTAS (DESPACHADORES) ─── */
+  async function openRutaAssign(uid, nombre) {
+    rutaAssignUserId = uid;
+    let assigned = [];
+    try { assigned = await apiFetch(`/api/admin/usuarios/${uid}/rutas`); } catch (_) {}
+    const assignedIds = new Set(assigned.map(r => r.id));
+
+    const byGroup = { A: rutas.filter(r => r.grupo === 'A'), B: rutas.filter(r => r.grupo === 'B') };
+    const grpLabel = { A: 'BUSES', B: 'MICRO' };
+    const renderGroup = (grp, list) => !list.length ? '' : `
+      <div style="margin-bottom:14px">
+        <div style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">${grpLabel[grp]}</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px">
+          ${list.map(r => `
+            <label style="display:flex;align-items:center;gap:7px;padding:7px 10px;border:1.5px solid ${assignedIds.has(r.id) ? 'var(--primary)' : 'var(--border)'};border-radius:8px;cursor:pointer;font-size:12px;background:${assignedIds.has(r.id) ? 'var(--primary2)' : 'var(--white)'};transition:all .12s">
+              <input type="checkbox" value="${r.id}" ${assignedIds.has(r.id) ? 'checked' : ''} onchange="toggleBusLabel(this)" style="accent-color:var(--primary);width:14px;height:14px" />
+              <span style="font-weight:600">${r.nombre}</span>
+            </label>`).join('')}
+        </div>
+      </div>`;
+
+    document.getElementById('modal-title').textContent = `Rutas de ${nombre}`;
+    document.getElementById('modal-body').innerHTML = `
+      <p style="font-size:12px;color:var(--txt3);margin-bottom:16px">Selecciona las rutas que administrará este despachador. Solo verá los buses del grupo de esas rutas.</p>
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <button class="btn btn-outline btn-sm" onclick="selectAllBuses(true)">Seleccionar todas</button>
+        <button class="btn btn-outline btn-sm" onclick="selectAllBuses(false)">Limpiar selección</button>
+      </div>
+      <div style="max-height:380px;overflow-y:auto;padding-right:4px">
+        ${renderGroup('A', byGroup.A)}
+        ${renderGroup('B', byGroup.B)}
+      </div>`;
+    document.getElementById('btn-save').textContent = 'Guardar Asignación';
+    document.getElementById('btn-save').onclick = saveRutaAssign;
+    document.getElementById('modal-overlay').classList.remove('hidden');
+    modalType = 'ruta-assign';
+  }
+
+  async function saveRutaAssign() {
+    const btn = document.getElementById('btn-save');
+    btn.disabled = true; btn.textContent = 'Guardando…';
+    const ruta_ids = [...document.querySelectorAll('#modal-body input[type=checkbox]:checked')].map(cb => parseInt(cb.value));
+    try {
+      await apiFetch(`/api/admin/usuarios/${rutaAssignUserId}/rutas`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ruta_ids }),
+      });
+      closeModal();
+      await loadAll();
+      showToast(`${ruta_ids.length} ruta${ruta_ids.length !== 1 ? 's' : ''} asignada${ruta_ids.length !== 1 ? 's' : ''} correctamente`);
     } catch (e) {
       showToast(e.message, 'error');
     } finally {

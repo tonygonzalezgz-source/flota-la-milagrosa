@@ -8,5 +8,8 @@
     { "src": "/api/(.*)", "dest": "/api/index.py" },
     { "src": "/", "dest": "/index.html" },
     { "src": "/(.+\\.html)", "dest": "/$1" }
+  ],
+  "crons": [
+    { "path": "/api/cron/cierre-despacho", "schedule": "59 4 * * *" }
   ]
 }

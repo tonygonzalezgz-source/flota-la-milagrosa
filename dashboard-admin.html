@@ -674,7 +674,7 @@
         </div>
       </div>
 
-      <!-- Buses que trabajaron -->
+      <!-- Buses trabajando hoy -->
       <div class="kpi-card">
         <div class="kpi-icon orange">
           <svg width="22" height="22" fill="none" stroke="#ea580c" stroke-width="2" viewBox="0 0 24 24">
@@ -689,8 +689,8 @@
             <span id="kpiBusesActivos">—</span>
             <span class="unit">/ <span id="kpiBusesTotal">—</span></span>
           </div>
-          <div class="kpi-label">Buses que reportaron datos</div>
-          <span class="kpi-trend neutral" id="kpiBusesTrend">Del total registrado</span>
+          <div class="kpi-label">Buses trabajando hoy</div>
+          <span class="kpi-trend neutral" id="kpiBusesTrend">Según despacho del día</span>
         </div>
       </div>
 
@@ -836,6 +836,7 @@
     let allMovData     = [];
     let allBuses       = [];
     let allRutas       = [];
+    let despachoBuses  = [];
     let chartInstance  = null;
     let trendPaxChart  = null;
     let trendViajesChart = null;
@@ -1035,21 +1036,29 @@
           return `${y}-${m}-${day}`;
         })();
 
-        const [movRes, busesRes, rutasRes, rangoRes] = await Promise.all([
+        const hoy = (() => {
+          const d = new Date();
+          return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        })();
+
+        const [movRes, busesRes, rutasRes, rangoRes, despRes] = await Promise.all([
           apiFetch(`${API}/movilidad?fecha=${fechaAyer}`),
           apiFetch(`${API}/buses`),
           apiFetch(`${API}/rutas/all`).catch(() => apiFetch(`${API}/rutas`)),
           apiFetch(`${API}/movilidad/rango?desde=${hace14}&hasta=${fechaAyer}`),
+          apiFetch(`${API}/despacho?fecha=${hoy}`).catch(() => null),
         ]);
 
         const movJson   = await movRes.json();
         const busesJson = await busesRes.json();
         const rutasJson = await rutasRes.json();
         const rangoJson = await rangoRes.json();
+        const despJson  = despRes ? await despRes.json().catch(() => null) : null;
 
         allMovData = Array.isArray(movJson)   ? movJson   : [];
         allBuses   = Array.isArray(busesJson) ? busesJson : [];
         allRutas   = Array.isArray(rutasJson) ? rutasJson : [];
+        despachoBuses = (despJson && Array.isArray(despJson.buses)) ? despJson.buses : [];
         const rangoData = Array.isArray(rangoJson) ? rangoJson : [];
 
         renderKpis();
@@ -1068,23 +1077,19 @@
       const totalBuses     = allBuses.length;
       const cobertura      = totalBuses > 0 ? Math.round(busesConDatos / totalBuses * 100) : 0;
 
+      const trabajando = despachoBuses.filter(b => b.estado === 'trabajando').length;
+      const taller     = despachoBuses.filter(b => b.estado === 'taller').length;
+      const descanso   = despachoBuses.filter(b => b.estado === 'descanso').length;
+
       document.getElementById('kpiViajes').textContent    = totalViajes.toLocaleString();
       document.getElementById('kpiPasajeros').textContent = totalPasajeros.toLocaleString();
-      document.getElementById('kpiBusesActivos').textContent = busesConDatos;
+      document.getElementById('kpiBusesActivos').textContent = trabajando;
       document.getElementById('kpiBusesTotal').textContent   = totalBuses;
       document.getElementById('kpiCobertura').textContent    = cobertura;
 
       const busesTrend = document.getElementById('kpiBusesTrend');
-      if (cobertura >= 80) {
-        busesTrend.className = 'kpi-trend up';
-        busesTrend.textContent = `${cobertura}% cobertura`;
-      } else if (cobertura >= 50) {
-        busesTrend.className = 'kpi-trend warn';
-        busesTrend.textContent = `${cobertura}% cobertura`;
-      } else {
-        busesTrend.className = 'kpi-trend down';
-        busesTrend.textContent = `${cobertura}% cobertura`;
-      }
+      busesTrend.className = 'kpi-trend ' + (trabajando > 0 ? 'up' : 'neutral');
+      busesTrend.textContent = `${taller} en taller · ${descanso} descanso`;
 
       const coberturaEl = document.getElementById('kpiMetaTrend');
       if (cobertura >= 80) {

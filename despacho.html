@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <script>
+    (function() {
+      if (window.location === window.parent.location) {
+        const token = localStorage.getItem('authToken');
+        if (!token) {
+          window.location.href = '/index.html';
+        }
+      }
+    })();
+  </script>
+
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>La Milagrosa — Despacho</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg:       #f4f4f6;
+      --white:    #ffffff;
+      --border:   #e5e5eb;
+      --border2:  #d0d0d8;
+      --txt:      #111;
+      --txt2:     #555;
+      --txt3:     #888;
+      --primary:  #6366f1;
+      --primary2: rgba(99,102,241,.12);
+      --red:      #ef4444;
+      --green:    #22c55e;
+      --yellow:   #f59e0b;
+      --radius:   12px;
+      --radius-s: 8px;
+      --shadow:   0 1px 4px rgba(0,0,0,.07);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--txt);
+      padding: 24px;
+      font-size: 14px;
+    }
+
+    .page-header {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      flex-wrap: wrap; gap: 12px; margin-bottom: 18px;
+    }
+    .page-title { font-size: 22px; font-weight: 800; letter-spacing: -.4px; }
+    .page-sub   { font-size: 13px; color: var(--txt2); margin-top: 2px; }
+    .fecha-pill {
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: var(--radius-s); padding: 8px 14px; font-weight: 600;
+      box-shadow: var(--shadow); font-size: 13px;
+    }
+
+    /* Resumen */
+    .summary { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 22px; }
+    .sum-card {
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: var(--radius); box-shadow: var(--shadow);
+      padding: 14px 18px; min-width: 130px;
+    }
+    .sum-num   { font-size: 26px; font-weight: 800; line-height: 1; }
+    .sum-label { font-size: 11px; color: var(--txt3); text-transform: uppercase;
+                 letter-spacing: .5px; margin-top: 6px; font-weight: 600; }
+    .sum-trabajando .sum-num { color: var(--green); }
+    .sum-taller    .sum-num  { color: var(--yellow); }
+    .sum-descanso  .sum-num  { color: var(--txt2); }
+
+    /* Grupo */
+    .grupo-block { margin-bottom: 26px; }
+    .grupo-title {
+      font-size: 13px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .6px; color: var(--txt2); margin-bottom: 10px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .grupo-title .badge {
+      background: var(--primary2); color: var(--primary);
+      border-radius: 6px; padding: 2px 8px; font-size: 11px;
+    }
+
+    .table-wrap {
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      text-align: left; font-size: 11px; font-weight: 700; color: var(--txt3);
+      text-transform: uppercase; letter-spacing: .4px;
+      padding: 11px 14px; border-bottom: 1px solid var(--border); background: #fafafb;
+    }
+    tbody td { padding: 9px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    tbody tr:last-child td { border-bottom: none; }
+    .bus-num { font-weight: 700; }
+    .bus-placa { color: var(--txt3); font-size: 12px; }
+
+    select {
+      width: 100%; padding: 7px 9px; border: 1px solid var(--border2);
+      border-radius: var(--radius-s); font-size: 13px; background: var(--white);
+      color: var(--txt); cursor: pointer; font-family: inherit;
+    }
+    select:focus { outline: none; border-color: var(--primary); }
+
+    .estado-sel.trabajando { border-color: var(--green); color: #15803d; font-weight: 600; }
+    .estado-sel.taller     { border-color: var(--yellow); color: #b45309; font-weight: 600; }
+    .estado-sel.descanso   { border-color: var(--border2); color: var(--txt2); }
+
+    .empty-state { padding: 40px; text-align: center; color: var(--txt3); }
+
+    /* Toast */
+    .toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: #111; color: #fff; padding: 11px 20px; border-radius: 10px;
+      font-size: 13px; box-shadow: 0 6px 24px rgba(0,0,0,.2); z-index: 1000;
+      transition: opacity .2s, transform .2s;
+    }
+    .toast.error { background: var(--red); }
+    .toast.hidden { opacity: 0; transform: translateX(-50%) translateY(8px); pointer-events: none; }
+  </style>
+</head>
+<body>
+
+  <div class="page-header">
+    <div>
+      <div class="page-title">Despacho del día</div>
+      <div class="page-sub">Asigna conductor y estado operativo a cada unidad. Los cambios se guardan automáticamente.</div>
+    </div>
+    <div class="fecha-pill" id="fechaPill">—</div>
+  </div>
+
+  <div class="summary">
+    <div class="sum-card sum-trabajando"><div class="sum-num" id="sumTrabajando">0</div><div class="sum-label">Trabajando</div></div>
+    <div class="sum-card sum-taller"><div class="sum-num" id="sumTaller">0</div><div class="sum-label">En taller</div></div>
+    <div class="sum-card sum-descanso"><div class="sum-num" id="sumDescanso">0</div><div class="sum-label">Descanso</div></div>
+  </div>
+
+  <div id="content">
+    <div class="empty-state">Cargando despacho…</div>
+  </div>
+
+  <div class="toast hidden" id="toast"></div>
+
+<script>
+  const API   = (window.location.port === '3030') ? 'http://localhost:8001' : window.location.origin;
+  const HOY    = new Date().toISOString().slice(0, 10);
+  let rutas    = [];
+  let conductores = [];
+  let buses    = [];        // {id, numero, placa, modelo, grupo, estado, conductor_id, ruta_id, cerrado}
+
+  document.addEventListener('DOMContentLoaded', loadAll);
+
+  async function apiFetch(path, opts = {}) {
+    const token = localStorage.getItem('authToken');
+    const res = await fetch(API + path, {
+      ...opts,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        ...(opts.headers || {}),
+      },
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Error del servidor');
+    return json;
+  }
+
+  async function loadAll() {
+    document.getElementById('fechaPill').textContent = formatoFecha(HOY);
+    try {
+      const [despacho, conds] = await Promise.all([
+        apiFetch(`/api/despacho?fecha=${HOY}`),
+        apiFetch('/api/conductores'),
+      ]);
+      rutas       = despacho.rutas || [];
+      buses       = despacho.buses || [];
+      conductores = conds || [];
+      render();
+    } catch (e) {
+      document.getElementById('content').innerHTML =
+        `<div class="empty-state">Error al cargar: ${e.message}</div>`;
+    }
+  }
+
+  function render() {
+    renderSummary();
+    if (!buses.length) {
+      document.getElementById('content').innerHTML =
+        `<div class="table-wrap"><div class="empty-state">No tienes buses ni rutas asignadas. Pide a un administrador que te asigne rutas en Catálogos.</div></div>`;
+      return;
+    }
+    const grupos = [
+      { key: 'A', label: 'Buses' },
+      { key: 'B', label: 'Micros' },
+    ];
+    let html = '';
+    grupos.forEach(g => {
+      const lista = buses.filter(b => b.grupo === g.key);
+      if (!lista.length) return;
+      html += `
+        <div class="grupo-block">
+          <div class="grupo-title">${g.label} <span class="badge">${lista.length}</span></div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:90px">Unidad</th>
+                  <th>Ruta</th>
+                  <th>Conductor</th>
+                  <th style="width:170px">Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${lista.map(rowHtml).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>`;
+    });
+    document.getElementById('content').innerHTML = html;
+  }
+
+  function rowHtml(b) {
+    const rutaOpts = `<option value="">— Sin ruta —</option>` + rutas
+      .filter(r => r.grupo === b.grupo)
+      .map(r => `<option value="${r.id}" ${b.ruta_id === r.id ? 'selected' : ''}>${escapeHtml(r.nombre)}</option>`)
+      .join('');
+    const condOpts = `<option value="">— Sin conductor —</option>` + conductores
+      .map(c => `<option value="${c.id}" ${b.conductor_id === c.id ? 'selected' : ''}>${escapeHtml(c.nombre)}</option>`)
+      .join('');
+    const estado = b.estado || 'trabajando';
+    return `<tr>
+      <td><span class="bus-num">${b.numero}</span>${b.placa ? `<div class="bus-placa">${escapeHtml(b.placa)}</div>` : ''}</td>
+      <td><select onchange="onChange(${b.id}, 'ruta_id', this.value)">${rutaOpts}</select></td>
+      <td><select onchange="onChange(${b.id}, 'conductor_id', this.value)">${condOpts}</select></td>
+      <td>
+        <select class="estado-sel ${estado}" onchange="onChange(${b.id}, 'estado', this.value)">
+          <option value="trabajando" ${estado === 'trabajando' ? 'selected' : ''}>Trabajando</option>
+          <option value="taller"     ${estado === 'taller'     ? 'selected' : ''}>En taller</option>
+          <option value="descanso"   ${estado === 'descanso'   ? 'selected' : ''}>Descanso</option>
+        </select>
+      </td>
+    </tr>`;
+  }
+
+  function renderSummary() {
+    const c = { trabajando: 0, taller: 0, descanso: 0 };
+    buses.forEach(b => { if (b.estado && c[b.estado] !== undefined) c[b.estado]++; });
+    document.getElementById('sumTrabajando').textContent = c.trabajando;
+    document.getElementById('sumTaller').textContent     = c.taller;
+    document.getElementById('sumDescanso').textContent   = c.descanso;
+  }
+
+  async function onChange(busId, campo, valor) {
+    const bus = buses.find(b => b.id === busId);
+    if (!bus) return;
+
+    // Marcar como trabajando por defecto si todavía no tenía estado al asignar algo
+    if (campo === 'estado') {
+      bus.estado = valor;
+    } else {
+      bus[campo] = valor ? parseInt(valor) : null;
+      if (!bus.estado) bus.estado = 'trabajando';
+    }
+
+    // refrescar color del selector de estado y el resumen
+    if (campo === 'estado') {
+      const sel = event.target;
+      sel.className = 'estado-sel ' + valor;
+    }
+    renderSummary();
+
+    try {
+      await apiFetch('/api/despacho/batch', {
+        method: 'PUT',
+        body: JSON.stringify({
+          fecha: HOY,
+          registros: [{
+            bus_id:       bus.id,
+            estado:       bus.estado,
+            conductor_id: bus.conductor_id || null,
+            ruta_id:      bus.ruta_id || null,
+          }],
+        }),
+      });
+      showToast(`Bus ${bus.numero} actualizado`);
+    } catch (e) {
+      showToast(e.message, 'error');
+    }
+  }
+
+  /* ─── Helpers ─── */
+  function formatoFecha(iso) {
+    const d = new Date(iso + 'T00:00:00');
+    return d.toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  }
+  function escapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  let toastTimer;
+  function showToast(msg, type = '') {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = 'toast' + (type ? ' ' + type : '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.add('hidden'), 2200);
+  }
+</script>
+</body>
+</html>

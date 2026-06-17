@@ -897,6 +897,20 @@
         </button>
       </li>
 
+      <!-- Despacho -->
+      <li>
+        <button class="sb-link" id="nav-despacho" data-view="despacho" data-src="despacho.html" onclick="switchView(this)">
+          <span class="sb-icon">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
+              <path d="M9 11l3 3L22 4"/>
+              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+            </svg>
+          </span>
+          Despacho
+          <span class="sb-access" style="background:rgba(34,197,94,.1);color:#16a34a;" data-roles="admin,despachador">Desp.</span>
+        </button>
+      </li>
+
     </ul>
 
     <div class="sb-section" style="margin-top:auto;">Cuenta</div>
@@ -1015,6 +1029,16 @@
       </div>
       <iframe id="iframe-catalogo" src="" title="Catálogo"
               onload="iframeLoaded('catalogo')"></iframe>
+    </div>
+
+    <!-- DESPACHO VIEW -->
+    <div class="view-panel" id="view-despacho">
+      <div class="iframe-loader" id="loader-despacho">
+        <div class="loader-ring"></div>
+        <div class="loader-text">Cargando Despacho…</div>
+      </div>
+      <iframe id="iframe-despacho" src="" title="Despacho del día"
+              onload="iframeLoaded('despacho')"></iframe>
     </div>
 
   </div><!-- /mainContent -->

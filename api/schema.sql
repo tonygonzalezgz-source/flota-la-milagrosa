@@ -97,7 +97,42 @@ CREATE TABLE IF NOT EXISTS tarifas (
     activa INTEGER NOT NULL DEFAULT 1
 );
 
+-- Catálogo de conductores
+CREATE TABLE IF NOT EXISTS conductores (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre     TEXT    NOT NULL,
+    cedula     TEXT,
+    telefono   TEXT,
+    activo     INTEGER NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Rutas asignadas a cada despachador
+CREATE TABLE IF NOT EXISTS despachador_rutas (
+    usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    ruta_id    INTEGER NOT NULL REFERENCES rutas(id)    ON DELETE CASCADE,
+    PRIMARY KEY (usuario_id, ruta_id)
+);
+
+-- Despacho diario: estado operativo de cada bus por día
+CREATE TABLE IF NOT EXISTS despacho_diario (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    fecha          DATE    NOT NULL,
+    bus_id         INTEGER NOT NULL REFERENCES buses(id),
+    ruta_id        INTEGER REFERENCES rutas(id),
+    conductor_id   INTEGER REFERENCES conductores(id),
+    despachador_id INTEGER REFERENCES usuarios(id),
+    estado         TEXT    NOT NULL DEFAULT 'trabajando'
+                           CHECK(estado IN ('trabajando','taller','descanso')),
+    cerrado        INTEGER NOT NULL DEFAULT 0,
+    created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(bus_id, fecha)
+);
+
 -- Índices para consultas frecuentes
 CREATE INDEX IF NOT EXISTS idx_reg_pax_timestamp ON registros_pasajeros(timestamp);
 CREATE INDEX IF NOT EXISTS idx_reg_mant_timestamp ON registros_mantenimiento(timestamp);
 CREATE INDEX IF NOT EXISTS idx_estado_mant_bus ON estado_mantenimiento(bus_id);
+CREATE INDEX IF NOT EXISTS idx_despacho_fecha ON despacho_diario(fecha);
+CREATE INDEX IF NOT EXISTS idx_despacho_bus ON despacho_diario(bus_id);
