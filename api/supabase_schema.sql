@@ -127,6 +127,39 @@ CREATE TABLE IF NOT EXISTS registros_movilidad (
     UNIQUE(bus_id, fecha)
 );
 
+-- Catálogo de conductores
+CREATE TABLE IF NOT EXISTS conductores (
+    id         SERIAL PRIMARY KEY,
+    nombre     TEXT    NOT NULL,
+    cedula     TEXT,
+    telefono   TEXT,
+    activo     INTEGER NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Rutas asignadas a cada despachador
+CREATE TABLE IF NOT EXISTS despachador_rutas (
+    usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    ruta_id    INTEGER NOT NULL REFERENCES rutas(id)    ON DELETE CASCADE,
+    PRIMARY KEY (usuario_id, ruta_id)
+);
+
+-- Despacho diario: estado operativo de cada bus por día
+CREATE TABLE IF NOT EXISTS despacho_diario (
+    id             SERIAL PRIMARY KEY,
+    fecha          DATE    NOT NULL,
+    bus_id         INTEGER NOT NULL REFERENCES buses(id),
+    ruta_id        INTEGER REFERENCES rutas(id),
+    conductor_id   INTEGER REFERENCES conductores(id),
+    despachador_id INTEGER REFERENCES usuarios(id),
+    estado         TEXT    NOT NULL DEFAULT 'trabajando'
+                           CHECK(estado IN ('trabajando','taller','descanso')),
+    cerrado        INTEGER NOT NULL DEFAULT 0,
+    created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(bus_id, fecha)
+);
+
 -- Foreign key diferida en buses → propietarios
 ALTER TABLE buses
     ADD CONSTRAINT fk_buses_propietario
@@ -140,3 +173,5 @@ CREATE INDEX IF NOT EXISTS idx_reg_mant_timestamp ON registros_mantenimiento(tim
 CREATE INDEX IF NOT EXISTS idx_estado_mant_bus    ON estado_mantenimiento(bus_id);
 CREATE INDEX IF NOT EXISTS idx_movilidad_fecha    ON registros_movilidad(fecha);
 CREATE INDEX IF NOT EXISTS idx_movilidad_bus      ON registros_movilidad(bus_id);
+CREATE INDEX IF NOT EXISTS idx_despacho_fecha     ON despacho_diario(fecha);
+CREATE INDEX IF NOT EXISTS idx_despacho_bus       ON despacho_diario(bus_id);

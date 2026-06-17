@@ -21,6 +21,7 @@ FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..")
 # Genera una clave secreta aleatoria si no está en el entorno (en prod se debe fijar en .env)
 SECRET_KEY = os.environ.get("SECRET_KEY") or os.urandom(32).hex()
 JWT_EXPIRY_HOURS = int(os.environ.get("JWT_EXPIRY_HOURS", "12"))
+CRON_SECRET = os.environ.get("CRON_SECRET")  # protege endpoints /api/cron/*
 
 # Rate limiting para el endpoint de login
 _login_attempts: dict = {}   # {ip: [timestamp, ...]}
@@ -81,11 +82,12 @@ SCHEMA_PATH  = os.path.join(os.path.dirname(__file__), "schema.sql")
 PG_SCHEMA    = os.path.join(os.path.dirname(__file__), "supabase_schema.sql")
 
 ROLE_VIEWS = {
-    "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo"],
+    "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho"],
     "Analista":       ["historial"],
     "Técnico Mant.":  ["mant"],
     "Propietario":    ["propietario"],
     "Operador":       ["operador"],
+    "Despachador":    ["despacho"],
 }
 
 
@@ -254,6 +256,33 @@ def migrate_db():
                 observaciones   TEXT,
                 created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )""",
+            """CREATE TABLE IF NOT EXISTS conductores (
+                id         SERIAL PRIMARY KEY,
+                nombre     TEXT    NOT NULL,
+                cedula     TEXT,
+                telefono   TEXT,
+                activo     INTEGER NOT NULL DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )""",
+            """CREATE TABLE IF NOT EXISTS despachador_rutas (
+                usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+                ruta_id    INTEGER NOT NULL REFERENCES rutas(id)    ON DELETE CASCADE,
+                PRIMARY KEY (usuario_id, ruta_id)
+            )""",
+            """CREATE TABLE IF NOT EXISTS despacho_diario (
+                id             SERIAL PRIMARY KEY,
+                fecha          DATE    NOT NULL,
+                bus_id         INTEGER NOT NULL REFERENCES buses(id),
+                ruta_id        INTEGER REFERENCES rutas(id),
+                conductor_id   INTEGER REFERENCES conductores(id),
+                despachador_id INTEGER REFERENCES usuarios(id),
+                estado         TEXT    NOT NULL DEFAULT 'trabajando'
+                                       CHECK(estado IN ('trabajando','taller','descanso')),
+                cerrado        INTEGER NOT NULL DEFAULT 0,
+                created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(bus_id, fecha)
+            )""",
         ]:
             try:
                 db.execute(tbl_sql)
@@ -342,6 +371,39 @@ def migrate_db():
                 realizado_por   TEXT,
                 observaciones   TEXT,
                 created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS conductores (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                nombre     TEXT    NOT NULL,
+                cedula     TEXT,
+                telefono   TEXT,
+                activo     INTEGER NOT NULL DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS despachador_rutas (
+                usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+                ruta_id    INTEGER NOT NULL REFERENCES rutas(id)    ON DELETE CASCADE,
+                PRIMARY KEY (usuario_id, ruta_id)
+            )
+        """)
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS despacho_diario (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                fecha          DATE    NOT NULL,
+                bus_id         INTEGER NOT NULL REFERENCES buses(id),
+                ruta_id        INTEGER REFERENCES rutas(id),
+                conductor_id   INTEGER REFERENCES conductores(id),
+                despachador_id INTEGER REFERENCES usuarios(id),
+                estado         TEXT    NOT NULL DEFAULT 'trabajando'
+                                       CHECK(estado IN ('trabajando','taller','descanso')),
+                cerrado        INTEGER NOT NULL DEFAULT 0,
+                created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(bus_id, fecha)
             )
         """)
         for col_sql in [
@@ -505,15 +567,7 @@ def get_current_user():
         return jsonify({"error": "Usuario no encontrado"}), 404
 
     rol = user["rol"]
-    allowed_views = []
-    if rol == "Administrador":
-        allowed_views = ["dashboard", "analista", "historial", "mant", "catalogo"]
-    elif rol == "Propietario":
-        allowed_views = ["propietario", "historial", "mant"]
-    elif rol == "Técnico Mant.":
-        allowed_views = ["mant", "historial"]
-    elif rol == "Analista":
-        allowed_views = ["analista", "historial"]
+    allowed_views = ROLE_VIEWS.get(rol, [])
 
     return jsonify({
         "id": user["id"],
@@ -850,6 +904,189 @@ def delete_ruta(ruta_id):
     db.commit()
     db.close()
     return jsonify({"ok": True})
+
+
+# ──────────────────────────────────────────
+#  Conductores (catálogo)
+# ──────────────────────────────────────────
+
+@app.route("/api/conductores", methods=["GET"])
+@require_auth
+def get_conductores():
+    db   = get_db()
+    rows = db.execute(
+        "SELECT * FROM conductores WHERE activo = 1 ORDER BY nombre"
+    ).fetchall()
+    db.close()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/conductores", methods=["POST"])
+@require_auth
+def create_conductor():
+    data   = request.get_json(force=True)
+    nombre = (data.get("nombre") or "").strip()
+    if not nombre:
+        return jsonify({"error": "El nombre es requerido"}), 400
+
+    db     = get_db()
+    cursor = db.execute(
+        "INSERT INTO conductores (nombre, cedula, telefono, activo) VALUES (?,?,?,?)",
+        (nombre, data.get("cedula", ""), data.get("telefono", ""), data.get("activo", 1)),
+    )
+    db.commit()
+    new_id = cursor.lastrowid
+    db.close()
+    return jsonify({"ok": True, "id": new_id}), 201
+
+
+@app.route("/api/conductores/<int:cid>", methods=["PUT"])
+@require_auth
+def update_conductor(cid):
+    data = request.get_json(force=True)
+    db   = get_db()
+    if not db.execute("SELECT id FROM conductores WHERE id = ?", (cid,)).fetchone():
+        db.close()
+        return jsonify({"error": "Conductor no encontrado"}), 404
+
+    db.execute(
+        "UPDATE conductores SET nombre=?, cedula=?, telefono=?, activo=? WHERE id=?",
+        (data.get("nombre", ""), data.get("cedula", ""), data.get("telefono", ""),
+         data.get("activo", 1), cid),
+    )
+    db.commit()
+    db.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/conductores/<int:cid>", methods=["DELETE"])
+@require_auth
+def delete_conductor(cid):
+    db = get_db()
+    db.execute("UPDATE conductores SET activo = 0 WHERE id = ?", (cid,))
+    db.commit()
+    db.close()
+    return jsonify({"ok": True})
+
+
+# ──────────────────────────────────────────
+#  Despacho diario
+# ──────────────────────────────────────────
+
+def _rutas_de_despachador(db, uid):
+    """Rutas asignadas a un despachador (lista de dicts id/nombre/grupo/color)."""
+    return db.execute(
+        """SELECT r.id, r.nombre, r.grupo, r.color
+           FROM despachador_rutas dr
+           JOIN rutas r ON r.id = dr.ruta_id
+           WHERE dr.usuario_id = ?
+           ORDER BY r.grupo, r.nombre""",
+        (uid,),
+    ).fetchall()
+
+
+@app.route("/api/despacho", methods=["GET"])
+@require_auth
+def get_despacho():
+    """Devuelve las rutas y los buses (con su estado del día) que administra el usuario.
+    Despachador → solo buses de los grupos de sus rutas asignadas. Admin → toda la flota."""
+    fecha = request.args.get("fecha", date.today().isoformat())
+    db    = get_db()
+    rol   = getattr(request, "jwt_user_rol", None)
+    uid   = getattr(request, "jwt_user_id", None)
+
+    if rol == "Despachador":
+        rutas  = [dict(r) for r in _rutas_de_despachador(db, uid)]
+        grupos = sorted({r["grupo"] for r in rutas})
+        if not grupos:
+            db.close()
+            return jsonify({"fecha": fecha, "rutas": rutas, "buses": []})
+        ph    = ",".join("?" * len(grupos))
+        buses = db.execute(
+            f"""SELECT b.id, b.numero, b.placa, b.modelo, b.grupo,
+                       d.estado, d.conductor_id, d.ruta_id, d.cerrado
+                FROM buses b
+                LEFT JOIN despacho_diario d ON d.bus_id = b.id AND d.fecha = ?
+                WHERE b.grupo IN ({ph})
+                ORDER BY b.numero""",
+            [fecha] + grupos,
+        ).fetchall()
+    else:
+        rutas = db.execute("SELECT id, nombre, grupo, color FROM rutas ORDER BY grupo, nombre").fetchall()
+        rutas = [dict(r) for r in rutas]
+        buses = db.execute(
+            """SELECT b.id, b.numero, b.placa, b.modelo, b.grupo,
+                      d.estado, d.conductor_id, d.ruta_id, d.cerrado
+               FROM buses b
+               LEFT JOIN despacho_diario d ON d.bus_id = b.id AND d.fecha = ?
+               ORDER BY b.numero""",
+            (fecha,),
+        ).fetchall()
+
+    db.close()
+    return jsonify({"fecha": fecha, "rutas": rutas, "buses": [dict(b) for b in buses]})
+
+
+@app.route("/api/despacho/batch", methods=["PUT"])
+@require_auth
+def batch_upsert_despacho():
+    """Guardado instantáneo del despacho del día (upsert por bus/fecha)."""
+    data       = request.get_json(force=True)
+    fecha      = data.get("fecha")
+    registros  = data.get("registros", [])
+    uid        = getattr(request, "jwt_user_id", None)
+
+    if not fecha:
+        return jsonify({"error": "fecha es requerida"}), 400
+
+    estados_validos = ("trabajando", "taller", "descanso")
+    db    = get_db()
+    saved = 0
+    for r in registros:
+        bus_id = r.get("bus_id")
+        if not bus_id:
+            continue
+        estado = r.get("estado") or "trabajando"
+        if estado not in estados_validos:
+            estado = "trabajando"
+        db.execute(
+            """INSERT INTO despacho_diario
+                   (bus_id, fecha, estado, conductor_id, ruta_id, despachador_id, updated_at)
+               VALUES (?,?,?,?,?,?,CURRENT_TIMESTAMP)
+               ON CONFLICT(bus_id, fecha) DO UPDATE SET
+                   estado         = excluded.estado,
+                   conductor_id   = excluded.conductor_id,
+                   ruta_id        = excluded.ruta_id,
+                   despachador_id = excluded.despachador_id,
+                   updated_at     = CURRENT_TIMESTAMP""",
+            (bus_id, fecha, estado, r.get("conductor_id") or None,
+             r.get("ruta_id") or None, uid),
+        )
+        saved += 1
+
+    db.commit()
+    db.close()
+    return jsonify({"ok": True, "saved": saved})
+
+
+@app.route("/api/cron/cierre-despacho", methods=["GET", "POST"])
+def cron_cierre_despacho():
+    """Consolida (cierra) el despacho del día. Invocado por el cron de Vercel a las 23:59.
+    El guardado ya es instantáneo; esto solo marca los registros como cerrados."""
+    if CRON_SECRET:
+        auth = request.headers.get("Authorization", "")
+        if auth != f"Bearer {CRON_SECRET}":
+            return jsonify({"error": "No autorizado"}), 401
+
+    fecha  = request.args.get("fecha", date.today().isoformat())
+    db     = get_db()
+    result = db.execute(
+        "UPDATE despacho_diario SET cerrado = 1 WHERE fecha = ?", (fecha,)
+    )
+    cerrados = getattr(result, "rowcount", None)
+    db.commit()
+    db.close()
+    return jsonify({"ok": True, "fecha": fecha, "cerrados": cerrados})
 
 
 # ──────────────────────────────────────────
@@ -1405,6 +1642,39 @@ def admin_set_usuario_buses(uid):
     for bid in bus_ids:
         try:
             db.execute("INSERT INTO usuario_buses (usuario_id, bus_id) VALUES (?,?)", (uid, bid))
+        except Exception:
+            pass
+    db.commit()
+    db.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/admin/usuarios/<int:uid>/rutas", methods=["GET"])
+@require_auth
+def admin_get_usuario_rutas(uid):
+    db   = get_db()
+    rows = db.execute(
+        """SELECT r.id, r.nombre, r.grupo, r.color
+           FROM rutas r
+           JOIN despachador_rutas dr ON dr.ruta_id = r.id
+           WHERE dr.usuario_id = ?
+           ORDER BY r.grupo, r.nombre""",
+        (uid,),
+    ).fetchall()
+    db.close()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/admin/usuarios/<int:uid>/rutas", methods=["PUT"])
+@require_auth
+def admin_set_usuario_rutas(uid):
+    data     = request.get_json(force=True)
+    ruta_ids = data.get("ruta_ids", [])
+    db = get_db()
+    db.execute("DELETE FROM despachador_rutas WHERE usuario_id = ?", (uid,))
+    for rid in ruta_ids:
+        try:
+            db.execute("INSERT INTO despachador_rutas (usuario_id, ruta_id) VALUES (?,?)", (uid, rid))
         except Exception:
             pass
     db.commit()
