@@ -1,5 +1,5 @@
 """Servidor estático con live-reload para desarrollo."""
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 import os, time, threading, glob
 
 _watched_mtimes = {}
@@ -100,6 +100,7 @@ if __name__ == '__main__':
     os.chdir(os.path.dirname(os.path.abspath(__file__)))
     t = threading.Thread(target=_watch_loop, daemon=True)
     t.start()
-    server = HTTPServer(('', 3030), DevHandler)
+    server = ThreadingHTTPServer(('', 3030), DevHandler)
+    server.daemon_threads = True
     print('[WEB] http://localhost:3030  (live-reload activo ⚡)')
     server.serve_forever()
