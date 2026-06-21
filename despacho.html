@@ -110,6 +110,81 @@
 
     .empty-state { padding: 40px; text-align: center; color: var(--txt3); }
 
+    /* Botón alistamiento */
+    .btn-alist {
+      padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;
+      border: none; cursor: pointer; font-family: inherit; white-space: nowrap;
+      transition: opacity .15s;
+    }
+    .btn-alist:hover { opacity: .8; }
+    .btn-alist.completado { background: #dcfce7; color: #16a34a; }
+    .btn-alist.pendiente  { background: #fef9c3; color: #a16207; }
+
+    /* Modal */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 200;
+      display: flex; align-items: flex-start; justify-content: center;
+      padding: 32px 16px; overflow-y: auto;
+    }
+    .modal-overlay.hidden { display: none; }
+    .modal-box {
+      background: var(--white); border-radius: var(--radius); width: 100%; max-width: 700px;
+      box-shadow: 0 8px 40px rgba(0,0,0,.18); display: flex; flex-direction: column;
+    }
+    .modal-header {
+      padding: 20px 24px 16px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+    }
+    .modal-title    { font-size: 17px; font-weight: 800; }
+    .modal-subtitle { font-size: 12px; color: var(--txt3); margin-top: 3px; }
+    .modal-close {
+      background: none; border: none; cursor: pointer; font-size: 20px;
+      color: var(--txt3); line-height: 1; padding: 2px 6px; flex-shrink: 0;
+    }
+    .modal-body { padding: 20px 24px; overflow-y: auto; max-height: 62vh; }
+    .modal-footer {
+      padding: 16px 24px; border-top: 1px solid var(--border);
+      display: flex; justify-content: flex-end; gap: 10px;
+    }
+    .check-section { margin-bottom: 16px; }
+    .check-section-title {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .6px; color: var(--txt3); margin-bottom: 8px;
+    }
+    .check-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+    .check-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius-s);
+      background: #fafafb; gap: 8px;
+    }
+    .check-label { font-size: 12px; flex: 1; }
+    .check-radios { display: flex; gap: 8px; flex-shrink: 0; }
+    .check-radios label {
+      display: flex; align-items: center; gap: 3px; cursor: pointer;
+      font-size: 11px; font-weight: 600;
+    }
+    .check-radios input[type="radio"] { cursor: pointer; width: 13px; height: 13px; accent-color: var(--primary); }
+    .radio-buena { color: #16a34a; }
+    .radio-mala  { color: var(--red); }
+    .radio-otros { color: var(--txt3); }
+    .check-obs {
+      width: 100%; margin-top: 14px; padding: 10px 12px;
+      border: 1px solid var(--border2); border-radius: var(--radius-s);
+      font-family: inherit; font-size: 13px; resize: vertical; min-height: 64px;
+    }
+    .check-obs:focus { outline: none; border-color: var(--primary); }
+    .btn-cancel {
+      padding: 9px 18px; border: 1px solid var(--border2); border-radius: var(--radius-s);
+      background: var(--white); color: var(--txt); cursor: pointer;
+      font-family: inherit; font-size: 13px; font-weight: 600;
+    }
+    .btn-save {
+      padding: 9px 18px; border: none; border-radius: var(--radius-s);
+      background: var(--primary); color: #fff; cursor: pointer;
+      font-family: inherit; font-size: 13px; font-weight: 600;
+    }
+    .btn-save:disabled { opacity: .55; cursor: default; }
+
     /* Toast */
     .toast {
       position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
@@ -142,6 +217,24 @@
   </div>
 
   <div class="toast hidden" id="toast"></div>
+
+  <!-- Modal Alistamiento Vehicular -->
+  <div class="modal-overlay hidden" id="modalOverlay">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div>
+          <div class="modal-title" id="modalTitle">Alistamiento Vehicular</div>
+          <div class="modal-subtitle" id="modalSubtitle"></div>
+        </div>
+        <button class="modal-close" onclick="cerrarModal()">✕</button>
+      </div>
+      <div class="modal-body" id="modalBody"></div>
+      <div class="modal-footer">
+        <button class="btn-cancel" onclick="cerrarModal()">Cancelar</button>
+        <button class="btn-save" id="btnGuardar" onclick="guardarAlistamiento()">Guardar alistamiento</button>
+      </div>
+    </div>
+  </div>
 
 <script>
   const API   = (window.location.port === '3030') ? 'http://localhost:8001' : window.location.origin;
@@ -210,6 +303,7 @@
                   <th>Ruta</th>
                   <th>Conductor</th>
                   <th style="width:170px">Estado</th>
+                  <th style="width:130px">Alistamiento</th>
                 </tr>
               </thead>
               <tbody>
@@ -231,6 +325,7 @@
       .map(c => `<option value="${c.id}" ${b.conductor_id === c.id ? 'selected' : ''}>${escapeHtml(c.nombre)}</option>`)
       .join('');
     const estado = b.estado || 'trabajando';
+    const alistOk = !!b.tiene_alistamiento;
     return `<tr>
       <td><span class="bus-num">${b.numero}</span>${b.placa ? `<div class="bus-placa">${escapeHtml(b.placa)}</div>` : ''}</td>
       <td><select onchange="onChange(${b.id}, 'ruta_id', this.value)">${rutaOpts}</select></td>
@@ -241,6 +336,12 @@
           <option value="taller"     ${estado === 'taller'     ? 'selected' : ''}>En taller</option>
           <option value="descanso"   ${estado === 'descanso'   ? 'selected' : ''}>Descanso</option>
         </select>
+      </td>
+      <td>
+        <button id="alist-btn-${b.id}" class="btn-alist ${alistOk ? 'completado' : 'pendiente'}"
+                onclick="abrirAlistamiento(${b.id})">
+          ${alistOk ? '✓ Ver' : '⚠ Registrar'}
+        </button>
       </td>
     </tr>`;
   }
@@ -309,6 +410,135 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => el.classList.add('hidden'), 2200);
   }
+
+  /* ─── Alistamiento vehicular ─── */
+  const ITEMS_ALIST = [
+    { section: 'Espejos', items: [
+      { campo: 'espejo_izq',   label: 'Espejo izquierdo' },
+      { campo: 'espejo_der',   label: 'Espejo derecho' },
+      { campo: 'espejo_retro', label: 'Espejo retrovisor' },
+    ]},
+    { section: 'Luces', items: [
+      { campo: 'luces_parqueo',  label: 'Luces de parqueo' },
+      { campo: 'luces_altas',    label: 'Luces altas' },
+      { campo: 'luces_bajas',    label: 'Luces bajas' },
+      { campo: 'luces_reversa',  label: 'Luces de reversa' },
+      { campo: 'direccionales',  label: 'Direccionales' },
+    ]},
+    { section: 'Fluidos', items: [
+      { campo: 'liquido_frenos', label: 'Líquido de frenos' },
+      { campo: 'liquido_hidra',  label: 'Líquido hidráulico' },
+      { campo: 'refrigerante',   label: 'Refrigerante' },
+      { campo: 'aceite_motor',   label: 'Aceite del motor' },
+    ]},
+    { section: 'Seguridad', items: [
+      { campo: 'pito',          label: 'Pito' },
+      { campo: 'frenos',        label: 'Frenos' },
+      { campo: 'cinturones',    label: 'Cinturones de seguridad' },
+      { campo: 'salidas_emerg', label: 'Salidas de emergencia' },
+      { campo: 'botiquin',      label: 'Botiquín de primeros auxilios' },
+    ]},
+    { section: 'Llantas / Suspensión', items: [
+      { campo: 'presion_llantas', label: 'Presión de llantas' },
+      { campo: 'estado_llantas',  label: 'Estado general de llantas' },
+      { campo: 'resortes',        label: 'Resortes / suspensión' },
+    ]},
+    { section: 'Apariencia', items: [
+      { campo: 'limpieza',         label: 'Limpieza general' },
+      { campo: 'logo_empresa',     label: 'Logo empresa' },
+      { campo: 'limpiaparabrisas', label: 'Limpiaparabrisas' },
+    ]},
+    { section: 'Sistema eléctrico', items: [
+      { campo: 'bateria',           label: 'Batería' },
+      { campo: 'sistema_electrico', label: 'Sistema eléctrico' },
+    ]},
+    { section: 'Adicionales', items: [
+      { campo: 'fugas_aceite',     label: 'Fugas de aceite' },
+      { campo: 'anclaje_asientos', label: 'Anclaje de asientos' },
+      { campo: 'fugas_diafragma',  label: 'Fugas de diafragma' },
+      { campo: 'estado_lavado',    label: 'Estado de lavado' },
+      { campo: 'extintor',         label: 'Extintor' },
+    ]},
+  ];
+
+  let alistBusId = null;
+  let alistDatos = {};
+
+  async function abrirAlistamiento(busId) {
+    alistBusId = busId;
+    const bus  = buses.find(b => b.id === busId);
+    document.getElementById('modalTitle').textContent    = `Alistamiento — Bus ${bus.numero}${bus.placa ? ' · ' + bus.placa : ''}`;
+    document.getElementById('modalSubtitle').textContent = formatoFecha(HOY);
+    document.getElementById('btnGuardar').disabled = true;
+    document.getElementById('modalBody').innerHTML = '<div style="padding:24px;text-align:center;color:var(--txt3)">Cargando…</div>';
+    document.getElementById('modalOverlay').classList.remove('hidden');
+
+    try {
+      alistDatos = await apiFetch(`/api/alistamiento?fecha=${HOY}&bus_id=${busId}`) || {};
+    } catch { alistDatos = {}; }
+
+    renderModal();
+    document.getElementById('btnGuardar').disabled = false;
+  }
+
+  function renderModal() {
+    let html = '';
+    ITEMS_ALIST.forEach(sec => {
+      html += `<div class="check-section"><div class="check-section-title">${escapeHtml(sec.section)}</div><div class="check-grid">`;
+      sec.items.forEach(it => {
+        const v = alistDatos[it.campo] || '';
+        html += `<div class="check-item">
+          <span class="check-label">${escapeHtml(it.label)}</span>
+          <div class="check-radios">
+            <label class="radio-buena"><input type="radio" name="${it.campo}" value="buena" ${v==='buena'?'checked':''}> B</label>
+            <label class="radio-mala"><input type="radio" name="${it.campo}" value="mala" ${v==='mala'?'checked':''}> M</label>
+            <label class="radio-otros"><input type="radio" name="${it.campo}" value="otros" ${v==='otros'?'checked':''}> O</label>
+          </div>
+        </div>`;
+      });
+      html += `</div></div>`;
+    });
+    html += `<textarea class="check-obs" id="obsTextarea" placeholder="Observaciones generales…">${escapeHtml(alistDatos.observaciones || '')}</textarea>`;
+    document.getElementById('modalBody').innerHTML = html;
+  }
+
+  async function guardarAlistamiento() {
+    const btn = document.getElementById('btnGuardar');
+    btn.disabled = true;
+    const bus = buses.find(b => b.id === alistBusId);
+    const body = {
+      fecha:        HOY,
+      bus_id:       alistBusId,
+      conductor_id: bus ? (bus.conductor_id || null) : null,
+      observaciones: document.getElementById('obsTextarea').value,
+    };
+    ITEMS_ALIST.forEach(sec => sec.items.forEach(it => {
+      const sel = document.querySelector(`input[name="${it.campo}"]:checked`);
+      body[it.campo] = sel ? sel.value : null;
+    }));
+    try {
+      await apiFetch('/api/alistamiento', { method: 'POST', body: JSON.stringify(body) });
+      if (bus) bus.tiene_alistamiento = 1;
+      const rowBtn = document.getElementById(`alist-btn-${alistBusId}`);
+      if (rowBtn) { rowBtn.textContent = '✓ Ver'; rowBtn.className = 'btn-alist completado'; }
+      cerrarModal();
+      showToast(`Alistamiento de Bus ${bus?.numero} guardado`);
+    } catch(e) {
+      showToast(e.message, 'error');
+      btn.disabled = false;
+    }
+  }
+
+  function cerrarModal() {
+    document.getElementById('modalOverlay').classList.add('hidden');
+  }
+
+  // Cerrar modal al hacer clic fuera del box
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('modalOverlay').addEventListener('click', e => {
+      if (e.target === document.getElementById('modalOverlay')) cerrarModal();
+    });
+  });
 </script>
 </body>
 </html>

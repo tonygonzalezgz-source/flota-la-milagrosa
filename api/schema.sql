@@ -130,9 +130,54 @@ CREATE TABLE IF NOT EXISTS despacho_diario (
     UNIQUE(bus_id, fecha)
 );
 
+-- Alistamiento vehicular pre-turno (30 ítems checklist)
+CREATE TABLE IF NOT EXISTS alistamiento_vehicular (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    fecha             DATE    NOT NULL,
+    bus_id            INTEGER NOT NULL REFERENCES buses(id),
+    conductor_id      INTEGER REFERENCES conductores(id),
+    despachador_id    INTEGER REFERENCES usuarios(id),
+    espejo_izq        TEXT CHECK(espejo_izq        IN ('buena','mala','otros')),
+    espejo_der        TEXT CHECK(espejo_der        IN ('buena','mala','otros')),
+    espejo_retro      TEXT CHECK(espejo_retro      IN ('buena','mala','otros')),
+    luces_parqueo     TEXT CHECK(luces_parqueo     IN ('buena','mala','otros')),
+    luces_altas       TEXT CHECK(luces_altas       IN ('buena','mala','otros')),
+    luces_bajas       TEXT CHECK(luces_bajas       IN ('buena','mala','otros')),
+    luces_reversa     TEXT CHECK(luces_reversa     IN ('buena','mala','otros')),
+    direccionales     TEXT CHECK(direccionales     IN ('buena','mala','otros')),
+    liquido_frenos    TEXT CHECK(liquido_frenos    IN ('buena','mala','otros')),
+    liquido_hidra     TEXT CHECK(liquido_hidra     IN ('buena','mala','otros')),
+    refrigerante      TEXT CHECK(refrigerante      IN ('buena','mala','otros')),
+    aceite_motor      TEXT CHECK(aceite_motor      IN ('buena','mala','otros')),
+    pito              TEXT CHECK(pito              IN ('buena','mala','otros')),
+    frenos            TEXT CHECK(frenos            IN ('buena','mala','otros')),
+    cinturones        TEXT CHECK(cinturones        IN ('buena','mala','otros')),
+    salidas_emerg     TEXT CHECK(salidas_emerg     IN ('buena','mala','otros')),
+    botiquin          TEXT CHECK(botiquin          IN ('buena','mala','otros')),
+    presion_llantas   TEXT CHECK(presion_llantas   IN ('buena','mala','otros')),
+    estado_llantas    TEXT CHECK(estado_llantas    IN ('buena','mala','otros')),
+    resortes          TEXT CHECK(resortes          IN ('buena','mala','otros')),
+    limpieza          TEXT CHECK(limpieza          IN ('buena','mala','otros')),
+    logo_empresa      TEXT CHECK(logo_empresa      IN ('buena','mala','otros')),
+    limpiaparabrisas  TEXT CHECK(limpiaparabrisas  IN ('buena','mala','otros')),
+    bateria           TEXT CHECK(bateria           IN ('buena','mala','otros')),
+    sistema_electrico TEXT CHECK(sistema_electrico IN ('buena','mala','otros')),
+    fugas_aceite      TEXT CHECK(fugas_aceite      IN ('buena','mala','otros')),
+    anclaje_asientos  TEXT CHECK(anclaje_asientos  IN ('buena','mala','otros')),
+    fugas_diafragma   TEXT CHECK(fugas_diafragma   IN ('buena','mala','otros')),
+    estado_lavado     TEXT CHECK(estado_lavado     IN ('buena','mala','otros')),
+    extintor          TEXT CHECK(extintor          IN ('buena','mala','otros')),
+    observaciones     TEXT    NOT NULL DEFAULT '',
+    created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(bus_id, fecha)
+);
+
 -- Índices para consultas frecuentes
 CREATE INDEX IF NOT EXISTS idx_reg_pax_timestamp ON registros_pasajeros(timestamp);
 CREATE INDEX IF NOT EXISTS idx_reg_mant_timestamp ON registros_mantenimiento(timestamp);
 CREATE INDEX IF NOT EXISTS idx_estado_mant_bus ON estado_mantenimiento(bus_id);
 CREATE INDEX IF NOT EXISTS idx_despacho_fecha ON despacho_diario(fecha);
 CREATE INDEX IF NOT EXISTS idx_despacho_bus ON despacho_diario(bus_id);
+CREATE INDEX IF NOT EXISTS idx_alist_fecha ON alistamiento_vehicular(fecha);
+CREATE INDEX IF NOT EXISTS idx_alist_bus  ON alistamiento_vehicular(bus_id);

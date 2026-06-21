@@ -283,6 +283,47 @@ def migrate_db():
                 updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(bus_id, fecha)
             )""",
+            """CREATE TABLE IF NOT EXISTS alistamiento_vehicular (
+                id                SERIAL PRIMARY KEY,
+                fecha             DATE    NOT NULL,
+                bus_id            INTEGER NOT NULL REFERENCES buses(id),
+                conductor_id      INTEGER REFERENCES conductores(id),
+                despachador_id    INTEGER REFERENCES usuarios(id),
+                espejo_izq        TEXT CHECK(espejo_izq        IN ('buena','mala','otros')),
+                espejo_der        TEXT CHECK(espejo_der        IN ('buena','mala','otros')),
+                espejo_retro      TEXT CHECK(espejo_retro      IN ('buena','mala','otros')),
+                luces_parqueo     TEXT CHECK(luces_parqueo     IN ('buena','mala','otros')),
+                luces_altas       TEXT CHECK(luces_altas       IN ('buena','mala','otros')),
+                luces_bajas       TEXT CHECK(luces_bajas       IN ('buena','mala','otros')),
+                luces_reversa     TEXT CHECK(luces_reversa     IN ('buena','mala','otros')),
+                direccionales     TEXT CHECK(direccionales     IN ('buena','mala','otros')),
+                liquido_frenos    TEXT CHECK(liquido_frenos    IN ('buena','mala','otros')),
+                liquido_hidra     TEXT CHECK(liquido_hidra     IN ('buena','mala','otros')),
+                refrigerante      TEXT CHECK(refrigerante      IN ('buena','mala','otros')),
+                aceite_motor      TEXT CHECK(aceite_motor      IN ('buena','mala','otros')),
+                pito              TEXT CHECK(pito              IN ('buena','mala','otros')),
+                frenos            TEXT CHECK(frenos            IN ('buena','mala','otros')),
+                cinturones        TEXT CHECK(cinturones        IN ('buena','mala','otros')),
+                salidas_emerg     TEXT CHECK(salidas_emerg     IN ('buena','mala','otros')),
+                botiquin          TEXT CHECK(botiquin          IN ('buena','mala','otros')),
+                presion_llantas   TEXT CHECK(presion_llantas   IN ('buena','mala','otros')),
+                estado_llantas    TEXT CHECK(estado_llantas    IN ('buena','mala','otros')),
+                resortes          TEXT CHECK(resortes          IN ('buena','mala','otros')),
+                limpieza          TEXT CHECK(limpieza          IN ('buena','mala','otros')),
+                logo_empresa      TEXT CHECK(logo_empresa      IN ('buena','mala','otros')),
+                limpiaparabrisas  TEXT CHECK(limpiaparabrisas  IN ('buena','mala','otros')),
+                bateria           TEXT CHECK(bateria           IN ('buena','mala','otros')),
+                sistema_electrico TEXT CHECK(sistema_electrico IN ('buena','mala','otros')),
+                fugas_aceite      TEXT CHECK(fugas_aceite      IN ('buena','mala','otros')),
+                anclaje_asientos  TEXT CHECK(anclaje_asientos  IN ('buena','mala','otros')),
+                fugas_diafragma   TEXT CHECK(fugas_diafragma   IN ('buena','mala','otros')),
+                estado_lavado     TEXT CHECK(estado_lavado     IN ('buena','mala','otros')),
+                extintor          TEXT CHECK(extintor          IN ('buena','mala','otros')),
+                observaciones     TEXT    NOT NULL DEFAULT '',
+                created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(bus_id, fecha)
+            )""",
         ]:
             try:
                 db.execute(tbl_sql)
@@ -403,6 +444,49 @@ def migrate_db():
                 cerrado        INTEGER NOT NULL DEFAULT 0,
                 created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(bus_id, fecha)
+            )
+        """)
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS alistamiento_vehicular (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                fecha             DATE    NOT NULL,
+                bus_id            INTEGER NOT NULL REFERENCES buses(id),
+                conductor_id      INTEGER REFERENCES conductores(id),
+                despachador_id    INTEGER REFERENCES usuarios(id),
+                espejo_izq        TEXT CHECK(espejo_izq        IN ('buena','mala','otros')),
+                espejo_der        TEXT CHECK(espejo_der        IN ('buena','mala','otros')),
+                espejo_retro      TEXT CHECK(espejo_retro      IN ('buena','mala','otros')),
+                luces_parqueo     TEXT CHECK(luces_parqueo     IN ('buena','mala','otros')),
+                luces_altas       TEXT CHECK(luces_altas       IN ('buena','mala','otros')),
+                luces_bajas       TEXT CHECK(luces_bajas       IN ('buena','mala','otros')),
+                luces_reversa     TEXT CHECK(luces_reversa     IN ('buena','mala','otros')),
+                direccionales     TEXT CHECK(direccionales     IN ('buena','mala','otros')),
+                liquido_frenos    TEXT CHECK(liquido_frenos    IN ('buena','mala','otros')),
+                liquido_hidra     TEXT CHECK(liquido_hidra     IN ('buena','mala','otros')),
+                refrigerante      TEXT CHECK(refrigerante      IN ('buena','mala','otros')),
+                aceite_motor      TEXT CHECK(aceite_motor      IN ('buena','mala','otros')),
+                pito              TEXT CHECK(pito              IN ('buena','mala','otros')),
+                frenos            TEXT CHECK(frenos            IN ('buena','mala','otros')),
+                cinturones        TEXT CHECK(cinturones        IN ('buena','mala','otros')),
+                salidas_emerg     TEXT CHECK(salidas_emerg     IN ('buena','mala','otros')),
+                botiquin          TEXT CHECK(botiquin          IN ('buena','mala','otros')),
+                presion_llantas   TEXT CHECK(presion_llantas   IN ('buena','mala','otros')),
+                estado_llantas    TEXT CHECK(estado_llantas    IN ('buena','mala','otros')),
+                resortes          TEXT CHECK(resortes          IN ('buena','mala','otros')),
+                limpieza          TEXT CHECK(limpieza          IN ('buena','mala','otros')),
+                logo_empresa      TEXT CHECK(logo_empresa      IN ('buena','mala','otros')),
+                limpiaparabrisas  TEXT CHECK(limpiaparabrisas  IN ('buena','mala','otros')),
+                bateria           TEXT CHECK(bateria           IN ('buena','mala','otros')),
+                sistema_electrico TEXT CHECK(sistema_electrico IN ('buena','mala','otros')),
+                fugas_aceite      TEXT CHECK(fugas_aceite      IN ('buena','mala','otros')),
+                anclaje_asientos  TEXT CHECK(anclaje_asientos  IN ('buena','mala','otros')),
+                fugas_diafragma   TEXT CHECK(fugas_diafragma   IN ('buena','mala','otros')),
+                estado_lavado     TEXT CHECK(estado_lavado     IN ('buena','mala','otros')),
+                extintor          TEXT CHECK(extintor          IN ('buena','mala','otros')),
+                observaciones     TEXT    NOT NULL DEFAULT '',
+                created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(bus_id, fecha)
             )
         """)
@@ -1004,23 +1088,27 @@ def get_despacho():
         ph    = ",".join("?" * len(grupos))
         buses = db.execute(
             f"""SELECT b.id, b.numero, b.placa, b.modelo, b.grupo,
-                       d.estado, d.conductor_id, d.ruta_id, d.cerrado
+                       d.estado, d.conductor_id, d.ruta_id, d.cerrado,
+                       CASE WHEN a.bus_id IS NOT NULL THEN 1 ELSE 0 END AS tiene_alistamiento
                 FROM buses b
                 LEFT JOIN despacho_diario d ON d.bus_id = b.id AND d.fecha = ?
+                LEFT JOIN alistamiento_vehicular a ON a.bus_id = b.id AND a.fecha = ?
                 WHERE b.grupo IN ({ph})
                 ORDER BY b.numero""",
-            [fecha] + grupos,
+            [fecha, fecha] + grupos,
         ).fetchall()
     else:
         rutas = db.execute("SELECT id, nombre, grupo, color FROM rutas ORDER BY grupo, nombre").fetchall()
         rutas = [dict(r) for r in rutas]
         buses = db.execute(
             """SELECT b.id, b.numero, b.placa, b.modelo, b.grupo,
-                      d.estado, d.conductor_id, d.ruta_id, d.cerrado
+                      d.estado, d.conductor_id, d.ruta_id, d.cerrado,
+                      CASE WHEN a.bus_id IS NOT NULL THEN 1 ELSE 0 END AS tiene_alistamiento
                FROM buses b
                LEFT JOIN despacho_diario d ON d.bus_id = b.id AND d.fecha = ?
+               LEFT JOIN alistamiento_vehicular a ON a.bus_id = b.id AND a.fecha = ?
                ORDER BY b.numero""",
-            (fecha,),
+            (fecha, fecha),
         ).fetchall()
 
     db.close()
@@ -1087,6 +1175,77 @@ def cron_cierre_despacho():
     db.commit()
     db.close()
     return jsonify({"ok": True, "fecha": fecha, "cerrados": cerrados})
+
+
+# ──────────────────────────────────────────
+#  Alistamiento vehicular
+# ──────────────────────────────────────────
+
+_ALIST_CAMPOS = [
+    'espejo_izq', 'espejo_der', 'espejo_retro',
+    'luces_parqueo', 'luces_altas', 'luces_bajas', 'luces_reversa', 'direccionales',
+    'liquido_frenos', 'liquido_hidra', 'refrigerante', 'aceite_motor',
+    'pito', 'frenos', 'cinturones', 'salidas_emerg', 'botiquin',
+    'presion_llantas', 'estado_llantas', 'resortes',
+    'limpieza', 'logo_empresa', 'limpiaparabrisas',
+    'bateria', 'sistema_electrico',
+    'fugas_aceite', 'anclaje_asientos', 'fugas_diafragma', 'estado_lavado', 'extintor',
+]
+_VALS_OK = ('buena', 'mala', 'otros')
+
+
+@app.route("/api/alistamiento", methods=["GET"])
+@require_auth
+def get_alistamiento():
+    """Devuelve el alistamiento de un bus para una fecha dada, o null si no existe."""
+    fecha  = request.args.get("fecha", date.today().isoformat())
+    bus_id = request.args.get("bus_id")
+    if not bus_id:
+        return jsonify({"error": "bus_id es requerido"}), 400
+    db  = get_db()
+    row = db.execute(
+        "SELECT * FROM alistamiento_vehicular WHERE bus_id = ? AND fecha = ?",
+        (bus_id, fecha),
+    ).fetchone()
+    db.close()
+    return jsonify(dict(row) if row else None)
+
+
+@app.route("/api/alistamiento", methods=["POST"])
+@require_auth
+def upsert_alistamiento():
+    """Crea o actualiza el alistamiento de un bus (UPSERT por bus_id + fecha)."""
+    data           = request.get_json(force=True)
+    fecha          = data.get("fecha")
+    bus_id         = data.get("bus_id")
+    conductor_id   = data.get("conductor_id") or None
+    despachador_id = getattr(request, "jwt_user_id", None)
+    observaciones  = data.get("observaciones", "")
+
+    if not fecha or not bus_id:
+        return jsonify({"error": "fecha y bus_id son requeridos"}), 400
+
+    vals = [data.get(c) if data.get(c) in _VALS_OK else None for c in _ALIST_CAMPOS]
+    cols_sql    = ", ".join(_ALIST_CAMPOS)
+    placeholders = ", ".join(["?"] * len(_ALIST_CAMPOS))
+    update_set  = ", ".join([f"{c} = excluded.{c}" for c in _ALIST_CAMPOS])
+
+    db = get_db()
+    db.execute(
+        f"""INSERT INTO alistamiento_vehicular
+               (fecha, bus_id, conductor_id, despachador_id, {cols_sql}, observaciones, updated_at)
+           VALUES (?,?,?,?,{placeholders},?,CURRENT_TIMESTAMP)
+           ON CONFLICT(bus_id, fecha) DO UPDATE SET
+               conductor_id   = excluded.conductor_id,
+               despachador_id = excluded.despachador_id,
+               {update_set},
+               observaciones  = excluded.observaciones,
+               updated_at     = CURRENT_TIMESTAMP""",
+        [fecha, bus_id, conductor_id, despachador_id] + vals + [observaciones],
+    )
+    db.commit()
+    db.close()
+    return jsonify({"ok": True})
 
 
 # ──────────────────────────────────────────
