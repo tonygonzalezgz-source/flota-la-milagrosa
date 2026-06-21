@@ -7,6 +7,7 @@ from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 import os
 import time
+import json
 from datetime import date, datetime, timedelta
 from functools import wraps
 from dotenv import load_dotenv
@@ -214,11 +215,24 @@ def migrate_db():
             "ALTER TABLE buses ADD COLUMN IF NOT EXISTS propietario_id INTEGER REFERENCES propietarios(id)",
             "ALTER TABLE registros_movilidad ADD COLUMN IF NOT EXISTS ruta_id INTEGER REFERENCES rutas(id)",
             "ALTER TABLE buses ADD COLUMN IF NOT EXISTS km_inicial INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE alistamiento_vehicular ADD COLUMN IF NOT EXISTS novedades TEXT",
         ]:
             try:
                 db.execute(col_sql)
             except Exception:
                 pass
+        # La tabla de alistamiento cambió de columnas (versión vieja inventada
+        # → preguntas exactas del formulario). Si existe el esquema viejo, se
+        # recrea desde cero para alinearlo con la nueva definición.
+        try:
+            row = db.execute(
+                "SELECT 1 FROM information_schema.columns "
+                "WHERE table_name = 'alistamiento_vehicular' AND column_name = 'espejo_izq'"
+            ).fetchone()
+            if row:
+                db.execute("DROP TABLE IF EXISTS alistamiento_vehicular")
+        except Exception:
+            pass
         # Tablas del módulo de mantenimiento preventivo
         for tbl_sql in [
             """CREATE TABLE IF NOT EXISTS catalogo_mantenimiento (
@@ -284,44 +298,46 @@ def migrate_db():
                 UNIQUE(bus_id, fecha)
             )""",
             """CREATE TABLE IF NOT EXISTS alistamiento_vehicular (
-                id                SERIAL PRIMARY KEY,
-                fecha             DATE    NOT NULL,
-                bus_id            INTEGER NOT NULL REFERENCES buses(id),
-                conductor_id      INTEGER REFERENCES conductores(id),
-                despachador_id    INTEGER REFERENCES usuarios(id),
-                espejo_izq        TEXT CHECK(espejo_izq        IN ('buena','mala','otros')),
-                espejo_der        TEXT CHECK(espejo_der        IN ('buena','mala','otros')),
-                espejo_retro      TEXT CHECK(espejo_retro      IN ('buena','mala','otros')),
-                luces_parqueo     TEXT CHECK(luces_parqueo     IN ('buena','mala','otros')),
-                luces_altas       TEXT CHECK(luces_altas       IN ('buena','mala','otros')),
-                luces_bajas       TEXT CHECK(luces_bajas       IN ('buena','mala','otros')),
-                luces_reversa     TEXT CHECK(luces_reversa     IN ('buena','mala','otros')),
-                direccionales     TEXT CHECK(direccionales     IN ('buena','mala','otros')),
-                liquido_frenos    TEXT CHECK(liquido_frenos    IN ('buena','mala','otros')),
-                liquido_hidra     TEXT CHECK(liquido_hidra     IN ('buena','mala','otros')),
-                refrigerante      TEXT CHECK(refrigerante      IN ('buena','mala','otros')),
-                aceite_motor      TEXT CHECK(aceite_motor      IN ('buena','mala','otros')),
-                pito              TEXT CHECK(pito              IN ('buena','mala','otros')),
-                frenos            TEXT CHECK(frenos            IN ('buena','mala','otros')),
-                cinturones        TEXT CHECK(cinturones        IN ('buena','mala','otros')),
-                salidas_emerg     TEXT CHECK(salidas_emerg     IN ('buena','mala','otros')),
-                botiquin          TEXT CHECK(botiquin          IN ('buena','mala','otros')),
-                presion_llantas   TEXT CHECK(presion_llantas   IN ('buena','mala','otros')),
-                estado_llantas    TEXT CHECK(estado_llantas    IN ('buena','mala','otros')),
-                resortes          TEXT CHECK(resortes          IN ('buena','mala','otros')),
-                limpieza          TEXT CHECK(limpieza          IN ('buena','mala','otros')),
-                logo_empresa      TEXT CHECK(logo_empresa      IN ('buena','mala','otros')),
-                limpiaparabrisas  TEXT CHECK(limpiaparabrisas  IN ('buena','mala','otros')),
-                bateria           TEXT CHECK(bateria           IN ('buena','mala','otros')),
-                sistema_electrico TEXT CHECK(sistema_electrico IN ('buena','mala','otros')),
-                fugas_aceite      TEXT CHECK(fugas_aceite      IN ('buena','mala','otros')),
-                anclaje_asientos  TEXT CHECK(anclaje_asientos  IN ('buena','mala','otros')),
-                fugas_diafragma   TEXT CHECK(fugas_diafragma   IN ('buena','mala','otros')),
-                estado_lavado     TEXT CHECK(estado_lavado     IN ('buena','mala','otros')),
-                extintor          TEXT CHECK(extintor          IN ('buena','mala','otros')),
-                observaciones     TEXT    NOT NULL DEFAULT '',
-                created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                id                         SERIAL PRIMARY KEY,
+                fecha                      DATE    NOT NULL,
+                bus_id                     INTEGER NOT NULL REFERENCES buses(id),
+                conductor_id               INTEGER REFERENCES conductores(id),
+                despachador_id             INTEGER REFERENCES usuarios(id),
+                lugar                      TEXT,
+                retrovisores               TEXT CHECK(retrovisores               IN ('buena','mala','otros')),
+                luz_estacionaria           TEXT CHECK(luz_estacionaria           IN ('buena','mala','otros')),
+                luz_alta_baja              TEXT CHECK(luz_alta_baja              IN ('buena','mala','otros')),
+                luz_reversa                TEXT CHECK(luz_reversa                IN ('buena','mala','otros')),
+                logo_empresa               TEXT CHECK(logo_empresa               IN ('buena','mala','otros')),
+                nivel_liquido_freno        TEXT CHECK(nivel_liquido_freno        IN ('buena','mala','otros')),
+                nivel_deposito_hidraulico  TEXT CHECK(nivel_deposito_hidraulico  IN ('buena','mala','otros')),
+                nivel_refrigerante         TEXT CHECK(nivel_refrigerante         IN ('buena','mala','otros')),
+                presion_llantas            TEXT CHECK(presion_llantas            IN ('buena','mala','otros')),
+                pito                       TEXT CHECK(pito                       IN ('buena','mala','otros')),
+                stop                       TEXT CHECK(stop                       IN ('buena','mala','otros')),
+                llantas_general            TEXT CHECK(llantas_general            IN ('buena','mala','otros')),
+                direccionales              TEXT CHECK(direccionales              IN ('buena','mala','otros')),
+                frenos_general             TEXT CHECK(frenos_general             IN ('buena','mala','otros')),
+                nivel_liquido_aceite       TEXT CHECK(nivel_liquido_aceite       IN ('buena','mala','otros')),
+                ballestas                  TEXT CHECK(ballestas                  IN ('buena','mala','otros')),
+                fugas_aceite               TEXT CHECK(fugas_aceite               IN ('buena','mala','otros')),
+                anclaje_bateria            TEXT CHECK(anclaje_bateria            IN ('buena','mala','otros')),
+                dispositivo_luminoso       TEXT CHECK(dispositivo_luminoso       IN ('buena','mala','otros')),
+                equipo_prevencion          TEXT CHECK(equipo_prevencion          IN ('buena','mala','otros')),
+                cinturon_seguridad         TEXT CHECK(cinturon_seguridad         IN ('buena','mala','otros')),
+                salidas_emergencia         TEXT CHECK(salidas_emergencia         IN ('buena','mala','otros')),
+                aseo_vehiculo              TEXT CHECK(aseo_vehiculo              IN ('buena','mala','otros')),
+                fugas_diafragmas           TEXT CHECK(fugas_diafragmas           IN ('buena','mala','otros')),
+                asientos_anclados          TEXT CHECK(asientos_anclados          IN ('buena','mala','otros')),
+                limpia_brillas             TEXT CHECK(limpia_brillas             IN ('buena','mala','otros')),
+                condiciones_botiquin       TEXT CHECK(condiciones_botiquin       IN ('buena','mala','otros')),
+                observaciones_adicionales  TEXT CHECK(observaciones_adicionales  IN ('buena','mala','otros')),
+                lavada_primeriada          TEXT CHECK(lavada_primeriada          IN ('buena','mala','otros')),
+                primeriada                 TEXT CHECK(primeriada                 IN ('buena','mala','otros')),
+                nombre_responsable         TEXT,
+                novedades                  TEXT,
+                created_at                 TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at                 TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(bus_id, fecha)
             )""",
         ]:
@@ -447,46 +463,56 @@ def migrate_db():
                 UNIQUE(bus_id, fecha)
             )
         """)
+        # Recrear la tabla de alistamiento si tiene el esquema viejo (columnas inventadas).
+        try:
+            cols = db.execute("PRAGMA table_info(alistamiento_vehicular)").fetchall()
+            col_names = {(c["name"] if isinstance(c, dict) else c[1]) for c in cols}
+            if "espejo_izq" in col_names:
+                db.execute("DROP TABLE IF EXISTS alistamiento_vehicular")
+        except Exception:
+            pass
         db.execute("""
             CREATE TABLE IF NOT EXISTS alistamiento_vehicular (
-                id                INTEGER PRIMARY KEY AUTOINCREMENT,
-                fecha             DATE    NOT NULL,
-                bus_id            INTEGER NOT NULL REFERENCES buses(id),
-                conductor_id      INTEGER REFERENCES conductores(id),
-                despachador_id    INTEGER REFERENCES usuarios(id),
-                espejo_izq        TEXT CHECK(espejo_izq        IN ('buena','mala','otros')),
-                espejo_der        TEXT CHECK(espejo_der        IN ('buena','mala','otros')),
-                espejo_retro      TEXT CHECK(espejo_retro      IN ('buena','mala','otros')),
-                luces_parqueo     TEXT CHECK(luces_parqueo     IN ('buena','mala','otros')),
-                luces_altas       TEXT CHECK(luces_altas       IN ('buena','mala','otros')),
-                luces_bajas       TEXT CHECK(luces_bajas       IN ('buena','mala','otros')),
-                luces_reversa     TEXT CHECK(luces_reversa     IN ('buena','mala','otros')),
-                direccionales     TEXT CHECK(direccionales     IN ('buena','mala','otros')),
-                liquido_frenos    TEXT CHECK(liquido_frenos    IN ('buena','mala','otros')),
-                liquido_hidra     TEXT CHECK(liquido_hidra     IN ('buena','mala','otros')),
-                refrigerante      TEXT CHECK(refrigerante      IN ('buena','mala','otros')),
-                aceite_motor      TEXT CHECK(aceite_motor      IN ('buena','mala','otros')),
-                pito              TEXT CHECK(pito              IN ('buena','mala','otros')),
-                frenos            TEXT CHECK(frenos            IN ('buena','mala','otros')),
-                cinturones        TEXT CHECK(cinturones        IN ('buena','mala','otros')),
-                salidas_emerg     TEXT CHECK(salidas_emerg     IN ('buena','mala','otros')),
-                botiquin          TEXT CHECK(botiquin          IN ('buena','mala','otros')),
-                presion_llantas   TEXT CHECK(presion_llantas   IN ('buena','mala','otros')),
-                estado_llantas    TEXT CHECK(estado_llantas    IN ('buena','mala','otros')),
-                resortes          TEXT CHECK(resortes          IN ('buena','mala','otros')),
-                limpieza          TEXT CHECK(limpieza          IN ('buena','mala','otros')),
-                logo_empresa      TEXT CHECK(logo_empresa      IN ('buena','mala','otros')),
-                limpiaparabrisas  TEXT CHECK(limpiaparabrisas  IN ('buena','mala','otros')),
-                bateria           TEXT CHECK(bateria           IN ('buena','mala','otros')),
-                sistema_electrico TEXT CHECK(sistema_electrico IN ('buena','mala','otros')),
-                fugas_aceite      TEXT CHECK(fugas_aceite      IN ('buena','mala','otros')),
-                anclaje_asientos  TEXT CHECK(anclaje_asientos  IN ('buena','mala','otros')),
-                fugas_diafragma   TEXT CHECK(fugas_diafragma   IN ('buena','mala','otros')),
-                estado_lavado     TEXT CHECK(estado_lavado     IN ('buena','mala','otros')),
-                extintor          TEXT CHECK(extintor          IN ('buena','mala','otros')),
-                observaciones     TEXT    NOT NULL DEFAULT '',
-                created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                id                         INTEGER PRIMARY KEY AUTOINCREMENT,
+                fecha                      DATE    NOT NULL,
+                bus_id                     INTEGER NOT NULL REFERENCES buses(id),
+                conductor_id               INTEGER REFERENCES conductores(id),
+                despachador_id             INTEGER REFERENCES usuarios(id),
+                lugar                      TEXT,
+                retrovisores               TEXT CHECK(retrovisores               IN ('buena','mala','otros')),
+                luz_estacionaria           TEXT CHECK(luz_estacionaria           IN ('buena','mala','otros')),
+                luz_alta_baja              TEXT CHECK(luz_alta_baja              IN ('buena','mala','otros')),
+                luz_reversa                TEXT CHECK(luz_reversa                IN ('buena','mala','otros')),
+                logo_empresa               TEXT CHECK(logo_empresa               IN ('buena','mala','otros')),
+                nivel_liquido_freno        TEXT CHECK(nivel_liquido_freno        IN ('buena','mala','otros')),
+                nivel_deposito_hidraulico  TEXT CHECK(nivel_deposito_hidraulico  IN ('buena','mala','otros')),
+                nivel_refrigerante         TEXT CHECK(nivel_refrigerante         IN ('buena','mala','otros')),
+                presion_llantas            TEXT CHECK(presion_llantas            IN ('buena','mala','otros')),
+                pito                       TEXT CHECK(pito                       IN ('buena','mala','otros')),
+                stop                       TEXT CHECK(stop                       IN ('buena','mala','otros')),
+                llantas_general            TEXT CHECK(llantas_general            IN ('buena','mala','otros')),
+                direccionales              TEXT CHECK(direccionales              IN ('buena','mala','otros')),
+                frenos_general             TEXT CHECK(frenos_general             IN ('buena','mala','otros')),
+                nivel_liquido_aceite       TEXT CHECK(nivel_liquido_aceite       IN ('buena','mala','otros')),
+                ballestas                  TEXT CHECK(ballestas                  IN ('buena','mala','otros')),
+                fugas_aceite               TEXT CHECK(fugas_aceite               IN ('buena','mala','otros')),
+                anclaje_bateria            TEXT CHECK(anclaje_bateria            IN ('buena','mala','otros')),
+                dispositivo_luminoso       TEXT CHECK(dispositivo_luminoso       IN ('buena','mala','otros')),
+                equipo_prevencion          TEXT CHECK(equipo_prevencion          IN ('buena','mala','otros')),
+                cinturon_seguridad         TEXT CHECK(cinturon_seguridad         IN ('buena','mala','otros')),
+                salidas_emergencia         TEXT CHECK(salidas_emergencia         IN ('buena','mala','otros')),
+                aseo_vehiculo              TEXT CHECK(aseo_vehiculo              IN ('buena','mala','otros')),
+                fugas_diafragmas           TEXT CHECK(fugas_diafragmas           IN ('buena','mala','otros')),
+                asientos_anclados          TEXT CHECK(asientos_anclados          IN ('buena','mala','otros')),
+                limpia_brillas             TEXT CHECK(limpia_brillas             IN ('buena','mala','otros')),
+                condiciones_botiquin       TEXT CHECK(condiciones_botiquin       IN ('buena','mala','otros')),
+                observaciones_adicionales  TEXT CHECK(observaciones_adicionales  IN ('buena','mala','otros')),
+                lavada_primeriada          TEXT CHECK(lavada_primeriada          IN ('buena','mala','otros')),
+                primeriada                 TEXT CHECK(primeriada                 IN ('buena','mala','otros')),
+                nombre_responsable         TEXT,
+                novedades                  TEXT,
+                created_at                 TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at                 TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(bus_id, fecha)
             )
         """)
@@ -494,6 +520,7 @@ def migrate_db():
             "ALTER TABLE buses ADD COLUMN propietario_id INTEGER REFERENCES propietarios(id)",
             "ALTER TABLE registros_movilidad ADD COLUMN ruta_id INTEGER REFERENCES rutas(id)",
             "ALTER TABLE buses ADD COLUMN km_inicial INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE alistamiento_vehicular ADD COLUMN novedades TEXT",
         ]:
             try:
                 db.execute(col_sql)
@@ -1181,15 +1208,16 @@ def cron_cierre_despacho():
 #  Alistamiento vehicular
 # ──────────────────────────────────────────
 
+# 30 ítems exactos del formulario oficial de alistamiento.
 _ALIST_CAMPOS = [
-    'espejo_izq', 'espejo_der', 'espejo_retro',
-    'luces_parqueo', 'luces_altas', 'luces_bajas', 'luces_reversa', 'direccionales',
-    'liquido_frenos', 'liquido_hidra', 'refrigerante', 'aceite_motor',
-    'pito', 'frenos', 'cinturones', 'salidas_emerg', 'botiquin',
-    'presion_llantas', 'estado_llantas', 'resortes',
-    'limpieza', 'logo_empresa', 'limpiaparabrisas',
-    'bateria', 'sistema_electrico',
-    'fugas_aceite', 'anclaje_asientos', 'fugas_diafragma', 'estado_lavado', 'extintor',
+    'retrovisores', 'luz_estacionaria', 'luz_alta_baja', 'luz_reversa', 'logo_empresa',
+    'nivel_liquido_freno', 'nivel_deposito_hidraulico', 'nivel_refrigerante',
+    'presion_llantas', 'pito', 'stop', 'llantas_general', 'direccionales',
+    'frenos_general', 'nivel_liquido_aceite', 'ballestas', 'fugas_aceite',
+    'anclaje_bateria', 'dispositivo_luminoso', 'equipo_prevencion', 'cinturon_seguridad',
+    'salidas_emergencia', 'aseo_vehiculo', 'fugas_diafragmas', 'asientos_anclados',
+    'limpia_brillas', 'condiciones_botiquin', 'observaciones_adicionales',
+    'lavada_primeriada', 'primeriada',
 ]
 _VALS_OK = ('buena', 'mala', 'otros')
 
@@ -1220,7 +1248,15 @@ def upsert_alistamiento():
     bus_id         = data.get("bus_id")
     conductor_id   = data.get("conductor_id") or None
     despachador_id = getattr(request, "jwt_user_id", None)
-    observaciones  = data.get("observaciones", "")
+    lugar          = data.get("lugar") or None
+    nombre_resp    = data.get("nombre_responsable") or None
+
+    # Novedades por ítem (texto libre cuando se marca "Otros"). Se guarda como JSON.
+    novedades = data.get("novedades")
+    if isinstance(novedades, (dict, list)):
+        nov_str = json.dumps(novedades, ensure_ascii=False) if novedades else None
+    else:
+        nov_str = novedades or None
 
     if not fecha or not bus_id:
         return jsonify({"error": "fecha y bus_id son requeridos"}), 400
@@ -1233,19 +1269,47 @@ def upsert_alistamiento():
     db = get_db()
     db.execute(
         f"""INSERT INTO alistamiento_vehicular
-               (fecha, bus_id, conductor_id, despachador_id, {cols_sql}, observaciones, updated_at)
-           VALUES (?,?,?,?,{placeholders},?,CURRENT_TIMESTAMP)
+               (fecha, bus_id, conductor_id, despachador_id, lugar, {cols_sql}, nombre_responsable, novedades, updated_at)
+           VALUES (?,?,?,?,?,{placeholders},?,?,CURRENT_TIMESTAMP)
            ON CONFLICT(bus_id, fecha) DO UPDATE SET
-               conductor_id   = excluded.conductor_id,
-               despachador_id = excluded.despachador_id,
+               conductor_id       = excluded.conductor_id,
+               despachador_id     = excluded.despachador_id,
+               lugar              = excluded.lugar,
                {update_set},
-               observaciones  = excluded.observaciones,
-               updated_at     = CURRENT_TIMESTAMP""",
-        [fecha, bus_id, conductor_id, despachador_id] + vals + [observaciones],
+               nombre_responsable = excluded.nombre_responsable,
+               novedades          = excluded.novedades,
+               updated_at         = CURRENT_TIMESTAMP""",
+        [fecha, bus_id, conductor_id, despachador_id, lugar] + vals + [nombre_resp, nov_str],
     )
     db.commit()
     db.close()
     return jsonify({"ok": True})
+
+
+@app.route("/api/alistamiento/historial", methods=["GET"])
+@require_auth
+def historial_alistamiento():
+    """Historial de alistamientos de un bus, ordenado del más reciente al más antiguo."""
+    bus_id = request.args.get("bus_id")
+    limite = request.args.get("limite", "60")
+    if not bus_id:
+        return jsonify({"error": "bus_id es requerido"}), 400
+    try:
+        limite = max(1, min(int(limite), 365))
+    except (TypeError, ValueError):
+        limite = 60
+    db = get_db()
+    rows = db.execute(
+        f"""SELECT a.*, u.nombre AS despachador_nombre
+              FROM alistamiento_vehicular a
+              LEFT JOIN usuarios u ON u.id = a.despachador_id
+             WHERE a.bus_id = ?
+             ORDER BY a.fecha DESC
+             LIMIT {limite}""",
+        (bus_id,),
+    ).fetchall()
+    db.close()
+    return jsonify([dict(r) for r in rows])
 
 
 # ──────────────────────────────────────────
