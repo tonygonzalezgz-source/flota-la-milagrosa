@@ -653,10 +653,12 @@
     .cm-item:first-child { border-top: none; }
     .cm-item .cm-it-name { font-size: 13px; font-weight: 600; color: var(--text); }
     .cm-item .cm-it-meta { font-size: 11px; color: var(--text-3); margin-top: 2px; font-weight: 400; }
-    .cm-item input[type="number"] {
+    .cm-item input[type="number"],
+    .cm-item input[type="date"] {
       width: 100%; padding: 6px 8px; font-size: 12px;
       border: 1px solid var(--border-2); border-radius: 6px; background: var(--surface);
     }
+    .cm-item input.cm-base { border-color: var(--green); }
     .cm-item-lbl { font-size: 10px; color: var(--text-3); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 3px; display:block; }
     .cm-it-hecho {
       padding: 6px 10px; font-size: 11px; font-weight: 700;
@@ -1705,11 +1707,13 @@
 
   function cmRenderItem(it) {
     const isKm  = it.tipo_intervalo === 'KM';
+    const baseFecha = (it.ultima_fecha || '').slice(0, 10);
+    const baseKm    = it.ultimo_km != null ? it.ultimo_km : '';
     const ultimo = it.ultima_fecha
-      ? `Último: ${it.ultima_fecha}${it.ultimo_km != null ? ' · ' + Number(it.ultimo_km).toLocaleString() + ' km' : ''}`
+      ? `Último: ${baseFecha}${it.ultimo_km != null ? ' · ' + Number(it.ultimo_km).toLocaleString() + ' km' : ''}`
       : 'Sin registros';
     return `
-      <div class="cm-item" data-iid="${it.item_id}">
+      <div class="cm-item" data-iid="${it.item_id}" data-orig-fecha="${baseFecha}" data-orig-km="${baseKm}">
         <div>
           <div class="cm-it-name">${it.nombre}<span class="cm-it-tag ${isKm ? 'km' : 'fecha'}">${isKm ? 'KM' : 'FECHA'}</span></div>
           <div class="cm-it-meta">${ultimo}</div>
@@ -1718,12 +1722,14 @@
           <div><label class="cm-item-lbl">Intervalo (km)</label><input type="number" min="0" data-f="intervalo_km" value="${it.intervalo_km ?? ''}"></div>
           <div><label class="cm-item-lbl">Aviso ⚠️ (km antes)</label><input type="number" min="0" data-f="umbral_amarillo_km" value="${it.umbral_amarillo_km ?? ''}"></div>
           <div><label class="cm-item-lbl">Urgente 🔴 (km antes)</label><input type="number" min="0" data-f="umbral_rojo_km" value="${it.umbral_rojo_km ?? ''}"></div>
-          <div></div><div></div>
+          <div><label class="cm-item-lbl">Último km hecho</label><input type="number" min="0" class="cm-base" data-base="km" value="${baseKm}"></div>
+          <div></div>
         ` : `
           <div><label class="cm-item-lbl">Intervalo (días)</label><input type="number" min="0" data-f="intervalo_dias" value="${it.intervalo_dias ?? ''}"></div>
           <div><label class="cm-item-lbl">Aviso ⚠️ (días antes)</label><input type="number" min="0" data-f="umbral_amarillo_dias" value="${it.umbral_amarillo_dias ?? ''}"></div>
           <div><label class="cm-item-lbl">Urgente 🔴 (días antes)</label><input type="number" min="0" data-f="umbral_rojo_dias" value="${it.umbral_rojo_dias ?? ''}"></div>
-          <div></div><div></div>
+          <div><label class="cm-item-lbl">Última fecha hecha</label><input type="date" class="cm-base" data-base="fecha" value="${baseFecha}"></div>
+          <div></div>
         `}
         <button class="cm-it-hecho" onclick="cmMarcarHecho(${it.item_id}, '${(it.nombre||'').replace(/'/g,"\\'")}')">✓ Hecho hoy</button>
       </div>
@@ -1738,6 +1744,7 @@
   async function cmSaveConfig() {
     if (!cmCurrentBus) return;
     const items = [];
+    const baselines = [];   // "última realización" que arranca el conteo
     cmGrupos.querySelectorAll('.cm-item').forEach(row => {
       const iid = parseInt(row.dataset.iid);
       const obj = { item_id: iid };
@@ -1746,6 +1753,16 @@
         obj[inp.dataset.f] = (v != null && !isNaN(v)) ? v : null;
       });
       items.push(obj);
+
+      // Captura la base solo si cambió respecto al último registro
+      const baseFecha = row.querySelector('input[data-base="fecha"]');
+      const baseKm    = row.querySelector('input[data-base="km"]');
+      if (baseFecha && baseFecha.value && baseFecha.value !== (row.dataset.origFecha || '')) {
+        baselines.push({ item_id: iid, fecha_realizado: baseFecha.value });
+      }
+      if (baseKm && baseKm.value !== '' && baseKm.value !== (row.dataset.origKm || '')) {
+        baselines.push({ item_id: iid, km_realizado: parseInt(baseKm.value) });
+      }
     });
     const km_inicial = cmKmIni.value === '' ? null : parseInt(cmKmIni.value);
 
@@ -1757,6 +1774,16 @@
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || 'Error');
+
+      // Registra cada base como histórico para que el cálculo de vencimiento arranque de ahí
+      for (const b of baselines) {
+        await apiFetch(`${API_URL}/mantenimiento/historial`, {
+          method: 'POST',
+          body: JSON.stringify({ bus_id: cmCurrentBus, ...b,
+            observaciones: 'Base inicial (configuración)' }),
+        });
+      }
+
       await cmLoadBus();
       await cmLoadAlertas();
       alert('Configuración guardada');
