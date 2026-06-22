@@ -899,43 +899,35 @@
     });
 
     /* ─────── ALERTAS CRÍTICAS ─────── */
-    function mockAlertas() {
-      const hoy = new Date();
-      const f = (d) => {
-        const x = new Date(hoy); x.setDate(x.getDate() + d);
-        return x.toISOString().slice(0,10);
-      };
-      return [
-        { id: 'm1', bus_id: 1, placa: 'XYZ-123', numero: 12, tipo: 'SOAT',
-          ventana: '2_DIAS', fecha_objetivo: f(2), confirmada: false },
-        { id: 'm2', bus_id: 2, placa: 'ABC-456', numero: 8,  tipo: 'TECNOMECANICA',
-          ventana: '7_DIAS', fecha_objetivo: f(7), confirmada: false },
-        { id: 'm3', bus_id: 3, placa: 'DEF-789', numero: 21, tipo: 'PREVENTIVO',
-          ventana: '7_DIAS', fecha_objetivo: f(7), confirmada: false },
-        { id: 'm4', bus_id: 4, placa: 'GHI-012', numero: 15, tipo: 'FALLA',
-          ventana: '7_DIAS', fecha_objetivo: f(0), confirmada: false,
-          extra: 'Frenos · severidad alta' },
-      ];
-    }
-
     async function cargarAlertas() {
-      let data = [];
+      let alertas = [];
       try {
-        const r = await apiFetch(`${API}/alertas?pendientes=1`);
-        if (r.ok) data = await r.json();
-        else throw new Error('not implemented');
-      } catch (_) {
-        data = mockAlertas();
+        const r = await apiFetch(`${API}/mantenimiento/alertas`);
+        if (!r.ok) throw new Error('error');
+        const raw = await r.json();
+        // Transforma alertas de mantenimiento al formato del panel
+        alertas = (Array.isArray(raw) ? raw : []).map(a => ({
+          id: `mant_${a.bus_id}_${a.item_id}`,
+          bus_id:          a.bus_id,
+          placa:           a.bus_placa,
+          numero:          a.bus_numero,
+          tipo:            'PREVENTIVO',
+          ventana:         a.nivel === 'ROJO' ? '2_DIAS' : '7_DIAS',
+          fecha_objetivo:  a.proxima_fecha || new Date().toISOString().slice(0,10),
+          confirmada:      false,
+          extra:           `${a.sistema} · ${a.nombre}`,
+          tipo_intervalo:  a.tipo,          // KM | FECHA
+          km_restante:     a.km_restante,
+          proximo_km:      a.proximo_km,
+          dias_restantes:  a.dias_restantes,
+        }));
         document.getElementById('alertasSub').textContent =
-          'Demo · endpoint /alertas pendiente de implementar';
+          'Vencimientos, mantenimientos y fallas activas';
+      } catch (_) {
+        document.getElementById('alertasSub').textContent =
+          'Sin items de mantenimiento configurados o error al cargar';
       }
-      renderAlertas(Array.isArray(data) ? data : []);
-    }
-
-    function diasFaltantes(isoFecha) {
-      const hoy = new Date(); hoy.setHours(0,0,0,0);
-      const objetivo = new Date(isoFecha);
-      return Math.round((objetivo - hoy) / 86400000);
+      renderAlertas(alertas);
     }
 
     const TIPO_LABEL = {
@@ -968,24 +960,41 @@
         return;
       }
 
-      /* Orden: 2_DIAS primero, luego FALLA, luego 7_DIAS por fecha */
-      const orden = a => (a.tipo === 'FALLA' ? 0 : (a.ventana === '2_DIAS' ? 1 : 2));
+      /* Orden: ventana ROJO (2_DIAS) primero, luego AMARILLO (7_DIAS) por urgencia */
       const sorted = [...alertas].sort((a,b) => {
         if (a.confirmada !== b.confirmada) return a.confirmada ? 1 : -1;
-        const dx = orden(a) - orden(b);
-        if (dx !== 0) return dx;
-        return new Date(a.fecha_objetivo) - new Date(b.fecha_objetivo);
+        if (a.ventana !== b.ventana) return a.ventana === '2_DIAS' ? -1 : 1;
+        // Dentro del mismo nivel: más urgente primero
+        const ua = a.tipo_intervalo === 'KM' ? (a.km_restante ?? 999999) : (a.dias_restantes ?? 999);
+        const ub = b.tipo_intervalo === 'KM' ? (b.km_restante ?? 999999) : (b.dias_restantes ?? 999);
+        return ua - ub;
       });
 
       lista.innerHTML = sorted.map(a => {
-        const d = diasFaltantes(a.fecha_objetivo);
-        const diasTxt = a.tipo === 'FALLA' ? 'Activa hoy'
-                      : d <= 0   ? 'Vence hoy'
-                      : d === 1  ? 'Vence mañana'
-                      : `${d} días`;
+        // Texto de urgencia según tipo de intervalo
+        let urgenciaTxt;
+        if (a.tipo === 'FALLA') {
+          urgenciaTxt = 'Activa hoy';
+        } else if (a.tipo_intervalo === 'KM') {
+          const km = a.km_restante;
+          urgenciaTxt = km == null ? '?' : km <= 0 ? '¡KM vencido!' : `${km.toLocaleString('es-CO')} km`;
+        } else {
+          const d = a.dias_restantes ?? 0;
+          urgenciaTxt = d <= 0 ? 'Vence hoy' : d === 1 ? 'Vence mañana' : `${d} días`;
+        }
+
+        // Línea de meta según tipo de intervalo
         const extra = a.extra ? ` · ${escH(a.extra)}` : '';
-        const placa = a.placa || `Bus ${a.numero || a.bus_id}`;
-        const interno = a.numero ? `Interno ${a.numero}` : '';
+        let metaTxt;
+        if (a.tipo_intervalo === 'KM') {
+          metaTxt = `Próximo: ${(a.proximo_km ?? 0).toLocaleString('es-CO')} km${extra}`;
+        } else {
+          metaTxt = `Objetivo: ${fmtFecha(a.fecha_objetivo)}${extra}`;
+        }
+
+        const placa   = a.placa   || `Bus ${a.numero || a.bus_id}`;
+        const interno = a.numero  ? `Interno ${a.numero}` : '';
+
         return `
           <li class="alerta-card ${a.confirmada ? 'confirmada' : ''}"
               data-ventana="${a.ventana}" data-tipo="${a.tipo}">
@@ -994,9 +1003,9 @@
                 <span class="alerta-tag ${a.tipo}">${TIPO_LABEL[a.tipo] || a.tipo}</span>
                 ${escH(placa)} ${interno ? `· <span style="color:#888;font-weight:400">${escH(interno)}</span>` : ''}
               </div>
-              <div class="alerta-meta">Objetivo: ${fmtFecha(a.fecha_objetivo)}${extra}</div>
+              <div class="alerta-meta">${metaTxt}</div>
             </div>
-            <span class="alerta-dias">${diasTxt}</span>
+            <span class="alerta-dias">${urgenciaTxt}</span>
             <button class="btn-confirmar" data-id="${a.id}" ${a.confirmada ? 'disabled' : ''}>
               ${a.confirmada ? '✓ Confirmada' : 'Confirmar'}
             </button>
@@ -1011,11 +1020,7 @@
     async function confirmarAlerta(id, btn) {
       btn.disabled = true;
       btn.textContent = '…';
-      try {
-        const r = await apiFetch(`${API}/alertas/${id}/confirmar`, { method: 'POST' });
-        if (!r.ok) throw new Error('endpoint pendiente');
-      } catch (_) { /* en modo mock: continuamos visualmente */ }
-
+      // Confirmación visual local (el registro real se hace en módulo de mantenimiento)
       const card = btn.closest('.alerta-card');
       card.classList.add('confirmada');
       btn.textContent = '✓ Confirmada';
