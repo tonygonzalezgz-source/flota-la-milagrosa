@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <script>
+    (function() {
+      if (window.location === window.parent.location) {
+        const token = localStorage.getItem('authToken');
+        if (!token) { window.location.href = '/index.html'; }
+      }
+    })();
+  </script>
+
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>La Milagrosa — Reporte de Alistamientos</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg:#f4f4f6; --white:#fff; --border:#e5e5eb; --border2:#d0d0d8;
+      --txt:#111; --txt2:#555; --txt3:#888; --primary:#6366f1; --primary2:rgba(99,102,241,.12);
+      --red:#ef4444; --green:#22c55e; --yellow:#f59e0b;
+      --radius:12px; --radius-s:8px; --shadow:0 1px 4px rgba(0,0,0,.07);
+    }
+    body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+           background:var(--bg); color:var(--txt); font-size:14px; }
+
+    /* Navbar */
+    .navbar { background:var(--white); border-bottom:1px solid var(--border);
+      display:flex; align-items:center; gap:24px; padding:0 24px; height:58px; position:sticky; top:0; z-index:50; }
+    .navbar-logo { display:flex; align-items:center; gap:9px; text-decoration:none; color:var(--txt); font-weight:800; }
+    .logo-icon { width:30px; height:30px; display:flex; align-items:center; justify-content:center;
+      background:var(--primary2); border-radius:8px; }
+    .logo-icon svg { width:18px; height:18px; }
+    .navbar-nav { display:flex; gap:4px; }
+    .navbar-nav a { text-decoration:none; color:var(--txt2); font-weight:600; font-size:13px;
+      padding:8px 12px; border-radius:8px; }
+    .navbar-nav a:hover { background:var(--bg); }
+    .navbar-nav a.active { background:var(--primary2); color:var(--primary); }
+    .navbar-right { margin-left:auto; display:flex; align-items:center; gap:8px; }
+
+    .main { padding:24px; max-width:1200px; margin:0 auto; }
+
+    .page-header { display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-bottom:18px; }
+    .page-title { font-size:22px; font-weight:800; letter-spacing:-.4px; }
+    .page-sub { font-size:13px; color:var(--txt2); margin-top:2px; }
+    .header-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .live-pill { font-size:12px; color:var(--txt3); display:flex; align-items:center; gap:6px; }
+    .live-dot { width:8px; height:8px; border-radius:50%; background:var(--green); animation:pulse 1.6s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:.3;} }
+
+    input[type="date"] { padding:8px 11px; border:1px solid var(--border2); border-radius:var(--radius-s);
+      font-size:13px; font-family:inherit; background:var(--white); color:var(--txt); }
+    input[type="date"]:focus { outline:none; border-color:var(--primary); }
+
+    .btn-outline { display:inline-flex; align-items:center; gap:7px; padding:8px 14px;
+      border:1px solid var(--border2); border-radius:var(--radius-s); background:var(--white);
+      color:var(--txt); cursor:pointer; font-family:inherit; font-size:13px; font-weight:600; }
+    .btn-outline:hover { border-color:var(--primary); color:var(--primary); }
+    .btn-outline svg { width:14px; height:14px; }
+
+    .summary { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:22px; }
+    .sum-card { background:var(--white); border:1px solid var(--border); border-radius:var(--radius);
+      box-shadow:var(--shadow); padding:14px 18px; min-width:130px; flex:1; }
+    .sum-num { font-size:26px; font-weight:800; line-height:1; }
+    .sum-label { font-size:11px; color:var(--txt3); text-transform:uppercase; letter-spacing:.5px; margin-top:6px; font-weight:600; }
+    .sum-ok .sum-num { color:var(--green); }
+    .sum-pend .sum-num { color:var(--yellow); }
+    .sum-fallas .sum-num { color:var(--red); }
+
+    .table-wrap { background:var(--white); border:1px solid var(--border); border-radius:var(--radius);
+      box-shadow:var(--shadow); overflow:hidden; }
+    table { width:100%; border-collapse:collapse; }
+    thead th { text-align:left; font-size:11px; font-weight:700; color:var(--txt3);
+      text-transform:uppercase; letter-spacing:.4px; padding:11px 14px; border-bottom:1px solid var(--border); background:#fafafb; }
+    tbody td { padding:10px 14px; border-bottom:1px solid var(--border); vertical-align:middle; }
+    tbody tr:last-child td { border-bottom:none; }
+    .bus-num { font-weight:700; }
+    .bus-placa { color:var(--txt3); font-size:12px; }
+    .muted { color:var(--txt3); }
+
+    .estado-tag { font-size:11px; font-weight:700; padding:3px 10px; border-radius:999px; white-space:nowrap; }
+    .estado-tag.ok { background:#dcfce7; color:#16a34a; }
+    .estado-tag.pend { background:#fef9c3; color:#a16207; }
+    .fallas-badge { font-size:11px; font-weight:700; padding:3px 10px; border-radius:999px; white-space:nowrap; }
+    .fallas-badge.bad { background:#fee2e2; color:var(--red); }
+    .fallas-badge.ok { background:#dcfce7; color:#16a34a; }
+    .fallas-badge.na { background:#f1f1f4; color:var(--txt3); }
+
+    .row-actions { display:flex; gap:6px; justify-content:flex-end; }
+    .btn-sm { padding:5px 11px; border-radius:7px; font-size:12px; font-weight:600; border:1px solid var(--border2);
+      background:var(--white); color:var(--txt); cursor:pointer; font-family:inherit; white-space:nowrap; }
+    .btn-sm:hover { border-color:var(--primary); color:var(--primary); }
+    .btn-sm.warn { border-color:#fca5a5; color:var(--red); background:#fff5f5; }
+    .btn-sm.warn:hover { background:#fee2e2; }
+    .btn-sm:disabled { opacity:.45; cursor:default; }
+
+    @keyframes flashRow { 0%{ background:#fef9c3; } 100%{ background:transparent; } }
+    tr.flash td { animation:flashRow 2.2s ease-out; }
+
+    .empty-state { padding:40px; text-align:center; color:var(--txt3); }
+
+    /* Modal */
+    .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:200;
+      display:flex; align-items:flex-start; justify-content:center; padding:32px 16px; overflow-y:auto; }
+    .modal-overlay.hidden { display:none; }
+    .modal-box { background:var(--white); border-radius:var(--radius); width:100%; max-width:640px;
+      box-shadow:0 8px 40px rgba(0,0,0,.18); display:flex; flex-direction:column; }
+    .modal-header { padding:20px 24px 16px; border-bottom:1px solid var(--border);
+      display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+    .modal-title { font-size:17px; font-weight:800; }
+    .modal-subtitle { font-size:12px; color:var(--txt3); margin-top:3px; }
+    .modal-close { background:none; border:none; cursor:pointer; font-size:20px; color:var(--txt3); line-height:1; padding:2px 6px; }
+    .modal-body { padding:20px 24px; overflow-y:auto; max-height:64vh; }
+    .modal-footer { padding:16px 24px; border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:10px; }
+
+    .ro-row { display:flex; align-items:center; justify-content:space-between; gap:10px;
+      padding:8px 11px; border:1px solid var(--border); border-radius:var(--radius-s); background:#fafafb; margin-bottom:5px; font-size:13px; }
+    .ro-val { font-weight:700; }
+    .ro-val.mala { color:var(--red); }
+    .ro-val.otros { color:#a16207; }
+    .ro-nota { font-size:11px; color:var(--txt2); font-style:italic; margin-top:2px; }
+
+    .field-label { display:block; font-size:12px; font-weight:700; color:var(--txt2); margin:14px 0 6px; }
+    .field-label:first-child { margin-top:0; }
+    select.field, textarea.field { width:100%; padding:9px 11px; border:1px solid var(--border2);
+      border-radius:var(--radius-s); font-size:13px; font-family:inherit; background:var(--white); color:var(--txt); }
+    textarea.field { min-height:90px; resize:vertical; }
+    select.field:focus, textarea.field:focus { outline:none; border-color:var(--primary); }
+
+    .btn-cancel { padding:9px 18px; border:1px solid var(--border2); border-radius:var(--radius-s);
+      background:var(--white); color:var(--txt); cursor:pointer; font-family:inherit; font-size:13px; font-weight:600; }
+    .btn-save { padding:9px 18px; border:none; border-radius:var(--radius-s); background:var(--primary);
+      color:#fff; cursor:pointer; font-family:inherit; font-size:13px; font-weight:600; }
+    .btn-save:disabled { opacity:.55; cursor:default; }
+
+    .toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:#111; color:#fff;
+      padding:11px 20px; border-radius:10px; font-size:13px; box-shadow:0 6px 24px rgba(0,0,0,.2); z-index:1000; transition:opacity .2s, transform .2s; }
+    .toast.error { background:var(--red); }
+    .toast.hidden { opacity:0; transform:translateX(-50%) translateY(8px); pointer-events:none; }
+  </style>
+</head>
+<body>
+
+  <nav class="navbar">
+    <a class="navbar-logo" href="dashboard-admin.html">
+      <div class="logo-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="1" y="4" width="22" height="14" rx="3"/><path d="M1 10h22"/>
+          <circle cx="6.5" cy="19.5" r="1.5"/><circle cx="17.5" cy="19.5" r="1.5"/><path d="M6.5 18V14M17.5 18V14"/>
+        </svg>
+      </div>
+      <span>La Milagrosa</span>
+    </a>
+    <nav class="navbar-nav">
+      <a href="dashboard-admin.html">Resumen</a>
+      <a href="historial.html">Historial</a>
+      <a href="mantenimiento.html">Mantenimiento</a>
+      <a href="reporte-alistamiento.html" class="active">Alistamientos</a>
+      <a href="catalogo.html">Catálogo</a>
+      <a href="usuarios.html">Usuarios</a>
+    </nav>
+  </nav>
+
+  <div class="main">
+    <div class="page-header">
+      <div>
+        <div class="page-title">Reporte de Alistamientos</div>
+        <div class="page-sub">Estado diario de la flota y novedades reportadas por los despachadores.</div>
+      </div>
+      <div class="header-actions">
+        <span class="live-pill" id="livePill"></span>
+        <input type="date" id="fechaSel" />
+        <button class="btn-outline" onclick="cargar(true)" title="Actualizar">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+          Actualizar
+        </button>
+        <button class="btn-outline" onclick="exportarExcel()">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Excel
+        </button>
+        <button class="btn-outline" onclick="exportarPDF()">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          PDF
+        </button>
+      </div>
+    </div>
+
+    <div class="summary">
+      <div class="sum-card"><div class="sum-num" id="sumTotal">0</div><div class="sum-label">Vehículos</div></div>
+      <div class="sum-card sum-ok"><div class="sum-num" id="sumOk">0</div><div class="sum-label">Alistados</div></div>
+      <div class="sum-card sum-pend"><div class="sum-num" id="sumPend">0</div><div class="sum-label">Pendientes</div></div>
+      <div class="sum-card sum-fallas"><div class="sum-num" id="sumFallas">0</div><div class="sum-label">Con novedades</div></div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:120px">Unidad</th>
+            <th style="width:110px">Estado</th>
+            <th>Responsable</th>
+            <th style="width:130px">Lugar</th>
+            <th style="width:130px">Actualizado</th>
+            <th style="width:120px">Novedades</th>
+            <th style="width:230px"></th>
+          </tr>
+        </thead>
+        <tbody id="tbody">
+          <tr><td colspan="7"><div class="empty-state">Cargando reporte…</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="toast hidden" id="toast"></div>
+
+  <!-- Modal Detalle -->
+  <div class="modal-overlay hidden" id="modalDetalle">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div>
+          <div class="modal-title" id="detTitle">Detalle</div>
+          <div class="modal-subtitle" id="detSubtitle"></div>
+        </div>
+        <button class="modal-close" onclick="cerrarDetalle()">✕</button>
+      </div>
+      <div class="modal-body" id="detBody"></div>
+      <div class="modal-footer">
+        <button class="btn-cancel" onclick="cerrarDetalle()">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Programar mantenimiento -->
+  <div class="modal-overlay hidden" id="modalMant">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div>
+          <div class="modal-title" id="mantTitle">Programar mantenimiento</div>
+          <div class="modal-subtitle" id="mantSubtitle"></div>
+        </div>
+        <button class="modal-close" onclick="cerrarMant()">✕</button>
+      </div>
+      <div class="modal-body">
+        <label class="field-label" for="mantTipo">Tipo de novedad / componente</label>
+        <select class="field" id="mantTipo"></select>
+        <label class="field-label" for="mantObs">Observación</label>
+        <textarea class="field" id="mantObs" placeholder="Describe el mantenimiento requerido…"></textarea>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-cancel" onclick="cerrarMant()">Cancelar</button>
+        <button class="btn-save" id="mantGuardar" onclick="guardarMant()">Registrar</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const API = (window.location.port === '3030') ? 'http://localhost:8001' : window.location.origin;
+  const HOY = new Date().toISOString().slice(0, 10);
+
+  // Lista EXACTA del formulario oficial de alistamiento (espejo de despacho.html).
+  const ITEMS_ALIST = [
+    { campo:'retrovisores', label:'¿Retrovisores?' },
+    { campo:'luz_estacionaria', label:'¿Luz Estacionaria?' },
+    { campo:'luz_alta_baja', label:'¿Luz alta-baja?' },
+    { campo:'luz_reversa', label:'¿Luz de reversa?' },
+    { campo:'logo_empresa', label:'¿Logo de la empresa?' },
+    { campo:'nivel_liquido_freno', label:'¿Nivel de liquido de freno?' },
+    { campo:'nivel_deposito_hidraulico', label:'¿Nivel deposito Hidráulico?' },
+    { campo:'nivel_refrigerante', label:'¿Nivel del refrigerante?' },
+    { campo:'presion_llantas', label:'¿Presión de las llantas?' },
+    { campo:'pito', label:'¿Pito?' },
+    { campo:'stop', label:'¿Stop?' },
+    { campo:'llantas_general', label:'¿Llantas en general?' },
+    { campo:'direccionales', label:'¿Direccionales?' },
+    { campo:'frenos_general', label:'¿Frenos en general?' },
+    { campo:'nivel_liquido_aceite', label:'¿Nivel del liquido de aceite?' },
+    { campo:'ballestas', label:'¿Ballestas?' },
+    { campo:'fugas_aceite', label:'¿Fugas de aceite?' },
+    { campo:'anclaje_bateria', label:'¿Anclaje y estado de la batería?' },
+    { campo:'dispositivo_luminoso', label:'¿Dispositivo luminoso?' },
+    { campo:'equipo_prevencion', label:'¿Equipo de prevención?' },
+    { campo:'cinturon_seguridad', label:'¿Cinturón de seguridad?' },
+    { campo:'salidas_emergencia', label:'¿Salidas de emergencia?' },
+    { campo:'aseo_vehiculo', label:'¿Aseo del vehículo?' },
+    { campo:'fugas_diafragmas', label:'¿Fugas en los diafragmas?' },
+    { campo:'asientos_anclados', label:'¿Asientas mal anclados?' },
+    { campo:'limpia_brillas', label:'¿Limpia-brillas?' },
+    { campo:'condiciones_botiquin', label:'¿Condiciones de botiquín?' },
+    { campo:'observaciones_adicionales', label:'¿Observaciones adicionales?' },
+    { campo:'lavada_primeriada', label:'¿Lavada primeriada?' },
+    { campo:'primeriada', label:'¿Primeriada?' },
+  ];
+  const LABEL_BY_CAMPO = Object.fromEntries(ITEMS_ALIST.map(it => [it.campo, it.label]));
+
+  let buses = [];                 // filas del reporte
+  let tiposNovedad = [];          // catálogo para el modal de mantenimiento
+  let prevUpdated = {};           // bus_id -> updated_at del ciclo anterior (para el flash)
+  let pollTimer = null;
+  let tickTimer = null;
+  let lastLoad = null;            // Date del último refresco exitoso
+  let mantBusId = null;
+  let modalAbierto = false;       // pausa el polling mientras un modal está abierto
+
+  document.addEventListener('DOMContentLoaded', init);
+
+  async function init() {
+    document.getElementById('fechaSel').value = HOY;
+    document.getElementById('fechaSel').addEventListener('change', () => { reiniciarPolling(); cargar(true); });
+    try { tiposNovedad = await apiFetch('/api/tipos-novedad') || []; } catch { tiposNovedad = []; }
+    await cargar(true);
+    reiniciarPolling();
+    tickTimer = setInterval(actualizarLivePill, 1000);
+  }
+
+  async function apiFetch(path, opts = {}) {
+    const token = localStorage.getItem('authToken');
+    const res = await fetch(API + path, {
+      ...opts,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        ...(opts.headers || {}),
+      },
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Error del servidor');
+    return json;
+  }
+
+  function fechaSel() { return document.getElementById('fechaSel').value || HOY; }
+  function esHoy() { return fechaSel() === HOY; }
+
+  function reiniciarPolling() {
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = null;
+    // Solo auto-refresca cuando se mira el día de hoy.
+    if (esHoy()) pollTimer = setInterval(() => { if (!modalAbierto) cargar(false); }, 20000);
+  }
+
+  async function cargar(manual) {
+    try {
+      const data = await apiFetch(`/api/alistamiento/reporte?fecha=${fechaSel()}`);
+      const nuevos = data.buses || [];
+      // Detectar filas que cambiaron desde el último ciclo (para el flash).
+      const cambiados = new Set();
+      if (!manual) {
+        nuevos.forEach(b => {
+          if (prevUpdated[b.bus_id] !== (b.updated_at || null)) cambiados.add(b.bus_id);
+        });
+      }
+      buses = nuevos;
+      prevUpdated = {};
+      buses.forEach(b => { prevUpdated[b.bus_id] = b.updated_at || null; });
+      lastLoad = new Date();
+      render(cambiados);
+      actualizarLivePill();
+    } catch (e) {
+      if (manual) showToast(e.message, 'error');
+      document.getElementById('tbody').innerHTML =
+        `<tr><td colspan="7"><div class="empty-state">Error al cargar: ${escapeHtml(e.message)}</div></td></tr>`;
+    }
+  }
+
+  function contarFallas(b) {
+    return ITEMS_ALIST.reduce((n, it) =>
+      n + ((b[it.campo] === 'mala' || b[it.campo] === 'otros') ? 1 : 0), 0);
+  }
+
+  function render(cambiados = new Set()) {
+    let ok = 0, pend = 0, conFallas = 0;
+    buses.forEach(b => {
+      if (b.tiene_alistamiento) ok++; else pend++;
+      if (contarFallas(b) > 0) conFallas++;
+    });
+    document.getElementById('sumTotal').textContent  = buses.length;
+    document.getElementById('sumOk').textContent     = ok;
+    document.getElementById('sumPend').textContent   = pend;
+    document.getElementById('sumFallas').textContent = conFallas;
+
+    if (!buses.length) {
+      document.getElementById('tbody').innerHTML =
+        `<tr><td colspan="7"><div class="empty-state">No hay vehículos registrados.</div></td></tr>`;
+      return;
+    }
+
+    document.getElementById('tbody').innerHTML = buses.map(b => {
+      const fallas = contarFallas(b);
+      const hecho  = !!b.tiene_alistamiento;
+      const estado = hecho
+        ? `<span class="estado-tag ok">✓ Realizado</span>`
+        : `<span class="estado-tag pend">⏳ Pendiente</span>`;
+      let badge;
+      if (!hecho) badge = `<span class="fallas-badge na">—</span>`;
+      else if (fallas > 0) badge = `<span class="fallas-badge bad">${fallas} novedad${fallas === 1 ? '' : 'es'}</span>`;
+      else badge = `<span class="fallas-badge ok">Sin novedades</span>`;
+
+      const resp = hecho
+        ? `${escapeHtml(b.nombre_responsable || '—')}${b.despachador_nombre ? `<div class="bus-placa">Desp.: ${escapeHtml(b.despachador_nombre)}</div>` : ''}`
+        : `<span class="muted">—</span>`;
+
+      const acciones = `
+        <div class="row-actions">
+          <button class="btn-sm" onclick="verDetalle(${b.bus_id})" ${hecho ? '' : 'disabled'}>Ver detalle</button>
+          <button class="btn-sm warn" onclick="abrirMant(${b.bus_id})" ${fallas > 0 ? '' : 'disabled'}>Programar mant.</button>
+        </div>`;
+
+      return `<tr class="${cambiados.has(b.bus_id) ? 'flash' : ''}">
+        <td><span class="bus-num">${escapeHtml(String(b.numero))}</span>${b.placa ? `<div class="bus-placa">${escapeHtml(b.placa)}</div>` : ''}</td>
+        <td>${estado}</td>
+        <td>${resp}</td>
+        <td>${hecho ? escapeHtml(b.lugar || '—') : '<span class="muted">—</span>'}</td>
+        <td>${hecho ? formatoHora(b.updated_at) : '<span class="muted">—</span>'}</td>
+        <td>${badge}</td>
+        <td>${acciones}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  /* ─── Detalle de novedades ─── */
+  function listaFallas(b) {
+    const nov = parseNovedades(b.novedades);
+    return ITEMS_ALIST
+      .filter(it => b[it.campo] === 'mala' || b[it.campo] === 'otros')
+      .map(it => ({ label: it.label, estado: b[it.campo], nota: nov[it.campo] || '' }));
+  }
+
+  function verDetalle(busId) {
+    const b = buses.find(x => x.bus_id === busId);
+    if (!b) return;
+    document.getElementById('detTitle').textContent = `Bus ${b.numero}${b.placa ? ' · ' + b.placa : ''}`;
+    document.getElementById('detSubtitle').textContent =
+      `${formatoFecha(fechaSel())}${b.nombre_responsable ? ' — ' + b.nombre_responsable : ''}`;
+    const fallas = listaFallas(b);
+    let html = '';
+    if (!fallas.length) {
+      html = `<div class="empty-state">Sin novedades reportadas. Todos los ítems en buen estado.</div>`;
+    } else {
+      html = fallas.map(f => `
+        <div class="ro-row">
+          <div>
+            <div>${escapeHtml(f.label)}</div>
+            ${f.nota ? `<div class="ro-nota">↳ ${escapeHtml(f.nota)}</div>` : ''}
+          </div>
+          <span class="ro-val ${f.estado}">${f.estado === 'mala' ? 'Mala' : 'Otros'}</span>
+        </div>`).join('');
+    }
+    document.getElementById('detBody').innerHTML = html;
+    abrirOverlay('modalDetalle');
+  }
+  function cerrarDetalle() { cerrarOverlay('modalDetalle'); }
+
+  /* ─── Programar mantenimiento ─── */
+  function resumenFallas(b) {
+    return listaFallas(b)
+      .map(f => `- ${f.label} (${f.estado === 'mala' ? 'Mala' : 'Otros'})${f.nota ? ': ' + f.nota : ''}`)
+      .join('\n');
+  }
+
+  function abrirMant(busId) {
+    const b = buses.find(x => x.bus_id === busId);
+    if (!b) return;
+    mantBusId = busId;
+    document.getElementById('mantTitle').textContent = `Programar mantenimiento`;
+    document.getElementById('mantSubtitle').textContent = `Bus ${b.numero}${b.placa ? ' · ' + b.placa : ''} — ${formatoFecha(fechaSel())}`;
+    const sel = document.getElementById('mantTipo');
+    sel.innerHTML = tiposNovedad.length
+      ? tiposNovedad.map(t => `<option value="${t.id}">${escapeHtml(t.label)}</option>`).join('')
+      : `<option value="">(Sin catálogo de novedades)</option>`;
+    document.getElementById('mantObs').value =
+      `Novedades del alistamiento ${fechaSel()}:\n${resumenFallas(b)}`;
+    abrirOverlay('modalMant');
+  }
+  function cerrarMant() { mantBusId = null; cerrarOverlay('modalMant'); }
+
+  async function guardarMant() {
+    const tipoId = document.getElementById('mantTipo').value;
+    const obs    = document.getElementById('mantObs').value.trim();
+    if (!tipoId) { showToast('Selecciona un tipo de novedad', 'error'); return; }
+    const btn = document.getElementById('mantGuardar');
+    btn.disabled = true;
+    let usuarioId = null;
+    try { usuarioId = (JSON.parse(localStorage.getItem('currentUser') || 'null') || {}).id || null; } catch {}
+    try {
+      await apiFetch('/api/mantenimiento/registro', {
+        method: 'POST',
+        body: JSON.stringify({
+          bus_id: mantBusId,
+          tipo_novedad_id: parseInt(tipoId),
+          observacion: obs,
+          usuario_id: usuarioId,
+        }),
+      });
+      showToast('Mantenimiento registrado');
+      cerrarMant();
+    } catch (e) {
+      showToast(e.message, 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  /* ─── Exportación ─── */
+  function filasResumen() {
+    return buses.map(b => ({
+      Unidad: b.numero,
+      Placa: b.placa || '',
+      Grupo: b.grupo || '',
+      Estado: b.tiene_alistamiento ? 'Realizado' : 'Pendiente',
+      Responsable: b.nombre_responsable || '',
+      Despachador: b.despachador_nombre || '',
+      Lugar: b.lugar || '',
+      Novedades: b.tiene_alistamiento ? contarFallas(b) : '',
+    }));
+  }
+  function filasDetalle() {
+    const rows = [];
+    buses.forEach(b => {
+      listaFallas(b).forEach(f => {
+        rows.push({
+          Unidad: b.numero,
+          Placa: b.placa || '',
+          Item: f.label,
+          Estado: f.estado === 'mala' ? 'Mala' : 'Otros',
+          Novedad: f.nota || '',
+        });
+      });
+    });
+    return rows;
+  }
+
+  function exportarExcel() {
+    if (!buses.length) { showToast('No hay datos para exportar', 'error'); return; }
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filasResumen()), 'Resumen');
+    const det = filasDetalle();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(det.length ? det : [{ Unidad: '', Item: 'Sin novedades' }]), 'Novedades');
+    XLSX.writeFile(wb, `alistamiento_${fechaSel()}.xlsx`);
+  }
+
+  function exportarPDF() {
+    if (!buses.length) { showToast('No hay datos para exportar', 'error'); return; }
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    doc.setFontSize(15); doc.text('Reporte de Alistamientos — La Milagrosa', 14, 16);
+    doc.setFontSize(10); doc.setTextColor(110);
+    doc.text(formatoFecha(fechaSel()), 14, 22);
+
+    doc.autoTable({
+      startY: 28,
+      head: [['Unidad', 'Placa', 'Estado', 'Responsable', 'Lugar', 'Novedades']],
+      body: filasResumen().map(r => [r.Unidad, r.Placa, r.Estado, r.Responsable, r.Lugar, r.Novedades]),
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [99, 102, 241] },
+    });
+
+    const det = filasDetalle();
+    if (det.length) {
+      doc.setFontSize(12); doc.setTextColor(17);
+      doc.text('Novedades reportadas', 14, doc.lastAutoTable.finalY + 10);
+      doc.autoTable({
+        startY: doc.lastAutoTable.finalY + 14,
+        head: [['Unidad', 'Ítem', 'Estado', 'Novedad']],
+        body: det.map(r => [r.Unidad, r.Item, r.Estado, r.Novedad]),
+        styles: { fontSize: 8, cellWidth: 'wrap' },
+        columnStyles: { 3: { cellWidth: 70 } },
+        headStyles: { fillColor: [239, 68, 68] },
+      });
+    }
+    doc.save(`alistamiento_${fechaSel()}.pdf`);
+  }
+
+  /* ─── Helpers ─── */
+  function parseNovedades(raw) {
+    if (!raw) return {};
+    if (typeof raw === 'object') return raw;
+    try { return JSON.parse(raw) || {}; } catch { return {}; }
+  }
+  function formatoFecha(iso) {
+    const d = new Date(iso + 'T00:00:00');
+    return d.toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  }
+  function formatoHora(raw) {
+    if (!raw) return '<span class="muted">—</span>';
+    const d = new Date(raw);
+    if (isNaN(d)) return escapeHtml(String(raw));
+    return d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+  }
+  function actualizarLivePill() {
+    const el = document.getElementById('livePill');
+    if (!esHoy()) { el.innerHTML = `<span class="muted">Vista histórica</span>`; return; }
+    if (!lastLoad) { el.innerHTML = ''; return; }
+    const s = Math.max(0, Math.round((Date.now() - lastLoad.getTime()) / 1000));
+    const txt = s < 60 ? `hace ${s}s` : `hace ${Math.round(s / 60)} min`;
+    el.innerHTML = `<span class="live-dot"></span> En vivo · actualizado ${txt}`;
+  }
+  function abrirOverlay(id) { modalAbierto = true; document.getElementById(id).classList.remove('hidden'); }
+  function cerrarOverlay(id) { modalAbierto = false; document.getElementById(id).classList.add('hidden'); }
+  function escapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  let toastTimer;
+  function showToast(msg, type = '') {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = 'toast' + (type ? ' ' + type : '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.add('hidden'), 2400);
+  }
+</script>
+</body>
+</html>
