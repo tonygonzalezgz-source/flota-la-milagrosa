@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <script>
+    (function() {
+      if (window.location === window.parent.location) {
+        const token = localStorage.getItem('authToken');
+        if (!token) {
+          window.location.href = '/index.html';
+        }
+      }
+    })();
+  </script>
+
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>La Milagrosa — Alistamiento</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg:       #f4f4f6;
+      --white:    #ffffff;
+      --border:   #e5e5eb;
+      --border2:  #d0d0d8;
+      --txt:      #111;
+      --txt2:     #555;
+      --txt3:     #888;
+      --primary:  #6366f1;
+      --primary2: rgba(99,102,241,.12);
+      --red:      #ef4444;
+      --green:    #22c55e;
+      --yellow:   #f59e0b;
+      --radius:   12px;
+      --radius-s: 8px;
+      --shadow:   0 1px 4px rgba(0,0,0,.07);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--txt);
+      padding: 24px;
+      font-size: 14px;
+    }
+
+    .page-header {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      flex-wrap: wrap; gap: 12px; margin-bottom: 18px;
+    }
+    .page-title { font-size: 22px; font-weight: 800; letter-spacing: -.4px; }
+    .page-sub   { font-size: 13px; color: var(--txt2); margin-top: 2px; }
+    .fecha-pill {
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: var(--radius-s); padding: 8px 14px; font-weight: 600;
+      box-shadow: var(--shadow); font-size: 13px;
+    }
+
+    /* Resumen */
+    .summary { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 22px; }
+    .sum-card {
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: var(--radius); box-shadow: var(--shadow);
+      padding: 14px 18px; min-width: 130px;
+    }
+    .sum-num   { font-size: 26px; font-weight: 800; line-height: 1; }
+    .sum-label { font-size: 11px; color: var(--txt3); text-transform: uppercase;
+                 letter-spacing: .5px; margin-top: 6px; font-weight: 600; }
+    .sum-pend  .sum-num { color: var(--yellow); }
+    .sum-list  .sum-num { color: var(--green); }
+    .sum-total .sum-num { color: var(--txt2); }
+
+    /* Grupo */
+    .grupo-block { margin-bottom: 26px; }
+    .grupo-title {
+      font-size: 13px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .6px; color: var(--txt2); margin-bottom: 10px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .grupo-title .badge {
+      background: var(--primary2); color: var(--primary);
+      border-radius: 6px; padding: 2px 8px; font-size: 11px;
+    }
+
+    .table-wrap {
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      text-align: left; font-size: 11px; font-weight: 700; color: var(--txt3);
+      text-transform: uppercase; letter-spacing: .4px;
+      padding: 11px 14px; border-bottom: 1px solid var(--border); background: #fafafb;
+    }
+    tbody td { padding: 9px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    tbody tr:last-child td { border-bottom: none; }
+    .bus-num { font-weight: 700; }
+    .bus-placa { color: var(--txt3); font-size: 12px; }
+
+    /* Estado (solo lectura) */
+    .estado-tag {
+      display: inline-block; padding: 4px 11px; border-radius: 999px;
+      font-size: 12px; font-weight: 600; border: 1px solid var(--border2);
+    }
+    .estado-tag.trabajando { background: #dcfce7; color: #15803d; border-color: #bbf7d0; }
+    .estado-tag.taller     { background: #fef9c3; color: #b45309; border-color: #fde68a; }
+    .estado-tag.descanso   { background: #f3f4f6; color: var(--txt2); }
+
+    .empty-state { padding: 40px; text-align: center; color: var(--txt3); }
+
+    /* Botón alistamiento */
+    .btn-alist {
+      padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;
+      border: none; cursor: pointer; font-family: inherit; white-space: nowrap;
+      transition: opacity .15s;
+    }
+    .btn-alist:hover { opacity: .8; }
+    .btn-alist.completado { background: #dcfce7; color: #16a34a; }
+    .btn-alist.pendiente  { background: #fef9c3; color: #a16207; }
+
+    /* Modal */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 200;
+      display: flex; align-items: flex-start; justify-content: center;
+      padding: 32px 16px; overflow-y: auto;
+    }
+    .modal-overlay.hidden { display: none; }
+    .modal-box {
+      background: var(--white); border-radius: var(--radius); width: 100%; max-width: 700px;
+      box-shadow: 0 8px 40px rgba(0,0,0,.18); display: flex; flex-direction: column;
+    }
+    .modal-header {
+      padding: 20px 24px 16px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+    }
+    .modal-title    { font-size: 17px; font-weight: 800; }
+    .modal-subtitle { font-size: 12px; color: var(--txt3); margin-top: 3px; }
+    .modal-close {
+      background: none; border: none; cursor: pointer; font-size: 20px;
+      color: var(--txt3); line-height: 1; padding: 2px 6px; flex-shrink: 0;
+    }
+    .modal-body { padding: 20px 24px; overflow-y: auto; max-height: 62vh; }
+    .modal-footer {
+      padding: 16px 24px; border-top: 1px solid var(--border);
+      display: flex; justify-content: flex-end; gap: 10px;
+    }
+    .check-field { margin-bottom: 16px; }
+    .check-field-label { display: block; font-size: 12px; font-weight: 700; color: var(--txt2); margin-bottom: 6px; }
+    .check-select, .check-input {
+      width: 100%; padding: 9px 11px; border: 1px solid var(--border2);
+      border-radius: var(--radius-s); font-size: 13px; font-family: inherit;
+      background: var(--white); color: var(--txt);
+    }
+    .check-select:focus, .check-input:focus { outline: none; border-color: var(--primary); }
+    .check-grid { display: grid; grid-template-columns: 1fr; gap: 5px; }
+    .check-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-s);
+      background: #fafafb; gap: 8px;
+    }
+    .check-label { font-size: 13px; flex: 1; }
+    .check-radios { display: flex; gap: 10px; flex-shrink: 0; }
+    .check-radios label {
+      display: flex; align-items: center; gap: 3px; cursor: pointer;
+      font-size: 12px; font-weight: 600;
+    }
+    .check-radios input[type="radio"] { cursor: pointer; width: 13px; height: 13px; accent-color: var(--primary); }
+    .radio-buena { color: #16a34a; }
+    .radio-mala  { color: var(--red); }
+    .radio-otros { color: var(--txt3); }
+    .alist-na { color: var(--txt3); }
+    /* Caja de novedad por ítem (aparece al marcar "Otros") */
+    .check-novedad {
+      width: 100%; margin-top: 6px; padding: 7px 10px;
+      border: 1px solid var(--red); border-radius: var(--radius-s);
+      font-size: 12px; font-family: inherit; background: #fff5f5; color: var(--txt);
+    }
+    .check-novedad:focus { outline: none; border-color: var(--primary); }
+    .check-novedad.hidden { display: none; }
+    /* Historial */
+    .hist-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .btn-link {
+      background: none; border: none; color: var(--primary); cursor: pointer;
+      font-family: inherit; font-size: 12px; font-weight: 700; padding: 4px 0;
+    }
+    .btn-link:hover { text-decoration: underline; }
+    .hist-item {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      padding: 11px 13px; border: 1px solid var(--border); border-radius: var(--radius-s);
+      background: #fafafb; margin-bottom: 7px; cursor: pointer;
+    }
+    .hist-item:hover { border-color: var(--primary); background: #f5f3ff; }
+    .hist-fecha { font-weight: 700; font-size: 13px; }
+    .hist-meta { font-size: 11px; color: var(--txt3); margin-top: 2px; }
+    .hist-badge { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+    .hist-badge.ok  { background: #dcfce7; color: #16a34a; }
+    .hist-badge.bad { background: #fee2e2; color: var(--red); }
+    .ro-row {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      padding: 7px 11px; border: 1px solid var(--border); border-radius: var(--radius-s);
+      background: #fafafb; margin-bottom: 5px; font-size: 13px;
+    }
+    .ro-val { font-weight: 700; }
+    .ro-val.buena { color: #16a34a; }
+    .ro-val.mala  { color: var(--red); }
+    .ro-val.otros { color: #a16207; }
+    .ro-nota { font-size: 11px; color: var(--txt2); font-style: italic; }
+    .btn-cancel {
+      padding: 9px 18px; border: 1px solid var(--border2); border-radius: var(--radius-s);
+      background: var(--white); color: var(--txt); cursor: pointer;
+      font-family: inherit; font-size: 13px; font-weight: 600;
+    }
+    .btn-save {
+      padding: 9px 18px; border: none; border-radius: var(--radius-s);
+      background: var(--primary); color: #fff; cursor: pointer;
+      font-family: inherit; font-size: 13px; font-weight: 600;
+    }
+    .btn-save:disabled { opacity: .55; cursor: default; }
+
+    /* Toast */
+    .toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: #111; color: #fff; padding: 11px 20px; border-radius: 10px;
+      font-size: 13px; box-shadow: 0 6px 24px rgba(0,0,0,.2); z-index: 1000;
+      transition: opacity .2s, transform .2s;
+    }
+    .toast.error { background: var(--red); }
+    .toast.hidden { opacity: 0; transform: translateX(-50%) translateY(8px); pointer-events: none; }
+
+    /* ═══════════════════════════════════════════════
+       ░░  RESPONSIVE — MÓVIL / TABLET  ░░
+    ═══════════════════════════════════════════════ */
+    @media (max-width: 720px) {
+      /* padding-top deja libre el botón de menú flotante de la shell */
+      body { padding: 16px 14px; padding-top: 64px; }
+
+      .page-header { margin-bottom: 14px; }
+      .page-title  { font-size: 19px; }
+      .page-sub    { font-size: 12px; }
+      .fecha-pill  { font-size: 12px; padding: 7px 12px; }
+
+      .summary  { gap: 8px; margin-bottom: 16px; }
+      .sum-card { flex: 1; min-width: 0; padding: 12px; }
+      .sum-num  { font-size: 22px; }
+
+      .grupo-block { margin-bottom: 18px; }
+
+      /* Tabla → tarjetas apiladas (cada bus es una tarjeta) */
+      .table-wrap { background: transparent; border: none; box-shadow: none; overflow: visible; }
+      table, tbody, tr, td { display: block; width: 100%; }
+      thead { display: none; }
+
+      tbody tr {
+        background: var(--white); border: 1px solid var(--border);
+        border-radius: var(--radius); box-shadow: var(--shadow);
+        margin-bottom: 10px; overflow: hidden;
+      }
+
+      tbody td {
+        display: flex; align-items: center; gap: 12px;
+        padding: 10px 14px; border-bottom: 1px solid var(--border);
+      }
+      tbody tr td:last-child { border-bottom: none; }
+
+      tbody td::before {
+        content: attr(data-label);
+        flex-shrink: 0; width: 92px;
+        font-size: 11px; font-weight: 700; color: var(--txt3);
+        text-transform: uppercase; letter-spacing: .4px;
+      }
+
+      /* Celda Unidad como encabezado de la tarjeta */
+      tbody td.cell-unidad { display: block; background: #fafafb; padding: 11px 14px; }
+      tbody td.cell-unidad::before { display: none; }
+      .bus-num { font-size: 16px; }
+
+      tbody td.cell-alist { justify-content: flex-start; }
+
+      /* Modal casi a pantalla completa */
+      .modal-overlay { padding: 12px; }
+      .modal-body    { max-height: 70vh; }
+      .check-radios  { gap: 8px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="page-header">
+    <div>
+      <div class="page-title">Alistamiento de unidades</div>
+      <div class="page-sub">Selecciona tu unidad y registra el alistamiento del día. No modifica el despacho.</div>
+    </div>
+    <div class="fecha-pill" id="fechaPill">—</div>
+  </div>
+
+  <div class="summary">
+    <div class="sum-card sum-pend"><div class="sum-num" id="sumPend">0</div><div class="sum-label">Pendientes</div></div>
+    <div class="sum-card sum-list"><div class="sum-num" id="sumList">0</div><div class="sum-label">Alistados</div></div>
+    <div class="sum-card sum-total"><div class="sum-num" id="sumTotal">0</div><div class="sum-label">Unidades en ruta</div></div>
+  </div>
+
+  <div id="content">
+    <div class="empty-state">Cargando unidades…</div>
+  </div>
+
+  <div class="toast hidden" id="toast"></div>
+
+  <!-- Modal Alistamiento Vehicular -->
+  <div class="modal-overlay hidden" id="modalOverlay">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div>
+          <div class="modal-title" id="modalTitle">Alistamiento Vehicular</div>
+          <div class="modal-subtitle" id="modalSubtitle"></div>
+        </div>
+        <button class="modal-close" onclick="cerrarModal()">✕</button>
+      </div>
+      <div class="modal-body" id="modalBody"></div>
+      <div class="modal-footer">
+        <button class="btn-cancel" onclick="cerrarModal()">Cancelar</button>
+        <button class="btn-save" id="btnGuardar" onclick="guardarAlistamiento()">Guardar alistamiento</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const API   = (window.location.port === '3030') ? 'http://localhost:8001' : window.location.origin;
+  const HOY    = new Date().toISOString().slice(0, 10);
+  let buses    = [];        // {id, numero, placa, modelo, grupo, estado, conductor_id, tiene_alistamiento}
+
+  document.addEventListener('DOMContentLoaded', loadAll);
+
+  async function apiFetch(path, opts = {}) {
+    const token = localStorage.getItem('authToken');
+    const res = await fetch(API + path, {
+      ...opts,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        ...(opts.headers || {}),
+      },
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Error del servidor');
+    return json;
+  }
+
+  async function loadAll() {
+    document.getElementById('fechaPill').textContent = formatoFecha(HOY);
+    try {
+      const despacho = await apiFetch(`/api/despacho?fecha=${HOY}`);
+      buses = despacho.buses || [];
+      render();
+    } catch (e) {
+      document.getElementById('content').innerHTML =
+        `<div class="empty-state">Error al cargar: ${e.message}</div>`;
+    }
+  }
+
+  function render() {
+    renderSummary();
+    if (!buses.length) {
+      document.getElementById('content').innerHTML =
+        `<div class="table-wrap"><div class="empty-state">No hay unidades disponibles.</div></div>`;
+      return;
+    }
+    const grupos = [
+      { key: 'A', label: 'Buses' },
+      { key: 'B', label: 'Micros' },
+    ];
+    let html = '';
+    grupos.forEach(g => {
+      const lista = buses.filter(b => b.grupo === g.key);
+      if (!lista.length) return;
+      html += `
+        <div class="grupo-block">
+          <div class="grupo-title">${g.label} <span class="badge">${lista.length}</span></div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width:90px">Unidad</th>
+                  <th style="width:160px">Estado</th>
+                  <th style="width:130px">Alistamiento</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${lista.map(rowHtml).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>`;
+    });
+    document.getElementById('content').innerHTML = html;
+  }
+
+  const ESTADO_LABEL = { trabajando: 'Trabajando', taller: 'En taller', descanso: 'Descanso' };
+
+  function rowHtml(b) {
+    const estado = b.estado || 'trabajando';
+    return `<tr>
+      <td class="cell-unidad"><span class="bus-num">${b.numero}</span>${b.placa ? `<div class="bus-placa">${escapeHtml(b.placa)}</div>` : ''}</td>
+      <td data-label="Estado"><span class="estado-tag ${estado}">${ESTADO_LABEL[estado] || estado}</span></td>
+      <td class="cell-alist" data-label="Alistamiento" id="alist-cell-${b.id}">${alistCellHtml(b)}</td>
+    </tr>`;
+  }
+
+  // Solo los buses que trabajarán ese día requieren alistamiento.
+  function alistCellHtml(b) {
+    const estado = b.estado || 'trabajando';
+    if (estado !== 'trabajando') return `<span class="alist-na">—</span>`;
+    const ok = !!b.tiene_alistamiento;
+    return `<button id="alist-btn-${b.id}" class="btn-alist ${ok ? 'completado' : 'pendiente'}"
+                   onclick="abrirAlistamiento(${b.id})">${ok ? '✓ Ver' : '⚠ Registrar'}</button>`;
+  }
+
+  function renderSummary() {
+    let pend = 0, list = 0, total = 0;
+    buses.forEach(b => {
+      const estado = b.estado || 'trabajando';
+      if (estado !== 'trabajando') return;
+      total++;
+      if (b.tiene_alistamiento) list++; else pend++;
+    });
+    document.getElementById('sumPend').textContent  = pend;
+    document.getElementById('sumList').textContent  = list;
+    document.getElementById('sumTotal').textContent = total;
+  }
+
+  /* ─── Helpers ─── */
+  function formatoFecha(iso) {
+    const d = new Date(iso + 'T00:00:00');
+    return d.toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  }
+  function escapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  let toastTimer;
+  function showToast(msg, type = '') {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = 'toast' + (type ? ' ' + type : '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.add('hidden'), 2200);
+  }
+
+  /* ─── Alistamiento vehicular ─── */
+  // Lista EXACTA del formulario oficial (no modificar el texto de las preguntas).
+  const ITEMS_ALIST = [
+    { campo: 'retrovisores',             label: '¿Retrovisores?' },
+    { campo: 'luz_estacionaria',         label: '¿Luz Estacionaria?' },
+    { campo: 'luz_alta_baja',            label: '¿Luz alta-baja?' },
+    { campo: 'luz_reversa',              label: '¿Luz de reversa?' },
+    { campo: 'logo_empresa',             label: '¿Logo de la empresa?' },
+    { campo: 'nivel_liquido_freno',      label: '¿Nivel de liquido de freno?' },
+    { campo: 'nivel_deposito_hidraulico',label: '¿Nivel deposito Hidráulico?' },
+    { campo: 'nivel_refrigerante',       label: '¿Nivel del refrigerante?' },
+    { campo: 'presion_llantas',          label: '¿Presión de las llantas?' },
+    { campo: 'pito',                     label: '¿Pito?' },
+    { campo: 'stop',                     label: '¿Stop?' },
+    { campo: 'llantas_general',          label: '¿Llantas en general?' },
+    { campo: 'direccionales',            label: '¿Direccionales?' },
+    { campo: 'frenos_general',           label: '¿Frenos en general?' },
+    { campo: 'nivel_liquido_aceite',     label: '¿Nivel del liquido de aceite?' },
+    { campo: 'ballestas',                label: '¿Ballestas?' },
+    { campo: 'fugas_aceite',             label: '¿Fugas de aceite?' },
+    { campo: 'anclaje_bateria',          label: '¿Anclaje y estado de la batería?' },
+    { campo: 'dispositivo_luminoso',     label: '¿Dispositivo luminoso?' },
+    { campo: 'equipo_prevencion',        label: '¿Equipo de prevención?' },
+    { campo: 'cinturon_seguridad',       label: '¿Cinturón de seguridad?' },
+    { campo: 'salidas_emergencia',       label: '¿Salidas de emergencia?' },
+    { campo: 'aseo_vehiculo',            label: '¿Aseo del vehículo?' },
+    { campo: 'fugas_diafragmas',         label: '¿Fugas en los diafragmas?' },
+    { campo: 'asientos_anclados',        label: '¿Asientas mal anclados?' },
+    { campo: 'limpia_brillas',           label: '¿Limpia-brillas?' },
+    { campo: 'condiciones_botiquin',     label: '¿Condiciones de botiquín?' },
+    { campo: 'observaciones_adicionales',label: '¿Observaciones adicionales?' },
+    { campo: 'lavada_primeriada',        label: '¿Lavada primeriada?' },
+    { campo: 'primeriada',               label: '¿Primeriada?' },
+  ];
+
+  const LUGARES_ALIST = ['CLT', 'TERMINAL P CATALUÑA', 'TERMINAL PABLO (RENACER)'];
+
+  let alistBusId    = null;
+  let alistDatos    = {};
+  let alistNovedades = {};   // { campo: "texto novedad" }
+
+  // Convierte el campo novedades (JSON string o ya objeto) en {campo: texto}
+  function parseNovedades(raw) {
+    if (!raw) return {};
+    if (typeof raw === 'object') return raw;
+    try { return JSON.parse(raw) || {}; } catch { return {}; }
+  }
+
+  async function abrirAlistamiento(busId) {
+    alistBusId = busId;
+    const bus  = buses.find(b => b.id === busId);
+    document.getElementById('modalTitle').textContent    = `Alistamiento — Bus ${bus.numero}${bus.placa ? ' · ' + bus.placa : ''}`;
+    document.getElementById('modalSubtitle').textContent = formatoFecha(HOY);
+    document.getElementById('btnGuardar').disabled = true;
+    document.getElementById('modalBody').innerHTML = '<div style="padding:24px;text-align:center;color:var(--txt3)">Cargando…</div>';
+    document.getElementById('modalOverlay').classList.remove('hidden');
+
+    try {
+      alistDatos = await apiFetch(`/api/alistamiento?fecha=${HOY}&bus_id=${busId}`) || {};
+    } catch { alistDatos = {}; }
+    alistNovedades = parseNovedades(alistDatos.novedades);
+
+    renderModal();
+    document.getElementById('btnGuardar').disabled = false;
+  }
+
+  function setGuardarVisible(visible) {
+    document.getElementById('btnGuardar').style.display = visible ? '' : 'none';
+  }
+
+  function renderModal() {
+    setGuardarVisible(true);
+    const lugarSel = alistDatos.lugar || '';
+    let html = '';
+
+    // Barra superior con acceso al historial
+    html += `<div class="hist-bar">
+      <span class="check-field-label" style="margin:0">${formatoFecha(HOY)}</span>
+      <button type="button" class="btn-link" onclick="verHistorial()">📋 Ver historial</button>
+    </div>`;
+
+    // Lugar del alistamiento (al inicio)
+    html += `<div class="check-field">
+      <label class="check-field-label" for="alistLugar">¿Lugar del alistamiento?</label>
+      <select class="check-select" id="alistLugar">
+        <option value="">— Selecciona —</option>
+        ${LUGARES_ALIST.map(l => `<option value="${escapeHtml(l)}" ${lugarSel === l ? 'selected' : ''}>${escapeHtml(l)}</option>`).join('')}
+      </select>
+    </div>`;
+
+    // 30 ítems exactos del formulario
+    html += `<div class="check-grid">`;
+    ITEMS_ALIST.forEach((it, i) => {
+      const v = alistDatos[it.campo] || '';
+      const nota = alistNovedades[it.campo] || '';
+      const hideNota = v === 'otros' ? '' : ' hidden';
+      html += `<div class="check-field">
+        <span class="check-field-label">${i + 1}. ${escapeHtml(it.label)}</span>
+        <div class="check-radios">
+          <label class="radio-buena"><input type="radio" name="${it.campo}" value="buena" ${v==='buena'?'checked':''} onchange="toggleNovedad('${it.campo}')"> Buena</label>
+          <label class="radio-mala"><input type="radio" name="${it.campo}" value="mala" ${v==='mala'?'checked':''} onchange="toggleNovedad('${it.campo}')"> Mala</label>
+          <label class="radio-otros"><input type="radio" name="${it.campo}" value="otros" ${v==='otros'?'checked':''} onchange="toggleNovedad('${it.campo}')"> Otros</label>
+        </div>
+        <input type="text" class="check-novedad${hideNota}" id="nov-${it.campo}"
+               placeholder="Describe la novedad…" value="${escapeHtml(nota)}">
+      </div>`;
+    });
+    html += `</div>`;
+
+    // Nombre del responsable (al final, lo escribe el conductor)
+    html += `<div class="check-field">
+      <label class="check-field-label" for="alistNombre">Nombre de quien realiza el alistamiento</label>
+      <input type="text" class="check-input" id="alistNombre" placeholder="Nombre del conductor"
+             value="${escapeHtml(alistDatos.nombre_responsable || '')}">
+    </div>`;
+
+    document.getElementById('modalBody').innerHTML = html;
+  }
+
+  // Muestra/oculta la caja de novedad según el radio seleccionado
+  function toggleNovedad(campo) {
+    const sel = document.querySelector(`input[name="${campo}"]:checked`);
+    const box = document.getElementById(`nov-${campo}`);
+    if (!box) return;
+    if (sel && sel.value === 'otros') { box.classList.remove('hidden'); box.focus(); }
+    else box.classList.add('hidden');
+  }
+
+  async function guardarAlistamiento() {
+    const btn = document.getElementById('btnGuardar');
+    btn.disabled = true;
+    const bus = buses.find(b => b.id === alistBusId);
+    const novedades = {};
+    const body = {
+      fecha:             HOY,
+      bus_id:            alistBusId,
+      conductor_id:      bus ? (bus.conductor_id || null) : null,
+      lugar:             document.getElementById('alistLugar').value || null,
+      nombre_responsable: document.getElementById('alistNombre').value.trim() || null,
+    };
+    ITEMS_ALIST.forEach(it => {
+      const sel = document.querySelector(`input[name="${it.campo}"]:checked`);
+      body[it.campo] = sel ? sel.value : null;
+      if (sel && sel.value === 'otros') {
+        const txt = (document.getElementById(`nov-${it.campo}`).value || '').trim();
+        if (txt) novedades[it.campo] = txt;
+      }
+    });
+    body.novedades = novedades;
+    try {
+      await apiFetch('/api/alistamiento', { method: 'POST', body: JSON.stringify(body) });
+      if (bus) bus.tiene_alistamiento = 1;
+      const rowBtn = document.getElementById(`alist-btn-${alistBusId}`);
+      if (rowBtn) { rowBtn.textContent = '✓ Ver'; rowBtn.className = 'btn-alist completado'; }
+      renderSummary();
+      cerrarModal();
+      showToast(`Alistamiento de Bus ${bus?.numero} guardado`);
+    } catch(e) {
+      showToast(e.message, 'error');
+      btn.disabled = false;
+    }
+  }
+
+  /* ─── Historial de alistamientos ─── */
+  let alistHistorial = [];
+
+  function contarMalas(reg) {
+    return ITEMS_ALIST.reduce((n, it) =>
+      n + ((reg[it.campo] === 'mala' || reg[it.campo] === 'otros') ? 1 : 0), 0);
+  }
+
+  async function verHistorial() {
+    setGuardarVisible(false);
+    document.getElementById('modalBody').innerHTML =
+      '<div style="padding:24px;text-align:center;color:var(--txt3)">Cargando historial…</div>';
+    try {
+      alistHistorial = await apiFetch(`/api/alistamiento/historial?bus_id=${alistBusId}`) || [];
+    } catch { alistHistorial = []; }
+
+    let html = `<div class="hist-bar">
+      <span class="check-field-label" style="margin:0">Historial de alistamientos</span>
+      <button type="button" class="btn-link" onclick="renderModal()">← Volver</button>
+    </div>`;
+
+    if (!alistHistorial.length) {
+      html += `<div class="empty-state" style="padding:20px">Este bus aún no tiene alistamientos registrados.</div>`;
+    } else {
+      alistHistorial.forEach((reg, idx) => {
+        const malas = contarMalas(reg);
+        const badge = malas
+          ? `<span class="hist-badge bad">${malas} novedad${malas === 1 ? '' : 'es'}</span>`
+          : `<span class="hist-badge ok">Sin novedades</span>`;
+        const meta = [reg.lugar, reg.nombre_responsable].filter(Boolean).join(' · ') || '—';
+        html += `<div class="hist-item" onclick="verRegistroHist(${idx})">
+          <div>
+            <div class="hist-fecha">${formatoFecha(reg.fecha.slice(0,10))}</div>
+            <div class="hist-meta">${escapeHtml(meta)}</div>
+          </div>
+          ${badge}
+        </div>`;
+      });
+    }
+    document.getElementById('modalBody').innerHTML = html;
+  }
+
+  // Vista de solo lectura de un alistamiento pasado
+  function verRegistroHist(idx) {
+    const reg = alistHistorial[idx];
+    if (!reg) return;
+    const nov = parseNovedades(reg.novedades);
+    let html = `<div class="hist-bar">
+      <span class="check-field-label" style="margin:0">${formatoFecha(reg.fecha.slice(0,10))}</span>
+      <button type="button" class="btn-link" onclick="verHistorial()">← Volver al historial</button>
+    </div>`;
+    html += `<div class="ro-row"><span>Lugar</span><span class="ro-val">${escapeHtml(reg.lugar || '—')}</span></div>`;
+    html += `<div class="ro-row"><span>Responsable</span><span class="ro-val">${escapeHtml(reg.nombre_responsable || '—')}</span></div>`;
+    ITEMS_ALIST.forEach((it, i) => {
+      const v = reg[it.campo] || '—';
+      const nota = nov[it.campo];
+      html += `<div class="ro-row">
+        <div>
+          <div>${i + 1}. ${escapeHtml(it.label)}</div>
+          ${nota ? `<div class="ro-nota">↳ ${escapeHtml(nota)}</div>` : ''}
+        </div>
+        <span class="ro-val ${v}">${escapeHtml(v)}</span>
+      </div>`;
+    });
+    document.getElementById('modalBody').innerHTML = html;
+  }
+
+  function cerrarModal() {
+    document.getElementById('modalOverlay').classList.add('hidden');
+    setGuardarVisible(true);
+  }
+
+  // Cerrar modal al hacer clic fuera del box
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('modalOverlay').addEventListener('click', e => {
+      if (e.target === document.getElementById('modalOverlay')) cerrarModal();
+    });
+  });
+</script>
+</body>
+</html>
