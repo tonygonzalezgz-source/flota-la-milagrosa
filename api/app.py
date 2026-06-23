@@ -66,6 +66,20 @@ def require_auth(f):
     return decorated
 
 
+# ── Decorador de autorización por rol ──
+def require_role(*roles):
+    """Exige token válido (require_auth) y que el rol esté entre los permitidos."""
+    def wrapper(f):
+        @require_auth
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            if getattr(request, "jwt_user_rol", None) not in roles:
+                return jsonify({"error": "No autorizado para esta acción"}), 403
+            return f(*args, **kwargs)
+        return decorated
+    return wrapper
+
+
 # ── Servir frontend estático en producción ──
 @app.route("/", defaults={"path": ""})
 @app.route("/<path:path>")
@@ -743,7 +757,7 @@ def get_bus(bus_id):
 
 
 @app.route("/api/buses", methods=["POST"])
-@require_auth
+@require_role("Administrador")
 def create_bus():
     data = request.get_json(force=True)
     numero     = data.get("numero")
@@ -773,7 +787,7 @@ def create_bus():
 
 
 @app.route("/api/buses/<int:bus_id>", methods=["PUT"])
-@require_auth
+@require_role("Administrador")
 def update_bus(bus_id):
     data    = request.get_json(force=True)
     db      = get_db()
@@ -805,7 +819,7 @@ def update_bus(bus_id):
 
 
 @app.route("/api/buses/<int:bus_id>", methods=["DELETE"])
-@require_auth
+@require_role("Administrador")
 def delete_bus(bus_id):
     db = get_db()
     bus = db.execute("SELECT id FROM buses WHERE id = ?", (bus_id,)).fetchone()
@@ -850,7 +864,7 @@ def get_propietarios():
 
 
 @app.route("/api/propietarios", methods=["POST"])
-@require_auth
+@require_role("Administrador")
 def create_propietario():
     data = request.get_json(force=True)
     nombre = (data.get("nombre") or "").strip()
@@ -869,7 +883,7 @@ def create_propietario():
 
 
 @app.route("/api/propietarios/<int:prop_id>", methods=["PUT"])
-@require_auth
+@require_role("Administrador")
 def update_propietario(prop_id):
     data = request.get_json(force=True)
     db   = get_db()
@@ -888,7 +902,7 @@ def update_propietario(prop_id):
 
 
 @app.route("/api/propietarios/<int:prop_id>", methods=["DELETE"])
-@require_auth
+@require_role("Administrador")
 def delete_propietario(prop_id):
     db  = get_db()
     row = db.execute("SELECT id FROM propietarios WHERE id = ?", (prop_id,)).fetchone()
@@ -923,7 +937,7 @@ def get_tarifas():
 
 
 @app.route("/api/tarifas/<int:tarifa_id>", methods=["PUT"])
-@require_auth
+@require_role("Administrador")
 def update_tarifa(tarifa_id):
     data  = request.get_json(force=True)
     db    = get_db()
@@ -966,7 +980,7 @@ def get_rutas_all():
 
 
 @app.route("/api/rutas", methods=["POST"])
-@require_auth
+@require_role("Administrador")
 def create_ruta():
     data   = request.get_json(force=True)
     nombre = (data.get("nombre") or "").strip()
@@ -986,7 +1000,7 @@ def create_ruta():
 
 
 @app.route("/api/rutas/<int:ruta_id>", methods=["PUT"])
-@require_auth
+@require_role("Administrador")
 def update_ruta(ruta_id):
     data = request.get_json(force=True)
     db   = get_db()
@@ -1006,7 +1020,7 @@ def update_ruta(ruta_id):
 
 
 @app.route("/api/rutas/<int:ruta_id>", methods=["DELETE"])
-@require_auth
+@require_role("Administrador")
 def delete_ruta(ruta_id):
     db  = get_db()
     row = db.execute("SELECT id FROM rutas WHERE id = ?", (ruta_id,)).fetchone()
@@ -1045,7 +1059,7 @@ def get_conductores():
 
 
 @app.route("/api/conductores", methods=["POST"])
-@require_auth
+@require_role("Administrador")
 def create_conductor():
     data   = request.get_json(force=True)
     nombre = (data.get("nombre") or "").strip()
@@ -1064,7 +1078,7 @@ def create_conductor():
 
 
 @app.route("/api/conductores/<int:cid>", methods=["PUT"])
-@require_auth
+@require_role("Administrador")
 def update_conductor(cid):
     data = request.get_json(force=True)
     db   = get_db()
@@ -1083,7 +1097,7 @@ def update_conductor(cid):
 
 
 @app.route("/api/conductores/<int:cid>", methods=["DELETE"])
-@require_auth
+@require_role("Administrador")
 def delete_conductor(cid):
     db = get_db()
     db.execute("UPDATE conductores SET activo = 0 WHERE id = ?", (cid,))
@@ -1799,7 +1813,7 @@ def get_movilidad_fechas():
 # ──────────────────────────────────────────
 
 @app.route("/api/admin/usuarios", methods=["GET"])
-@require_auth
+@require_role("Administrador")
 def admin_get_usuarios():
     db = get_db()
     rows = db.execute(
@@ -1815,7 +1829,7 @@ def admin_get_usuarios():
 
 
 @app.route("/api/admin/usuarios", methods=["POST"])
-@require_auth
+@require_role("Administrador")
 def admin_create_usuario():
     data     = request.get_json(force=True)
     nombre   = (data.get("nombre") or "").strip()
@@ -1845,7 +1859,7 @@ def admin_create_usuario():
 
 
 @app.route("/api/admin/usuarios/<int:uid>", methods=["PUT"])
-@require_auth
+@require_role("Administrador")
 def admin_update_usuario(uid):
     data = request.get_json(force=True)
     db   = get_db()
@@ -1872,7 +1886,7 @@ def admin_update_usuario(uid):
 
 
 @app.route("/api/admin/usuarios/<int:uid>", methods=["DELETE"])
-@require_auth
+@require_role("Administrador")
 def admin_delete_usuario(uid):
     db = get_db()
     db.execute("UPDATE usuarios SET activo = 0 WHERE id = ?", (uid,))
@@ -1882,7 +1896,7 @@ def admin_delete_usuario(uid):
 
 
 @app.route("/api/admin/usuarios/<int:uid>/buses", methods=["GET"])
-@require_auth
+@require_role("Administrador")
 def admin_get_usuario_buses(uid):
     db = get_db()
     rows = db.execute(
@@ -1898,7 +1912,7 @@ def admin_get_usuario_buses(uid):
 
 
 @app.route("/api/admin/usuarios/<int:uid>/buses", methods=["PUT"])
-@require_auth
+@require_role("Administrador")
 def admin_set_usuario_buses(uid):
     data    = request.get_json(force=True)
     bus_ids = data.get("bus_ids", [])
@@ -1915,7 +1929,7 @@ def admin_set_usuario_buses(uid):
 
 
 @app.route("/api/admin/usuarios/<int:uid>/rutas", methods=["GET"])
-@require_auth
+@require_role("Administrador")
 def admin_get_usuario_rutas(uid):
     db   = get_db()
     rows = db.execute(
@@ -1931,7 +1945,7 @@ def admin_get_usuario_rutas(uid):
 
 
 @app.route("/api/admin/usuarios/<int:uid>/rutas", methods=["PUT"])
-@require_auth
+@require_role("Administrador")
 def admin_set_usuario_rutas(uid):
     data     = request.get_json(force=True)
     ruta_ids = data.get("ruta_ids", [])
