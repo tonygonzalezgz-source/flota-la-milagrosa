@@ -228,6 +228,62 @@
     }
     .toast.error { background: var(--red); }
     .toast.hidden { opacity: 0; transform: translateX(-50%) translateY(8px); pointer-events: none; }
+
+    /* ═══════════════════════════════════════════════
+       ░░  RESPONSIVE — MÓVIL / TABLET  ░░
+    ═══════════════════════════════════════════════ */
+    @media (max-width: 720px) {
+      /* padding-top deja libre el botón de menú flotante de la shell */
+      body { padding: 16px 14px; padding-top: 64px; }
+
+      .page-header { margin-bottom: 14px; }
+      .page-title  { font-size: 19px; }
+      .page-sub    { font-size: 12px; }
+      .fecha-pill  { font-size: 12px; padding: 7px 12px; }
+
+      .summary  { gap: 8px; margin-bottom: 16px; }
+      .sum-card { flex: 1; min-width: 0; padding: 12px; }
+      .sum-num  { font-size: 22px; }
+
+      .grupo-block { margin-bottom: 18px; }
+
+      /* Tabla → tarjetas apiladas (cada bus es una tarjeta) */
+      .table-wrap { background: transparent; border: none; box-shadow: none; overflow: visible; }
+      table, tbody, tr, td { display: block; width: 100%; }
+      thead { display: none; }
+
+      tbody tr {
+        background: var(--white); border: 1px solid var(--border);
+        border-radius: var(--radius); box-shadow: var(--shadow);
+        margin-bottom: 10px; overflow: hidden;
+      }
+
+      tbody td {
+        display: flex; align-items: center; gap: 12px;
+        padding: 10px 14px; border-bottom: 1px solid var(--border);
+      }
+      tbody tr td:last-child { border-bottom: none; }
+
+      tbody td::before {
+        content: attr(data-label);
+        flex-shrink: 0; width: 92px;
+        font-size: 11px; font-weight: 700; color: var(--txt3);
+        text-transform: uppercase; letter-spacing: .4px;
+      }
+      tbody td select { flex: 1; min-width: 0; }
+
+      /* Celda Unidad como encabezado de la tarjeta */
+      tbody td.cell-unidad { display: block; background: #fafafb; padding: 11px 14px; }
+      tbody td.cell-unidad::before { display: none; }
+      .bus-num { font-size: 16px; }
+
+      tbody td.cell-alist { justify-content: flex-start; }
+
+      /* Modal casi a pantalla completa */
+      .modal-overlay { padding: 12px; }
+      .modal-body    { max-height: 70vh; }
+      .check-radios  { gap: 8px; }
+    }
   </style>
 </head>
 <body>
@@ -360,17 +416,17 @@
       .join('');
     const estado = b.estado || 'trabajando';
     return `<tr>
-      <td><span class="bus-num">${b.numero}</span>${b.placa ? `<div class="bus-placa">${escapeHtml(b.placa)}</div>` : ''}</td>
-      <td><select onchange="onChange(${b.id}, 'ruta_id', this.value)">${rutaOpts}</select></td>
-      <td><select onchange="onChange(${b.id}, 'conductor_id', this.value)">${condOpts}</select></td>
-      <td>
+      <td class="cell-unidad"><span class="bus-num">${b.numero}</span>${b.placa ? `<div class="bus-placa">${escapeHtml(b.placa)}</div>` : ''}</td>
+      <td data-label="Ruta"><select onchange="onChange(${b.id}, 'ruta_id', this.value)">${rutaOpts}</select></td>
+      <td data-label="Conductor"><select onchange="onChange(${b.id}, 'conductor_id', this.value)">${condOpts}</select></td>
+      <td data-label="Estado">
         <select class="estado-sel ${estado}" onchange="onChange(${b.id}, 'estado', this.value)">
           <option value="trabajando" ${estado === 'trabajando' ? 'selected' : ''}>Trabajando</option>
           <option value="taller"     ${estado === 'taller'     ? 'selected' : ''}>En taller</option>
           <option value="descanso"   ${estado === 'descanso'   ? 'selected' : ''}>Descanso</option>
         </select>
       </td>
-      <td id="alist-cell-${b.id}">${alistCellHtml(b)}</td>
+      <td class="cell-alist" data-label="Alistamiento" id="alist-cell-${b.id}">${alistCellHtml(b)}</td>
     </tr>`;
   }
 
