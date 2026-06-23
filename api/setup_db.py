@@ -5,6 +5,8 @@ Ejecutar una sola vez: python api/setup_db.py
 import sqlite3
 import os
 
+from placas_reales import PLACAS_REALES
+
 BASE_DIR   = os.path.dirname(__file__)
 DB_PATH    = os.path.join(BASE_DIR, "flota.db")
 SCHEMA_PATH = os.path.join(BASE_DIR, "schema.sql")
@@ -35,7 +37,7 @@ def seed_buses(conn):
     # Grupo A: buses 1–63
     modelos_a = ["Mercedes Benz O500", "Volvo B9R", "Scania K310", "Hino AK", "Agrale MT17"]
     for n in range(1, 64):
-        placa  = f"ABC-{100 + n:03d}"
+        placa  = PLACAS_REALES.get(n, f"ABC-{100 + n:03d}")
         modelo = modelos_a[(n - 1) % len(modelos_a)]
         estado = "activo" if n % 7 != 0 else ("alerta" if n % 3 == 0 else "revision")
         buses.append((n, placa, modelo, "A", estado, (n * 1237) % 180000))
@@ -43,7 +45,7 @@ def seed_buses(conn):
     # Grupo B: buses 64–94
     modelos_b = ["Marcopolo Viale", "Busscar Urbanuss", "Caio Induscar"]
     for n in range(64, 95):
-        placa  = f"XYZ-{n:03d}"
+        placa  = PLACAS_REALES.get(n, f"XYZ-{n:03d}")
         modelo = modelos_b[(n - 64) % len(modelos_b)]
         estado = "activo" if n % 5 != 0 else "alerta"
         buses.append((n, placa, modelo, "B", estado, (n * 987) % 200000))
