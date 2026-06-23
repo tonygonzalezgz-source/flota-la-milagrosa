@@ -144,6 +144,50 @@
       padding:11px 20px; border-radius:10px; font-size:13px; box-shadow:0 6px 24px rgba(0,0,0,.2); z-index:1000; transition:opacity .2s, transform .2s; }
     .toast.error { background:var(--red); }
     .toast.hidden { opacity:0; transform:translateX(-50%) translateY(8px); pointer-events:none; }
+
+    /* ═══ RESPONSIVE — MÓVIL / TABLET ═══ */
+    @media (max-width: 720px) {
+      /* deja libre el botón de menú flotante de la shell */
+      .navbar { padding-left:60px; gap:12px; }
+      .navbar-nav { display:none; }
+      .main { padding:16px 14px; }
+
+      .page-header { margin-bottom:14px; }
+      .page-title  { font-size:19px; }
+      .header-actions { width:100%; }
+
+      .summary  { gap:8px; margin-bottom:16px; }
+      .sum-card { min-width:0; padding:12px; }
+      .sum-num  { font-size:22px; }
+
+      /* Tabla → tarjetas apiladas */
+      .table-wrap { background:transparent; border:none; box-shadow:none; overflow:visible; }
+      table, tbody, tr, td { display:block; width:100%; }
+      thead { display:none; }
+      tbody tr {
+        background:var(--white); border:1px solid var(--border);
+        border-radius:var(--radius); box-shadow:var(--shadow);
+        margin-bottom:10px; overflow:hidden;
+      }
+      tbody td {
+        display:flex; align-items:center; gap:12px;
+        padding:10px 14px; border-bottom:1px solid var(--border);
+      }
+      tbody tr td:last-child { border-bottom:none; }
+      tbody td::before {
+        content:attr(data-label); flex-shrink:0; width:96px;
+        font-size:11px; font-weight:700; color:var(--txt3);
+        text-transform:uppercase; letter-spacing:.4px;
+      }
+      tbody td.cell-unidad { display:block; background:#fafafb; padding:11px 14px; }
+      tbody td.cell-unidad::before { display:none; }
+      .bus-num { font-size:16px; }
+      tbody td.cell-acciones::before { display:none; }
+      tbody td.cell-acciones { padding-top:12px; }
+      .row-actions { justify-content:flex-start; flex-wrap:wrap; width:100%; }
+
+      .modal-overlay { padding:12px; }
+    }
   </style>
 </head>
 <body>
@@ -425,13 +469,13 @@
         </div>`;
 
       return `<tr class="${cambiados.has(b.bus_id) ? 'flash' : ''}">
-        <td><span class="bus-num">${escapeHtml(String(b.numero))}</span>${b.placa ? `<div class="bus-placa">${escapeHtml(b.placa)}</div>` : ''}</td>
-        <td>${estado}</td>
-        <td>${resp}</td>
-        <td>${hecho ? escapeHtml(b.lugar || '—') : '<span class="muted">—</span>'}</td>
-        <td>${hecho ? formatoHora(b.updated_at) : '<span class="muted">—</span>'}</td>
-        <td>${badge}</td>
-        <td>${acciones}</td>
+        <td class="cell-unidad"><span class="bus-num">${escapeHtml(String(b.numero))}</span>${b.placa ? `<div class="bus-placa">${escapeHtml(b.placa)}</div>` : ''}</td>
+        <td data-label="Estado">${estado}</td>
+        <td data-label="Responsable">${resp}</td>
+        <td data-label="Lugar">${hecho ? escapeHtml(b.lugar || '—') : '<span class="muted">—</span>'}</td>
+        <td data-label="Actualizado">${hecho ? formatoHora(b.updated_at) : '<span class="muted">—</span>'}</td>
+        <td data-label="Novedades">${badge}</td>
+        <td class="cell-acciones">${acciones}</td>
       </tr>`;
     }).join('');
   }
