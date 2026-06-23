@@ -86,6 +86,8 @@
     .estado-tag { font-size:11px; font-weight:700; padding:3px 10px; border-radius:999px; white-space:nowrap; }
     .estado-tag.ok { background:#dcfce7; color:#16a34a; }
     .estado-tag.pend { background:#fef9c3; color:#a16207; }
+    .estado-tag.taller { background:#e0e7ff; color:#4f46e5; }
+    .estado-tag.descanso { background:#f1f1f4; color:#64748b; }
     .fallas-badge { font-size:11px; font-weight:700; padding:3px 10px; border-radius:999px; white-space:nowrap; }
     .fallas-badge.bad { background:#fee2e2; color:var(--red); }
     .fallas-badge.ok { background:#dcfce7; color:#16a34a; }
@@ -372,10 +374,19 @@
       n + ((b[it.campo] === 'mala' || b[it.campo] === 'otros') ? 1 : 0), 0);
   }
 
+  function estadoTexto(b) {
+    if (b.tiene_alistamiento) return 'Realizado';
+    if (b.estado_despacho === 'taller') return 'En taller';
+    if (b.estado_despacho === 'descanso') return 'En descanso';
+    return 'Pendiente';
+  }
+
   function render(cambiados = new Set()) {
     let ok = 0, pend = 0, conFallas = 0;
     buses.forEach(b => {
-      if (b.tiene_alistamiento) ok++; else pend++;
+      const ed = b.estado_despacho;
+      if (b.tiene_alistamiento) ok++;
+      else if (ed !== 'taller' && ed !== 'descanso') pend++;
       if (contarFallas(b) > 0) conFallas++;
     });
     document.getElementById('sumTotal').textContent  = buses.length;
@@ -392,9 +403,12 @@
     document.getElementById('tbody').innerHTML = buses.map(b => {
       const fallas = contarFallas(b);
       const hecho  = !!b.tiene_alistamiento;
-      const estado = hecho
-        ? `<span class="estado-tag ok">✓ Realizado</span>`
-        : `<span class="estado-tag pend">⏳ Pendiente</span>`;
+      const ed     = b.estado_despacho;
+      let estado;
+      if (hecho)               estado = `<span class="estado-tag ok">✓ Realizado</span>`;
+      else if (ed === 'taller')   estado = `<span class="estado-tag taller">🔧 En taller</span>`;
+      else if (ed === 'descanso') estado = `<span class="estado-tag descanso">🛌 En descanso</span>`;
+      else                        estado = `<span class="estado-tag pend">⏳ Pendiente</span>`;
       let badge;
       if (!hecho) badge = `<span class="fallas-badge na">—</span>`;
       else if (fallas > 0) badge = `<span class="fallas-badge bad">${fallas} novedad${fallas === 1 ? '' : 'es'}</span>`;
@@ -511,7 +525,7 @@
       Unidad: b.numero,
       Placa: b.placa || '',
       Grupo: b.grupo || '',
-      Estado: b.tiene_alistamiento ? 'Realizado' : 'Pendiente',
+      Estado: estadoTexto(b),
       Responsable: b.nombre_responsable || '',
       Despachador: b.despachador_nombre || '',
       Lugar: b.lugar || '',

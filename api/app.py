@@ -1341,12 +1341,14 @@ def reporte_alistamiento():
                    a.lugar, a.nombre_responsable, a.novedades, a.updated_at,
                    {cols},
                    u.nombre AS despachador_nombre,
+                   d.estado AS estado_despacho,
                    CASE WHEN a.bus_id IS NOT NULL THEN 1 ELSE 0 END AS tiene_alistamiento
               FROM buses b
               LEFT JOIN alistamiento_vehicular a ON a.bus_id = b.id AND a.fecha = ?
+              LEFT JOIN despacho_diario d ON d.bus_id = b.id AND d.fecha = ?
               LEFT JOIN usuarios u ON u.id = a.despachador_id
              ORDER BY b.numero""",
-        (fecha,),
+        (fecha, fecha),
     ).fetchall()
     db.close()
     return jsonify({"fecha": fecha, "buses": [dict(r) for r in rows]})
