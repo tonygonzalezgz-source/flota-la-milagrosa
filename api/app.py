@@ -582,6 +582,18 @@ def migrate_db():
         except Exception:
             pass
 
+    # Sincroniza las placas reales de la flota (idempotente: solo actualiza
+    # las que difieren). Corrige las placas de relleno heredadas en producción.
+    try:
+        from placas_reales import PLACAS_REALES
+        actuales = {r["numero"]: r["placa"]
+                    for r in db.execute("SELECT numero, placa FROM buses").fetchall()}
+        for numero, placa_real in PLACAS_REALES.items():
+            if actuales.get(numero) != placa_real:
+                db.execute("UPDATE buses SET placa = ? WHERE numero = ?", (placa_real, numero))
+    except Exception as e:
+        print(f"[migrate_db] sync placas: {e}")
+
     db.commit()
     db.close()
 

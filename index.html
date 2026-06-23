@@ -754,27 +754,6 @@
       </div>
     </div>
 
-    <!-- Credential hints (clickable) -->
-    <div class="creds-hint">
-      <div class="creds-hint-title">Credenciales de demo — haz clic para autocompletar</div>
-      <div class="creds-row" onclick="fillCreds('admin','admin123')">
-        <span class="creds-badge badge-admin">Admin</span>
-        <span class="creds-text"><b>admin</b> / admin123 — acceso completo</span>
-      </div>
-      <div class="creds-row" onclick="fillCreds('analista','analista123')">
-        <span class="creds-badge badge-analista">Analista</span>
-        <span class="creds-text"><b>analista</b> / analista123 — solo Ingreso</span>
-      </div>
-      <div class="creds-row" onclick="fillCreds('tecnico','tecnico123')">
-        <span class="creds-badge badge-tecnico">Técnico</span>
-        <span class="creds-text"><b>tecnico</b> / tecnico123 — solo Mant.</span>
-      </div>
-      <div class="creds-row" onclick="fillCreds('propietario','prop123')">
-        <span class="creds-badge badge-propietario">Propietario</span>
-        <span class="creds-text"><b>propietario</b> / prop123 — solo Mis Buses</span>
-      </div>
-    </div>
-
     <!-- Submit -->
     <button class="lg-btn" id="lgBtn" onclick="doLogin()">
       <div class="spinner"></div>
@@ -1145,17 +1124,7 @@
   }
 
   /* ═══════════════════════════════════════
-     2. AUTOFILL CREDENTIALS (demo hint)
-  ═══════════════════════════════════════ */
-  function fillCreds(user, pass) {
-    document.getElementById('lgUser').value = user;
-    document.getElementById('lgPass').value = pass;
-    document.getElementById('lgError').classList.remove('show');
-    document.getElementById('lgUser').focus();
-  }
-
-  /* ═══════════════════════════════════════
-     3. LOGIN
+     2. LOGIN
   ═══════════════════════════════════════ */
   // Allow Enter key
   ['lgUser', 'lgPass'].forEach(id => {
