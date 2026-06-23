@@ -480,15 +480,39 @@
       html { height: 100%; overflow-y: scroll; overflow-x: hidden; -webkit-overflow-scrolling: touch; }
       body { min-height: 100%; overflow-y: visible; overflow-x: hidden; max-width: 100%; }
       .page { height: auto; min-height: 100vh; }
-      .topbar { padding: 8px 12px; gap: 8px; }
+      /* padding-left deja libre el botón de menú flotante de la shell */
+      .topbar { padding: 8px 12px 8px 60px; gap: 8px; }
       .topbar-title { font-size: 14px; }
       .topbar-sep { display: none; }
-      .bus-table { font-size: 12px; }
-      .bus-table th, .bus-table td { padding: 8px 10px; }
-      thead th { padding: 8px 10px; font-size: 10px; }
-      tbody td { padding: 8px 10px; font-size: 12px; }
       .stats-bar { flex-wrap: wrap; gap: 8px; padding: 10px 12px; }
       .content-area { padding: 12px; overflow: visible; flex: unset; }
+
+      /* Tabla → tarjetas apiladas (cada bus es una tarjeta) */
+      .table-area, .table-wrap { overflow: visible; }
+      .table-wrap { background: transparent; border: none; box-shadow: none; }
+      table, tbody, tr, td { display: block; width: 100%; min-width: 0; }
+      thead { display: none; }
+      tbody tr {
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.06);
+        margin-bottom: 10px; overflow: hidden;
+      }
+      tbody td {
+        display: flex; align-items: center; gap: 12px;
+        padding: 10px 14px; border-bottom: 1px solid var(--border);
+      }
+      tbody tr td:last-child { border-bottom: none; }
+      tbody td::before {
+        content: attr(data-label); flex-shrink: 0; width: 92px;
+        font-size: 11px; font-weight: 700; color: var(--txt-muted, #888);
+        text-transform: uppercase; letter-spacing: .4px;
+      }
+      tbody td input, tbody td select { flex: 1; min-width: 0; }
+      tbody td.cell-unidad { display: block; background: rgba(0,0,0,.02); padding: 11px 14px; }
+      tbody td.cell-unidad::before { display: none; }
+      .bus-num { font-size: 16px; }
+      tbody td.cell-acciones::before { display: none; }
+      tbody td.cell-acciones .btn-row-save { width: 100%; }
 
       /* Botones touch-friendly */
       button, .btn, .btn-confirm-imp, .btn-cancel-imp { min-height: 40px; }
@@ -775,18 +799,18 @@
 
       return `
       <tr id="row-${b.id}" class="${cls}">
-        <td>
+        <td class="cell-unidad">
           <div class="bus-num">${b.numero}</div>
           <div class="bus-placa">${b.placa || '—'}</div>
         </td>
-        <td><span class="badge-grupo badge-${(b.grupo || 'A').toLowerCase()}">${b.grupo}</span></td>
-        <td><input  class="num-input"   id="v-${b.id}"    type="number" min="0"
+        <td data-label="Grupo"><span class="badge-grupo badge-${(b.grupo || 'A').toLowerCase()}">${b.grupo}</span></td>
+        <td data-label="Vueltas"><input  class="num-input"   id="v-${b.id}"    type="number" min="0"
                     value="${rec ? rec.vueltas : ''}" placeholder="0"
                     oninput="markDirty(${b.id})" /></td>
-        <td><input  class="num-input"   id="p-${b.id}"    type="number" min="0"
+        <td data-label="Pasajeros"><input  class="num-input"   id="p-${b.id}"    type="number" min="0"
                     value="${rec ? rec.pasajeros : ''}" placeholder="0"
                     oninput="markDirty(${b.id})" /></td>
-        <td>
+        <td data-label="Ruta">
           ${rutasBus.length
             ? `<select class="ruta-select" id="ruta-${b.id}" onchange="markDirty(${b.id})">
                  <option value="">— Sin ruta —</option>
@@ -795,11 +819,11 @@
             : `<span class="no-rutas-tip">Sin rutas Gr.${b.grupo}</span>`
           }
         </td>
-        <td><input  class="nov-input"   id="n-${b.id}"    type="text"
+        <td data-label="Novedades"><input  class="nov-input"   id="n-${b.id}"    type="text"
                     value="${rec ? escHtml(rec.novedades) : ''}" placeholder="Sin novedades"
                     oninput="markDirty(${b.id})" /></td>
-        <td><span class="estado-badge ${est}" id="est-${b.id}">${estLabel}</span></td>
-        <td><button class="btn-row-save" id="brs-${b.id}" onclick="saveRow(${b.id})">Guardar</button></td>
+        <td data-label="Estado"><span class="estado-badge ${est}" id="est-${b.id}">${estLabel}</span></td>
+        <td class="cell-acciones"><button class="btn-row-save" id="brs-${b.id}" onclick="saveRow(${b.id})">Guardar</button></td>
       </tr>`;
     }).join('');
   }
