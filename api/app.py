@@ -1312,6 +1312,34 @@ def historial_alistamiento():
     return jsonify([dict(r) for r in rows])
 
 
+@app.route("/api/alistamiento/reporte", methods=["GET"])
+@require_auth
+def reporte_alistamiento():
+    """Reporte consolidado: todos los buses con su alistamiento del día (o sin él).
+    Pensado para el administrador; el despachador usa la vista de despacho."""
+    rol = getattr(request, "jwt_user_rol", None)
+    if rol == "Despachador":
+        return jsonify({"error": "No autorizado"}), 403
+
+    fecha = request.args.get("fecha", date.today().isoformat())
+    cols  = ", ".join(f"a.{c}" for c in _ALIST_CAMPOS)
+    db    = get_db()
+    rows  = db.execute(
+        f"""SELECT b.id AS bus_id, b.numero, b.placa, b.grupo,
+                   a.lugar, a.nombre_responsable, a.novedades, a.updated_at,
+                   {cols},
+                   u.nombre AS despachador_nombre,
+                   CASE WHEN a.bus_id IS NOT NULL THEN 1 ELSE 0 END AS tiene_alistamiento
+              FROM buses b
+              LEFT JOIN alistamiento_vehicular a ON a.bus_id = b.id AND a.fecha = ?
+              LEFT JOIN usuarios u ON u.id = a.despachador_id
+             ORDER BY b.numero""",
+        (fecha,),
+    ).fetchall()
+    db.close()
+    return jsonify({"fecha": fecha, "buses": [dict(r) for r in rows]})
+
+
 # ──────────────────────────────────────────
 #  Tipos de novedad
 # ──────────────────────────────────────────
