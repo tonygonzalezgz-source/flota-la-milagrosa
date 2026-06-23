@@ -103,6 +103,7 @@ ROLE_VIEWS = {
     "Propietario":    ["propietario"],
     "Operador":       ["operador"],
     "Despachador":    ["despacho"],
+    "Conductor":      ["alistamiento"],
 }
 
 
@@ -1172,6 +1173,9 @@ def get_despacho():
 @require_auth
 def batch_upsert_despacho():
     """Guardado instantáneo del despacho del día (upsert por bus/fecha)."""
+    if getattr(request, "jwt_user_rol", None) == "Conductor":
+        return jsonify({"error": "No autorizado"}), 403
+
     data       = request.get_json(force=True)
     fecha      = data.get("fecha")
     registros  = data.get("registros", [])
@@ -1344,7 +1348,7 @@ def reporte_alistamiento():
     """Reporte consolidado: todos los buses con su alistamiento del día (o sin él).
     Pensado para el administrador; el despachador usa la vista de despacho."""
     rol = getattr(request, "jwt_user_rol", None)
-    if rol == "Despachador":
+    if rol in ("Despachador", "Conductor"):
         return jsonify({"error": "No autorizado"}), 403
 
     fecha = request.args.get("fecha", date.today().isoformat())
