@@ -1125,6 +1125,7 @@
 
         const shell = document.getElementById('appShell');
         shell.style.display = 'flex';
+        document.getElementById('menuToggle').style.display = '';
         requestAnimationFrame(() => {
           requestAnimationFrame(() => shell.classList.add('visible'));
         });
@@ -1138,11 +1139,14 @@
           }
         }
 
-        // Validar token en background (sin bloquear UI)
+        // Validar token en background (sin bloquear UI).
+        // apiFetch NO lanza error con un 401, así que hay que revisar res.ok:
+        // si el token está vencido, limpiar y volver al login en vez de dejar
+        // al usuario atrapado con una sesión muerta.
         setTimeout(() => {
           apiFetch(`${API_URL}/me`)
+            .then(res => { if (!res.ok) throw new Error('sesion-vencida'); })
             .catch(() => {
-              // Token inválido, cerrar sesión
               localStorage.removeItem('authToken');
               localStorage.removeItem('currentUser');
               currentUser = null;
