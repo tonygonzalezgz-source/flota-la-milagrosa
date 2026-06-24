@@ -867,10 +867,17 @@
         <div class="sec-title">Conductores</div>
         <div class="sec-sub">Administra los conductores que los despachadores asignan a cada unidad</div>
       </div>
-      <button class="btn btn-primary" onclick="openModal('conductor')">
-        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        Nuevo Conductor
-      </button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-outline" onclick="document.getElementById('csvConductoresInput').click()" title="Importar conductores desde CSV exportado de Excel">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Importar CSV
+        </button>
+        <input type="file" id="csvConductoresInput" accept=".csv" style="display:none" onchange="importarConductoresCSV(this)">
+        <button class="btn btn-primary" onclick="openModal('conductor')">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Nuevo Conductor
+        </button>
+      </div>
     </div>
     <div class="table-wrap">
       <table>
@@ -1098,6 +1105,53 @@
         </button>
       </div></td>
     </tr>`).join('');
+  }
+
+  /* ─── IMPORTAR CONDUCTORES DESDE CSV ─── */
+  async function importarConductoresCSV(input) {
+    const file = input.files[0];
+    input.value = '';
+    if (!file) return;
+
+    const text = await file.text();
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+
+    // Detectar fila de encabezado: si la primera columna no es número, es cabecera
+    let startIdx = 0;
+    const firstCel = lines[0].split(',')[0].replace(/"/g,'').trim();
+    if (isNaN(firstCel) || firstCel === '') startIdx = 1;
+
+    const filas = [];
+    for (let i = startIdx; i < lines.length; i++) {
+      // Separa por coma respetando comillas
+      const cols = lines[i].match(/(".*?"|[^,]+|(?<=,)(?=,)|^(?=,))/g) || lines[i].split(',');
+      const cedula = (cols[0] || '').replace(/"/g,'').trim();
+      const nombre = (cols[1] || '').replace(/"/g,'').trim();
+      if (cedula && nombre) filas.push({ cedula, nombre });
+    }
+
+    if (!filas.length) { showToast('No se encontraron filas válidas en el CSV', 'error'); return; }
+
+    showToast(`Importando ${filas.length} conductores…`, '');
+    let ok = 0, errores = 0;
+    for (const f of filas) {
+      try {
+        await apiFetch('/api/conductores', {
+          method: 'POST',
+          body: JSON.stringify({ nombre: f.nombre, cedula: f.cedula })
+        });
+        ok++;
+      } catch { errores++; }
+    }
+
+    // Recargar lista
+    try {
+      conductores = await apiFetch('/api/conductores');
+    } catch {}
+    renderConductores();
+
+    if (errores === 0) showToast(`✓ ${ok} conductores importados correctamente`);
+    else showToast(`${ok} importados, ${errores} con error (duplicados o vacíos)`, 'warn');
   }
 
   /* ─── RENDER: DESPACHADORES ─── */
