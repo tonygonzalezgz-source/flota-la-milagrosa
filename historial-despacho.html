@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>La Milagrosa — Historial de Despacho</title>
+  <script>
+    (function(){
+      document.addEventListener('contextmenu',function(e){e.preventDefault();});
+      document.addEventListener('keydown',function(e){
+        if(e.key==='F12'){e.preventDefault();return false;}
+        if(e.ctrlKey&&e.shiftKey&&['I','J','C','U'].includes(e.key.toUpperCase())){e.preventDefault();return false;}
+        if(e.ctrlKey&&e.key.toUpperCase()==='U'){e.preventDefault();return false;}
+      });
+    })();
+  </script>
+  <script>
+    (function() {
+      if (window.location === window.parent.location) {
+        const token = localStorage.getItem('authToken');
+        if (!token) { window.location.href = '/index.html'; }
+      }
+    })();
+  </script>
+  <style>
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+    html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+    img, svg, video { max-width: 100%; }
+
+    :root {
+      --bg:      #0f0f11;
+      --surface: #17171a;
+      --card:    #1e1e22;
+      --border:  #2a2a30;
+      --accent:  #6366f1;
+      --green:   #22c55e;
+      --yellow:  #f59e0b;
+      --red:     #ef4444;
+      --txt:     #f0f0f3;
+      --txt2:    #aaaaaa;
+      --txt3:    #555;
+      --radius:  10px;
+    }
+
+    html, body {
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--txt);
+      overflow: hidden;
+    }
+
+    .page { display: flex; flex-direction: column; height: 100vh; }
+
+    /* ── TOP BAR ── */
+    .topbar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      height: 58px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-shrink: 0;
+    }
+
+    .topbar-title {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: -.3px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+    .topbar-title svg { color: var(--green); }
+
+    .topbar-sep { width: 1px; height: 22px; background: var(--border); flex-shrink: 0; }
+
+    .lbl { font-size: 11px; color: var(--txt2); font-weight: 600; letter-spacing: .4px; text-transform: uppercase; white-space: nowrap; }
+
+    .date-wrap { display: flex; align-items: center; gap: 8px; }
+
+    .date-input {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--txt);
+      font-size: 13px;
+      padding: 6px 12px;
+      cursor: pointer;
+      outline: none;
+      transition: border-color .15s;
+      color-scheme: dark;
+    }
+    .date-input:focus { border-color: var(--accent); }
+
+    .btn-buscar {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 16px;
+      background: var(--accent);
+      border: none;
+      border-radius: var(--radius);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s;
+      white-space: nowrap;
+    }
+    .btn-buscar:hover { background: #4f52d1; }
+
+    .btn-hoy {
+      padding: 6px 14px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--txt2);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .13s;
+      white-space: nowrap;
+    }
+    .btn-hoy:hover { border-color: var(--green); color: var(--green); }
+
+    .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+
+    .count-pill {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 4px 12px;
+      font-size: 12px;
+      color: var(--txt2);
+      white-space: nowrap;
+    }
+    .count-pill strong { color: var(--txt); }
+
+    /* ── TABLE AREA ── */
+    .table-area {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 24px 24px;
+    }
+
+    /* ── DATE GROUP ── */
+    .date-group { margin-bottom: 20px; }
+
+    .date-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .date-label {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--txt2);
+      letter-spacing: .2px;
+      white-space: nowrap;
+    }
+    .date-label span.hoy-tag {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 1px 7px;
+      border-radius: 10px;
+      background: rgba(34,197,94,.15);
+      color: var(--green);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .3px;
+    }
+
+    .date-line { flex: 1; height: 1px; background: var(--border); }
+
+    .date-count {
+      font-size: 11px;
+      color: var(--txt3);
+      white-space: nowrap;
+    }
+
+    /* ── TABLE ── */
+    .table-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    table { width: 100%; min-width: 600px; border-collapse: collapse; }
+
+    thead th {
+      background: var(--card);
+      padding: 9px 14px;
+      text-align: left;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      color: var(--txt3);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background .1s;
+    }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: rgba(255,255,255,.02); }
+
+    tbody td { padding: 9px 14px; font-size: 13px; vertical-align: middle; }
+
+    .bus-num {
+      font-size: 17px;
+      font-weight: 800;
+      letter-spacing: -1px;
+      color: var(--txt);
+    }
+    .bus-placa {
+      font-size: 11px;
+      color: var(--txt2);
+      margin-top: 1px;
+      font-family: monospace;
+      letter-spacing: .5px;
+    }
+
+    .badge-grupo {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 6px;
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .badge-a { background: rgba(99,102,241,.15); color: #818cf8; }
+    .badge-b { background: rgba(236,72,153,.12); color: #f472b6; }
+
+    .conductor-nombre { font-weight: 500; }
+    .conductor-vacio  { color: var(--txt3); font-style: italic; font-size: 12px; }
+
+    .ruta-nombre { font-size: 12px; color: var(--txt2); }
+    .ruta-vacia  { color: var(--txt3); font-style: italic; font-size: 12px; }
+
+    .estado-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 9px;
+      border-radius: 20px;
+      font-size: 10px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .estado-badge::before {
+      content: '';
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    .badge-trabajando { background: rgba(34,197,94,.12);  color: var(--green); }
+    .badge-taller     { background: rgba(245,158,11,.12); color: var(--yellow); }
+    .badge-descanso   { background: rgba(85,85,85,.15);   color: var(--txt3); }
+
+    /* ── EMPTY STATE ── */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--txt3);
+    }
+    .empty-state svg { opacity: .3; margin-bottom: 12px; }
+    .empty-state p   { font-size: 14px; }
+
+    /* ── LOADING ── */
+    .loading-state {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 60px 20px;
+      gap: 12px;
+      color: var(--txt2);
+    }
+    .spinner {
+      width: 20px; height: 20px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── RESPONSIVE MÓVIL ── */
+    @media (max-width: 720px) {
+      .topbar { flex-wrap: wrap; height: auto; padding: 10px 16px; gap: 8px; }
+      .topbar-sep { display: none; }
+      .date-wrap { flex-wrap: wrap; }
+      .topbar-right { margin-left: 0; width: 100%; }
+      .table-area { padding: 10px 12px 20px; }
+
+      /* Tarjetas en lugar de tabla */
+      table, thead, tbody, th, td, tr { display: block; }
+      thead { display: none; }
+
+      tbody tr {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        margin-bottom: 8px;
+        padding: 10px 12px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 16px;
+        align-items: center;
+      }
+      tbody tr:hover { background: var(--card); }
+
+      tbody td {
+        padding: 0;
+        font-size: 12px;
+        border: none;
+      }
+      tbody td::before {
+        content: attr(data-label);
+        font-size: 9px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .5px;
+        color: var(--txt3);
+        display: block;
+        margin-bottom: 2px;
+      }
+      .table-wrap { background: transparent; border: none; border-radius: 0; overflow: visible; }
+      table { min-width: unset; }
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div class="topbar-title">
+      <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
+        <rect x="3" y="4" width="18" height="18" rx="2"/>
+        <line x1="16" y1="2" x2="16" y2="6"/>
+        <line x1="8"  y1="2" x2="8"  y2="6"/>
+        <line x1="3"  y1="10" x2="21" y2="10"/>
+        <path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/>
+      </svg>
+      Historial de Despacho
+    </div>
+
+    <div class="topbar-sep"></div>
+
+    <div class="date-wrap">
+      <span class="lbl">Desde</span>
+      <input type="date" id="inputDesde" class="date-input" />
+    </div>
+
+    <div class="date-wrap">
+      <span class="lbl">Hasta</span>
+      <input type="date" id="inputHasta" class="date-input" />
+    </div>
+
+    <button class="btn-buscar" onclick="cargar()">
+      <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      Buscar
+    </button>
+
+    <button class="btn-hoy" onclick="irHoy()">Hoy</button>
+
+    <div class="topbar-right">
+      <div class="count-pill" id="totalPill">— registros</div>
+    </div>
+  </div>
+
+  <!-- CONTENT -->
+  <div class="table-area" id="tableArea">
+    <div class="loading-state">
+      <div class="spinner"></div>
+      <span>Cargando historial…</span>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const API = (window.location === window.parent.location)
+    ? 'https://wed-flota-la-milagrosa.vercel.app'
+    : '';
+
+  function token() { return localStorage.getItem('authToken') || ''; }
+
+  async function apiFetch(path) {
+    const r = await fetch(API + path, {
+      headers: { Authorization: 'Bearer ' + token() }
+    });
+    if (r.status === 401) { window.location.href = '/index.html'; return null; }
+    if (!r.ok) throw new Error(await r.text());
+    return r.json();
+  }
+
+  // ── Fechas por defecto: últimos 30 días hasta hoy ──
+  function hoy() {
+    return new Date().toISOString().slice(0, 10);
+  }
+  function hace30() {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return d.toISOString().slice(0, 10);
+  }
+
+  const inputDesde = document.getElementById('inputDesde');
+  const inputHasta = document.getElementById('inputHasta');
+  inputDesde.value  = hace30();
+  inputHasta.value  = hoy();
+  inputDesde.max    = hoy();
+  inputHasta.max    = hoy();
+
+  // Sincronizar límites al cambiar
+  inputDesde.addEventListener('change', () => {
+    if (inputHasta.value < inputDesde.value) inputHasta.value = inputDesde.value;
+  });
+  inputHasta.addEventListener('change', () => {
+    if (inputDesde.value > inputHasta.value) inputDesde.value = inputHasta.value;
+  });
+
+  function irHoy() {
+    inputDesde.value = hoy();
+    inputHasta.value = hoy();
+    cargar();
+  }
+
+  // ── Formatear fecha para encabezado ──
+  function formatFecha(iso) {
+    const [y, m, d] = iso.split('-');
+    const date = new Date(+y, +m - 1, +d);
+    const dias  = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+    const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+                   'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+    return `${dias[date.getDay()]} ${+d} de ${meses[+m - 1]} de ${y}`;
+  }
+
+  // ── Badge de estado ──
+  function estadoBadge(estado) {
+    if (!estado) return `<span class="estado-badge badge-descanso">Sin datos</span>`;
+    const map = {
+      trabajando: ['badge-trabajando', 'Trabajando'],
+      taller:     ['badge-taller',     'En taller'],
+      descanso:   ['badge-descanso',   'Descanso'],
+    };
+    const [cls, lbl] = map[estado] || ['badge-descanso', estado];
+    return `<span class="estado-badge ${cls}">${lbl}</span>`;
+  }
+
+  // ── Renderizar ──
+  function render(rows) {
+    const area  = document.getElementById('tableArea');
+    const pill  = document.getElementById('totalPill');
+    const todayStr = hoy();
+
+    if (!rows || rows.length === 0) {
+      pill.innerHTML = '<strong>0</strong> registros';
+      area.innerHTML = `
+        <div class="empty-state">
+          <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+            <rect x="3" y="4" width="18" height="18" rx="2"/>
+            <line x1="16" y1="2" x2="16" y2="6"/>
+            <line x1="8" y1="2" x2="8" y2="6"/>
+            <line x1="3" y1="10" x2="21" y2="10"/>
+          </svg>
+          <p>No hay registros de despacho en este período.</p>
+        </div>`;
+      return;
+    }
+
+    pill.innerHTML = `<strong>${rows.length}</strong> registros`;
+
+    // Agrupar por fecha
+    const grupos = {};
+    for (const r of rows) {
+      if (!grupos[r.fecha]) grupos[r.fecha] = [];
+      grupos[r.fecha].push(r);
+    }
+
+    const fechasOrdenadas = Object.keys(grupos).sort((a, b) => b.localeCompare(a));
+
+    let html = '';
+    for (const fecha of fechasOrdenadas) {
+      const buses  = grupos[fecha];
+      const esHoy  = fecha === todayStr;
+      const label  = formatFecha(fecha);
+
+      html += `
+        <div class="date-group">
+          <div class="date-header">
+            <span class="date-label">
+              ${label}${esHoy ? '<span class="hoy-tag">HOY</span>' : ''}
+            </span>
+            <div class="date-line"></div>
+            <span class="date-count">${buses.length} ${buses.length === 1 ? 'unidad' : 'unidades'}</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Unidad</th>
+                  <th>Tipo</th>
+                  <th>Conductor</th>
+                  <th>Ruta</th>
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody>`;
+
+      for (const b of buses) {
+        const grupoCls = b.grupo === 'A' ? 'badge-a' : 'badge-b';
+        const grupoLbl = b.grupo === 'A' ? 'Bus' : 'Micro';
+        html += `
+                <tr>
+                  <td data-label="Unidad">
+                    <div class="bus-num">${b.numero}</div>
+                    <div class="bus-placa">${b.placa || '—'}</div>
+                  </td>
+                  <td data-label="Tipo">
+                    <span class="badge-grupo ${grupoCls}">${grupoLbl}</span>
+                  </td>
+                  <td data-label="Conductor">
+                    ${b.conductor_nombre
+                      ? `<span class="conductor-nombre">${b.conductor_nombre}</span>`
+                      : `<span class="conductor-vacio">Sin asignar</span>`}
+                  </td>
+                  <td data-label="Ruta">
+                    ${b.ruta_nombre
+                      ? `<span class="ruta-nombre">${b.ruta_nombre}</span>`
+                      : `<span class="ruta-vacia">Sin ruta</span>`}
+                  </td>
+                  <td data-label="Estado">${estadoBadge(b.estado)}</td>
+                </tr>`;
+      }
+
+      html += `
+              </tbody>
+            </table>
+          </div>
+        </div>`;
+    }
+
+    area.innerHTML = html;
+  }
+
+  // ── Cargar datos ──
+  async function cargar() {
+    const area  = document.getElementById('tableArea');
+    const desde = inputDesde.value;
+    const hasta = inputHasta.value;
+
+    area.innerHTML = `
+      <div class="loading-state">
+        <div class="spinner"></div>
+        <span>Cargando historial…</span>
+      </div>`;
+
+    try {
+      const rows = await apiFetch(`/api/despacho/historial?desde=${desde}&hasta=${hasta}`);
+      if (rows !== null) render(rows);
+    } catch (e) {
+      area.innerHTML = `
+        <div class="empty-state">
+          <p>Error al cargar el historial. Intente nuevamente.</p>
+        </div>`;
+    }
+  }
+
+  // Carga inicial
+  cargar();
+</script>
+</body>
+</html>

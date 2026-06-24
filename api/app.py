@@ -97,12 +97,12 @@ SCHEMA_PATH  = os.path.join(os.path.dirname(__file__), "schema.sql")
 PG_SCHEMA    = os.path.join(os.path.dirname(__file__), "supabase_schema.sql")
 
 ROLE_VIEWS = {
-    "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho"],
+    "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho", "historial-despacho"],
     "Analista":       ["historial"],
     "Técnico Mant.":  ["mant"],
     "Propietario":    ["propietario"],
     "Operador":       ["operador"],
-    "Despachador":    ["despacho"],
+    "Despachador":    ["despacho", "historial-despacho"],
     "Conductor":      ["alistamiento"],
 }
 
@@ -1167,6 +1167,49 @@ def get_despacho():
 
     db.close()
     return jsonify({"fecha": fecha, "rutas": rutas, "buses": [dict(b) for b in buses]})
+
+
+@app.route("/api/despacho/historial", methods=["GET"])
+@require_auth
+def get_historial_despacho():
+    """Historial de despacho por rango de fechas con nombres de conductor y bus."""
+    desde = request.args.get("desde", (date.today() - timedelta(days=30)).isoformat())
+    hasta = request.args.get("hasta", date.today().isoformat())
+    db    = get_db()
+    rol   = getattr(request, "jwt_user_rol", None)
+    uid   = getattr(request, "jwt_user_id", None)
+
+    base_query = """
+        SELECT d.fecha, b.numero, b.placa, b.modelo, b.grupo,
+               c.nombre AS conductor_nombre,
+               r.nombre AS ruta_nombre,
+               d.estado, d.cerrado
+        FROM despacho_diario d
+        JOIN buses b ON b.id = d.bus_id
+        LEFT JOIN conductores c ON c.id = d.conductor_id
+        LEFT JOIN rutas r ON r.id = d.ruta_id
+        WHERE d.fecha BETWEEN ? AND ?
+    """
+
+    if rol == "Despachador":
+        rutas_d = _rutas_de_despachador(db, uid)
+        grupos  = list({r["grupo"] for r in rutas_d})
+        if not grupos:
+            db.close()
+            return jsonify([])
+        ph   = ",".join("?" * len(grupos))
+        rows = db.execute(
+            base_query + f" AND b.grupo IN ({ph}) ORDER BY d.fecha DESC, b.numero",
+            [desde, hasta] + grupos,
+        ).fetchall()
+    else:
+        rows = db.execute(
+            base_query + " ORDER BY d.fecha DESC, b.numero",
+            (desde, hasta),
+        ).fetchall()
+
+    db.close()
+    return jsonify([dict(r) for r in rows])
 
 
 @app.route("/api/despacho/batch", methods=["PUT"])
