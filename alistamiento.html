@@ -325,7 +325,8 @@
 
 <script>
   const API   = (window.location.port === '3030') ? 'http://localhost:8001' : window.location.origin;
-  const HOY    = new Date().toISOString().slice(0, 10);
+  // Fecha de hoy en Colombia (el día cambia a la medianoche local, no por UTC).
+  const HOY    = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date());
   let buses    = [];        // {id, numero, placa, modelo, grupo, estado, conductor_id, tiene_alistamiento}
 
   document.addEventListener('DOMContentLoaded', loadAll);

@@ -1252,6 +1252,12 @@ _ALIST_CAMPOS = [
 _VALS_OK = ('buena', 'mala', 'otros')
 
 
+def hoy_bogota():
+    """Fecha actual en Colombia (UTC-5, sin horario de verano) como 'YYYY-MM-DD'.
+    El día cambia a la medianoche local: 23:59 es el último momento editable."""
+    return (datetime.utcnow() - timedelta(hours=5)).date().isoformat()
+
+
 @app.route("/api/alistamiento", methods=["GET"])
 @require_auth
 def get_alistamiento():
@@ -1290,6 +1296,15 @@ def upsert_alistamiento():
 
     if not fecha or not bus_id:
         return jsonify({"error": "fecha y bus_id son requeridos"}), 400
+
+    # Bloqueo por día: solo el Administrador puede modificar alistamientos de días
+    # que no sean el de hoy. Despachadores y conductores únicamente registran el día
+    # en curso; a la medianoche (Colombia) el día anterior queda congelado.
+    rol = getattr(request, "jwt_user_rol", None)
+    if rol != "Administrador" and fecha != hoy_bogota():
+        return jsonify({
+            "error": "Este alistamiento ya está cerrado. Solo el administrador puede modificar días anteriores."
+        }), 403
 
     vals = [data.get(c) if data.get(c) in _VALS_OK else None for c in _ALIST_CAMPOS]
     cols_sql    = ", ".join(_ALIST_CAMPOS)
