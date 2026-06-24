@@ -1172,23 +1172,31 @@ def get_despacho():
 @app.route("/api/despacho/historial", methods=["GET"])
 @require_auth
 def get_historial_despacho():
-    """Historial de despacho por rango de fechas con nombres de conductor y bus."""
+    """Historial de despacho: todos los vehículos por cada fecha con actividad."""
     desde = request.args.get("desde", (date.today() - timedelta(days=30)).isoformat())
     hasta = request.args.get("hasta", date.today().isoformat())
     db    = get_db()
     rol   = getattr(request, "jwt_user_rol", None)
     uid   = getattr(request, "jwt_user_id", None)
 
+    # Para cada fecha que tenga al menos un registro, muestra TODOS los vehículos
+    # (LEFT JOIN desde buses hacia despacho_diario para no omitir los no editados)
     base_query = """
-        SELECT d.fecha, b.numero, b.placa, b.modelo, b.grupo,
+        WITH fechas AS (
+            SELECT DISTINCT fecha FROM despacho_diario
+            WHERE fecha BETWEEN ? AND ?{grupo_filter}
+        )
+        SELECT f.fecha, b.numero, b.placa, b.modelo, b.grupo,
                c.nombre AS conductor_nombre,
                r.nombre AS ruta_nombre,
                d.estado, d.cerrado
-        FROM despacho_diario d
-        JOIN buses b ON b.id = d.bus_id
+        FROM fechas f
+        CROSS JOIN buses b
+        LEFT JOIN despacho_diario d ON d.bus_id = b.id AND d.fecha = f.fecha
         LEFT JOIN conductores c ON c.id = d.conductor_id
         LEFT JOIN rutas r ON r.id = d.ruta_id
-        WHERE d.fecha BETWEEN ? AND ?
+        {bus_filter}
+        ORDER BY f.fecha DESC, b.numero
     """
 
     if rol == "Despachador":
@@ -1197,16 +1205,15 @@ def get_historial_despacho():
         if not grupos:
             db.close()
             return jsonify([])
-        ph   = ",".join("?" * len(grupos))
-        rows = db.execute(
-            base_query + f" AND b.grupo IN ({ph}) ORDER BY d.fecha DESC, b.numero",
-            [desde, hasta] + grupos,
-        ).fetchall()
+        ph = ",".join("?" * len(grupos))
+        query = base_query.format(
+            grupo_filter=f" AND bus_id IN (SELECT id FROM buses WHERE grupo IN ({ph}))",
+            bus_filter=f"WHERE b.grupo IN ({ph})",
+        )
+        rows = db.execute(query, [desde, hasta] + grupos + grupos).fetchall()
     else:
-        rows = db.execute(
-            base_query + " ORDER BY d.fecha DESC, b.numero",
-            (desde, hasta),
-        ).fetchall()
+        query = base_query.format(grupo_filter="", bus_filter="")
+        rows  = db.execute(query, (desde, hasta)).fetchall()
 
     db.close()
     return jsonify([dict(r) for r in rows])
