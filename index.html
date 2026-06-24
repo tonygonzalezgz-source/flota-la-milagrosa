@@ -898,6 +898,23 @@
         </button>
       </li>
 
+      <!-- Historial Despacho -->
+      <li>
+        <button class="sb-link" id="nav-historial-despacho" data-view="historial-despacho" data-src="historial-despacho.html" onclick="switchView(this)">
+          <span class="sb-icon">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
+              <rect x="3" y="4" width="18" height="18" rx="2"/>
+              <line x1="16" y1="2" x2="16" y2="6"/>
+              <line x1="8" y1="2" x2="8" y2="6"/>
+              <line x1="3" y1="10" x2="21" y2="10"/>
+              <path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/>
+            </svg>
+          </span>
+          Historial Despacho
+          <span class="sb-access" style="background:rgba(34,197,94,.1);color:#16a34a;" data-roles="admin,despachador">Desp.</span>
+        </button>
+      </li>
+
       <!-- Alistamiento -->
       <li>
         <button class="sb-link" id="nav-alistamiento" data-view="alistamiento" data-src="alistamiento.html" onclick="switchView(this)">
@@ -1042,6 +1059,16 @@
               onload="iframeLoaded('despacho')"></iframe>
     </div>
 
+    <!-- HISTORIAL DESPACHO VIEW -->
+    <div class="view-panel" id="view-historial-despacho">
+      <div class="iframe-loader" id="loader-historial-despacho">
+        <div class="loader-ring"></div>
+        <div class="loader-text">Cargando Historial Despacho…</div>
+      </div>
+      <iframe id="iframe-historial-despacho" src="" title="Historial de Despacho"
+              onload="iframeLoaded('historial-despacho')"></iframe>
+    </div>
+
     <!-- ALISTAMIENTO VIEW -->
     <div class="view-panel" id="view-alistamiento">
       <div class="iframe-loader" id="loader-alistamiento">
@@ -1091,8 +1118,9 @@
     mant:        { label: 'Mantenimiento',       icon: 'wrench',   src: 'mantenimiento.html' },
     propietario: { label: 'Mis Buses',           icon: 'bus',      src: 'dashboard-propietario.html' },
     catalogo:    { label: 'Catálogo',            icon: 'book',     src: 'catalogo.html' },
-    despacho:    { label: 'Despacho',            icon: 'check',    src: 'despacho.html' },
-    alistamiento:{ label: 'Alistamiento',        icon: 'check',    src: 'alistamiento.html' },
+    despacho:             { label: 'Despacho',            icon: 'check',    src: 'despacho.html' },
+    'historial-despacho': { label: 'Historial Despacho',  icon: 'calendar', src: 'historial-despacho.html' },
+    alistamiento:         { label: 'Alistamiento',        icon: 'check',    src: 'alistamiento.html' },
   };
 
   let currentUser = null;
@@ -1304,8 +1332,9 @@
     catalogo:    { bg: '#1a1e2e', svg: `<svg width="18" height="18" fill="none" stroke="#6366f1" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>` },
     historial:   { bg: '#0a1e2e', svg: `<svg width="18" height="18" fill="none" stroke="#14b8a6" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>` },
     operador:    { bg: '#1a1a2e', svg: `<svg width="18" height="18" fill="none" stroke="#a855f7" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>` },
-    despacho:    { bg: '#0a2a1a', svg: `<svg width="18" height="18" fill="none" stroke="#22c55e" stroke-width="2" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>` },
-    alistamiento:{ bg: '#0a2a1a', svg: `<svg width="18" height="18" fill="none" stroke="#22c55e" stroke-width="2" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>` },
+    despacho:             { bg: '#0a2a1a', svg: `<svg width="18" height="18" fill="none" stroke="#22c55e" stroke-width="2" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>` },
+    'historial-despacho': { bg: '#0a2a1a', svg: `<svg width="18" height="18" fill="none" stroke="#22c55e" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h.01M12 14h.01M8 18h.01"/></svg>` },
+    alistamiento:         { bg: '#0a2a1a', svg: `<svg width="18" height="18" fill="none" stroke="#22c55e" stroke-width="2" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>` },
   };
 
   function buildWelcomeCards() {
@@ -1410,7 +1439,7 @@
     loadedViews.clear();
 
     // Reset iframes
-    ['dashboard', 'analista', 'historial', 'mant', 'propietario'].forEach(id => {
+    ['dashboard', 'analista', 'historial', 'mant', 'propietario', 'historial-despacho'].forEach(id => {
       const iframe = document.getElementById(`iframe-${id}`);
       iframe.src = '';
       const loader = document.getElementById(`loader-${id}`);
