@@ -868,6 +868,10 @@
         <div class="sec-sub">Administra los conductores que los despachadores asignan a cada unidad</div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-outline" style="color:#ef4444;border-color:#ef4444" onclick="eliminarTodosConductores()" title="Eliminar todos los conductores activos">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+          Eliminar todos
+        </button>
         <button class="btn btn-outline" onclick="document.getElementById('csvConductoresInput').click()" title="Importar conductores desde CSV exportado de Excel">
           <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
           Importar CSV
@@ -1105,6 +1109,22 @@
         </button>
       </div></td>
     </tr>`).join('');
+  }
+
+  /* ─── ELIMINAR TODOS LOS CONDUCTORES ─── */
+  async function eliminarTodosConductores() {
+    if (!conductores.length) { showToast('No hay conductores para eliminar', ''); return; }
+    if (!confirm(`¿Eliminar los ${conductores.length} conductores activos? Esta acción no se puede deshacer.`)) return;
+    let ok = 0, errores = 0;
+    for (const c of [...conductores]) {
+      try {
+        await apiFetch(`/api/conductores/${c.id}`, { method: 'DELETE' });
+        ok++;
+      } catch { errores++; }
+    }
+    conductores = [];
+    renderConductores();
+    showToast(errores === 0 ? `${ok} conductores eliminados` : `${ok} eliminados, ${errores} con error`);
   }
 
   /* ─── IMPORTAR CONDUCTORES DESDE CSV ─── */
