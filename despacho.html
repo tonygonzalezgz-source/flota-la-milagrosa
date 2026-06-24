@@ -687,8 +687,9 @@
     // Nombre del responsable (al final, lo escribe el conductor)
     html += `<div class="check-field">
       <label class="check-field-label" for="alistNombre">Nombre de quien realiza el alistamiento</label>
-      <input type="text" class="check-input" id="alistNombre" placeholder="Nombre del conductor"
-             value="${escapeHtml(alistDatos.nombre_responsable || '')}">
+      <input type="text" class="check-input" id="alistNombre"
+             value="Supervisor de Alistamiento de Flota" readonly
+             style="background:#f4f4f6;color:#888;cursor:default;">
     </div>`;
 
     document.getElementById('modalBody').innerHTML = html;
