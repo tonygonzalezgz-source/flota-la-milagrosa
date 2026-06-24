@@ -28,8 +28,8 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
-    html, body { max-width: 100%; overflow-x: hidden; }
+    html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; max-width: 100%; }
+    body { max-width: 100%; overflow-x: clip; }
     img, svg, video { max-width: 100%; }
 
     body {
@@ -917,8 +917,10 @@
     }
 
     @media (max-width: 768px) {
-      html { height: 100%; overflow-y: scroll; overflow-x: hidden; -webkit-overflow-scrolling: touch; }
-      body { min-height: 100%; overflow-y: visible; }
+      /* Deja que el contenido fluya y el iframe haga el scroll (igual que despacho).
+         NO fijar height:100% en html — crea un segundo scroll que rompe el táctil. */
+      html { height: auto; overflow: visible; -webkit-overflow-scrolling: touch; }
+      body { height: auto; min-height: auto; overflow-x: clip; overflow-y: visible; }
       .buses-grid { grid-template-columns: 1fr; }
       .navbar {
         padding: 0 14px 0 60px;   /* deja libre el botón de menú flotante de la shell */
@@ -940,15 +942,74 @@
       .navbar-nav a { padding: 6px 12px; font-size: 13px; white-space: nowrap; flex-shrink: 0; }
       .page-header { padding: 14px; flex-direction: column; align-items: flex-start; gap: 10px; }
       .buses-container { padding: 12px 14px; }
-      .kpi-row { grid-template-columns: 1fr; gap: 12px; }
-      .hist-kpi-row { grid-template-columns: 1fr; }
+      .kpi-row { grid-template-columns: 1fr 1fr; gap: 10px; }
+      .hist-kpi-row { grid-template-columns: 1fr 1fr; }
       .hist-bus-block-totals { flex-wrap: wrap; gap: 12px; margin-left: 0; }
       .bottom-grid { grid-template-columns: 1fr; }
+
+      /* Main sin padding lateral excesivo */
+      .main { padding: 14px; gap: 16px; }
+      .header-row { flex-direction: column; align-items: flex-start; gap: 10px; }
+      .header-actions { width: 100%; }
+      .bus-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 720px) {
+      /* Tablas → tarjetas apiladas */
+      .hist-table thead, .mov-table thead { display: none; }
+      .hist-table, .hist-table tbody, .hist-table tr, .hist-table td,
+      .mov-table,  .mov-table tbody,  .mov-table tr,  .mov-table td  { display: block; width: 100%; }
+
+      .hist-table tr, .mov-table tr {
+        background: #fff;
+        border: 1px solid #eee;
+        border-radius: 10px;
+        margin-bottom: 8px;
+        overflow: hidden;
+        box-shadow: 0 1px 3px rgba(0,0,0,.04);
+      }
+      .hist-table td, .mov-table td {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 14px;
+        border-bottom: 1px solid #f5f5f5;
+        font-size: 13px;
+        box-sizing: border-box;
+      }
+      .hist-table tr td:last-child, .mov-table tr td:last-child { border-bottom: none; }
+
+      .hist-table td::before, .mov-table td::before {
+        content: attr(data-label);
+        flex-shrink: 0;
+        width: 82px;
+        font-size: 10px;
+        font-weight: 700;
+        color: #aaa;
+        text-transform: uppercase;
+        letter-spacing: .4px;
+      }
+      /* Primera celda: encabezado de tarjeta, sin label */
+      .hist-table td.cell-bus, .hist-table td.cell-fecha,
+      .mov-table td.cell-fecha {
+        background: #fafafa;
+        font-weight: 600;
+      }
+      .hist-table td.cell-bus::before, .hist-table td.cell-fecha::before,
+      .mov-table td.cell-fecha::before { display: none; }
+
+      /* Novedades: texto completo sin truncar */
+      .hist-novedad { max-width: unset; white-space: normal; }
+
+      /* El modal también mejora en mobile */
+      .modal-body { padding: 14px; }
     }
 
     @media (max-width: 480px) {
       .navbar { padding: 0 10px 0 56px; }
       .navbar-nav a { padding: 6px 10px; font-size: 12px; }
+      .kpi-row { grid-template-columns: 1fr; }
+      .hist-kpi-row { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -1591,11 +1652,11 @@
                  </tr></thead>
                  <tbody>${movRows.map(r => `
                    <tr>
-                     <td style="font-weight:600;color:#333;white-space:nowrap">${fmtFecha(r.fecha)}</td>
-                     <td style="font-weight:700;font-size:14px">${r.vueltas||0}</td>
-                     <td style="font-weight:700;font-size:15px;color:#111">${(r.pasajeros||0).toLocaleString()}</td>
-                     <td style="color:#555">${(r.km_recorridos||0).toFixed(1)}</td>
-                     <td style="font-weight:700;color:#16a34a;font-size:13px">${fmtCOP((r.pasajeros||0) * tarifaPromedio)}</td>
+                     <td class="cell-fecha" style="font-weight:600;color:#333;white-space:nowrap">${fmtFecha(r.fecha)}</td>
+                     <td data-label="Vueltas" style="font-weight:700;font-size:14px">${r.vueltas||0}</td>
+                     <td data-label="Pasajeros" style="font-weight:700;font-size:15px;color:#111">${(r.pasajeros||0).toLocaleString()}</td>
+                     <td data-label="Km" style="color:#555">${(r.km_recorridos||0).toFixed(1)}</td>
+                     <td data-label="Tarifa Est." style="font-weight:700;color:#16a34a;font-size:13px">${fmtCOP((r.pasajeros||0) * tarifaPromedio)}</td>
                    </tr>`).join('')}
                  </tbody>
                </table>
@@ -1767,11 +1828,11 @@
         </div>`; return;
       }
       const filas = rows.map(r => `<tr>
-        <td><div class="hist-bus-num">${r.numero}</div><div class="hist-bus-sub">${r.placa||'—'} · Grupo ${r.grupo}</div></td>
-        <td><div class="hist-val">${(r.vueltas||0).toLocaleString()}</div><div class="hist-val-sub">vueltas</div></td>
-        <td><div class="hist-val">${(r.pasajeros||0).toLocaleString()}</div><div class="hist-val-sub">pasajeros</div></td>
-        <td><div class="hist-val">${(r.km_recorridos||0).toFixed(1)}</div><div class="hist-val-sub">km</div></td>
-        <td><div class="hist-novedad" title="${escH(r.novedades)}">${r.novedades||'<span style="color:#ccc">Sin novedades</span>'}</div></td>
+        <td class="cell-bus"><div class="hist-bus-num">${r.numero}</div><div class="hist-bus-sub">${r.placa||'—'} · Grupo ${r.grupo}</div></td>
+        <td data-label="Vueltas"><div class="hist-val">${(r.vueltas||0).toLocaleString()}</div></td>
+        <td data-label="Pasajeros"><div class="hist-val">${(r.pasajeros||0).toLocaleString()}</div></td>
+        <td data-label="Km"><div class="hist-val">${(r.km_recorridos||0).toFixed(1)}</div></td>
+        <td data-label="Novedades"><div class="hist-novedad" title="${escH(r.novedades)}">${r.novedades||'<span style="color:#ccc">Sin novedades</span>'}</div></td>
       </tr>`).join('');
       div.innerHTML = `
         <div class="hist-table-wrap">
@@ -1806,11 +1867,11 @@
         const totP  = bus.dias.reduce((s,d)=>s+(d.pasajeros||0),0);
         const totKm = bus.dias.reduce((s,d)=>s+(d.km_recorridos||0),0);
         const filas = bus.dias.map(d => `<tr>
-          <td style="color:#888;font-size:12px">${fmtFecha(d.fecha)}</td>
-          <td><div class="hist-val" style="font-size:14px">${d.vueltas||0}</div></td>
-          <td><div class="hist-val" style="font-size:14px">${(d.pasajeros||0).toLocaleString()}</div></td>
-          <td><div class="hist-val" style="font-size:14px">${(d.km_recorridos||0).toFixed(1)}</div></td>
-          <td><div class="hist-novedad" title="${escH(d.novedades)}">${d.novedades||'<span style="color:#ccc">—</span>'}</div></td>
+          <td class="cell-fecha" style="color:#888;font-size:12px">${fmtFecha(d.fecha)}</td>
+          <td data-label="Vueltas"><div class="hist-val" style="font-size:14px">${d.vueltas||0}</div></td>
+          <td data-label="Pasajeros"><div class="hist-val" style="font-size:14px">${(d.pasajeros||0).toLocaleString()}</div></td>
+          <td data-label="Km"><div class="hist-val" style="font-size:14px">${(d.km_recorridos||0).toFixed(1)}</div></td>
+          <td data-label="Novedades"><div class="hist-novedad" title="${escH(d.novedades)}">${d.novedades||'<span style="color:#ccc">—</span>'}</div></td>
         </tr>`).join('');
         return `
           <div class="hist-bus-block">
