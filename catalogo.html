@@ -585,6 +585,7 @@
       .btn { font-size: 13px; }
     }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -876,7 +877,7 @@
           <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
           Importar CSV
         </button>
-        <input type="file" id="csvConductoresInput" accept=".csv" style="display:none" onchange="importarConductoresCSV(this)">
+        <input type="file" id="csvConductoresInput" accept=".csv,.xlsx,.xls" style="display:none" onchange="importarConductoresCSV(this)">
         <button class="btn btn-primary" onclick="openModal('conductor')">
           <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           Nuevo Conductor
@@ -1133,24 +1134,37 @@
     input.value = '';
     if (!file) return;
 
-    const text = await file.text();
-    const lines = text.split(/\r?\n/).filter(l => l.trim());
+    let filas = [];
+    const esExcel = /\.xlsx?$/i.test(file.name);
 
-    // Detectar fila de encabezado: si la primera columna no es número, es cabecera
-    let startIdx = 0;
-    const firstCel = lines[0].split(',')[0].replace(/"/g,'').trim();
-    if (isNaN(firstCel) || firstCel === '') startIdx = 1;
-
-    const filas = [];
-    for (let i = startIdx; i < lines.length; i++) {
-      // Separa por coma respetando comillas
-      const cols = lines[i].match(/(".*?"|[^,]+|(?<=,)(?=,)|^(?=,))/g) || lines[i].split(',');
-      const cedula = (cols[0] || '').replace(/"/g,'').trim();
-      const nombre = (cols[1] || '').replace(/"/g,'').trim();
-      if (cedula && nombre) filas.push({ cedula, nombre });
+    if (esExcel) {
+      // Leer con SheetJS
+      const buf = await file.arrayBuffer();
+      const wb  = XLSX.read(buf, { type: 'array' });
+      const ws  = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      // Detectar fila de encabezado: si col A no es número, saltarla
+      const startIdx = (isNaN(String(rows[0]?.[0]).trim()) || String(rows[0]?.[0]).trim() === '') ? 1 : 0;
+      for (let i = startIdx; i < rows.length; i++) {
+        const cedula = String(rows[i][0] ?? '').trim();
+        const nombre = String(rows[i][1] ?? '').trim();
+        if (cedula && nombre) filas.push({ cedula, nombre });
+      }
+    } else {
+      // Leer CSV
+      const text  = await file.text();
+      const lines = text.split(/\r?\n/).filter(l => l.trim());
+      const firstCel = lines[0].split(',')[0].replace(/"/g,'').trim();
+      const startIdx = (isNaN(firstCel) || firstCel === '') ? 1 : 0;
+      for (let i = startIdx; i < lines.length; i++) {
+        const cols   = lines[i].split(',');
+        const cedula = (cols[0] || '').replace(/"/g,'').trim();
+        const nombre = (cols[1] || '').replace(/"/g,'').trim();
+        if (cedula && nombre) filas.push({ cedula, nombre });
+      }
     }
 
-    if (!filas.length) { showToast('No se encontraron filas válidas en el CSV', 'error'); return; }
+    if (!filas.length) { showToast('No se encontraron filas válidas', 'error'); return; }
 
     showToast(`Importando ${filas.length} conductores…`, '');
     let ok = 0, errores = 0;
@@ -1164,10 +1178,7 @@
       } catch { errores++; }
     }
 
-    // Recargar lista
-    try {
-      conductores = await apiFetch('/api/conductores');
-    } catch {}
+    try { conductores = await apiFetch('/api/conductores'); } catch {}
     renderConductores();
 
     if (errores === 0) showToast(`✓ ${ok} conductores importados correctamente`);
