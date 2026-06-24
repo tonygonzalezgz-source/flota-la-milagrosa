@@ -104,6 +104,31 @@
     }
     select:focus { outline: none; border-color: var(--primary); }
 
+    /* Combobox buscable para conductor */
+    .cond-combo { position: relative; }
+    .cond-input {
+      width: 100%; padding: 7px 28px 7px 9px; border: 1px solid var(--border2);
+      border-radius: var(--radius-s); font-size: 13px; background: var(--white);
+      color: var(--txt); cursor: pointer; font-family: inherit; box-sizing: border-box;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 8px center;
+    }
+    .cond-input:focus { outline: none; border-color: var(--primary); }
+    .cond-drop {
+      display: none; position: absolute; top: calc(100% + 2px); left: 0; right: 0;
+      background: var(--white); border: 1px solid var(--border2); border-radius: var(--radius-s);
+      max-height: 220px; overflow-y: auto; z-index: 300;
+      box-shadow: 0 6px 20px rgba(0,0,0,.12);
+    }
+    .cond-combo.open .cond-drop { display: block; }
+    .cond-opt {
+      padding: 8px 11px; font-size: 13px; color: var(--txt2); cursor: pointer;
+      border-bottom: 1px solid var(--border);
+    }
+    .cond-opt:last-child { border-bottom: none; }
+    .cond-opt:hover { background: var(--primary2); color: var(--primary); }
+    .cond-opt.cond-hidden { display: none; }
+
     .estado-sel.trabajando { border-color: var(--green); color: #15803d; font-weight: 600; }
     .estado-sel.taller     { border-color: var(--yellow); color: #b45309; font-weight: 600; }
     .estado-sel.descanso   { border-color: var(--border2); color: var(--txt2); }
@@ -412,14 +437,21 @@
       .filter(r => r.grupo === b.grupo)
       .map(r => `<option value="${r.id}" ${b.ruta_id === r.id ? 'selected' : ''}>${escapeHtml(r.nombre)}</option>`)
       .join('');
-    const condOpts = `<option value="">— Sin conductor —</option>` + conductores
-      .map(c => `<option value="${c.id}" ${b.conductor_id === c.id ? 'selected' : ''}>${escapeHtml(c.nombre)}</option>`)
-      .join('');
     const estado = b.estado || 'trabajando';
+    const condNombre = b.conductor_id ? (conductores.find(c => c.id === b.conductor_id)?.nombre || '') : '';
+    const condOpts = `<div class="cond-opt" data-id="" onclick="selectCond(${b.id},'',this)">— Sin conductor —</div>`
+      + conductores.map(c => `<div class="cond-opt" data-id="${c.id}" onclick="selectCond(${b.id},'${c.id}',this)">${escapeHtml(c.nombre)}</div>`).join('');
     return `<tr>
       <td class="cell-unidad"><span class="bus-num">${b.numero}</span>${b.placa ? `<div class="bus-placa">${escapeHtml(b.placa)}</div>` : ''}</td>
       <td data-label="Ruta"><select onchange="onChange(${b.id}, 'ruta_id', this.value)">${rutaOpts}</select></td>
-      <td data-label="Conductor"><select onchange="onChange(${b.id}, 'conductor_id', this.value)">${condOpts}</select></td>
+      <td data-label="Conductor">
+        <div class="cond-combo" id="combo-${b.id}">
+          <input class="cond-input" type="text" autocomplete="off"
+                 value="${escapeHtml(condNombre)}" placeholder="— Sin conductor —"
+                 onclick="abrirCombo(${b.id},this)" oninput="filtrarCombo(${b.id},this)">
+          <div class="cond-drop" id="cdrop-${b.id}">${condOpts}</div>
+        </div>
+      </td>
       <td data-label="Estado">
         <select class="estado-sel ${estado}" onchange="onChange(${b.id}, 'estado', this.value)">
           <option value="trabajando" ${estado === 'trabajando' ? 'selected' : ''}>Trabajando</option>
@@ -447,6 +479,42 @@
     document.getElementById('sumTaller').textContent     = c.taller;
     document.getElementById('sumDescanso').textContent   = c.descanso;
   }
+
+  /* ── Combobox buscable de conductores ── */
+  function abrirCombo(busId, inp) {
+    const combo = document.getElementById(`combo-${busId}`);
+    const yaAbierto = combo.classList.contains('open');
+    cerrarTodosCombos();
+    if (!yaAbierto) {
+      combo.classList.add('open');
+      inp.select();
+      filtrarCombo(busId, inp);
+    }
+  }
+
+  function filtrarCombo(busId, inp) {
+    const q = inp.value.toLowerCase().trim();
+    document.querySelectorAll(`#cdrop-${busId} .cond-opt`).forEach(el => {
+      const nombre = (el.dataset.id === '' ? '' : el.textContent).toLowerCase();
+      el.classList.toggle('cond-hidden', q !== '' && el.dataset.id !== '' && !nombre.includes(q));
+    });
+    document.getElementById(`combo-${busId}`).classList.add('open');
+  }
+
+  function selectCond(busId, condId, el) {
+    const inp = document.querySelector(`#combo-${busId} .cond-input`);
+    inp.value = condId ? el.textContent : '';
+    document.getElementById(`combo-${busId}`).classList.remove('open');
+    onChange(busId, 'conductor_id', condId ? Number(condId) : null);
+  }
+
+  function cerrarTodosCombos() {
+    document.querySelectorAll('.cond-combo.open').forEach(c => c.classList.remove('open'));
+  }
+
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.cond-combo')) cerrarTodosCombos();
+  });
 
   async function onChange(busId, campo, valor) {
     const bus = buses.find(b => b.id === busId);
