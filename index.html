@@ -373,6 +373,36 @@
 
     .sb-link:hover { background: #1a1a1e; color: #999; }
 
+    /* Grupo acordeón */
+    .sb-group { list-style: none; }
+    .sb-group-toggle {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 10px; border-radius: 10px;
+      cursor: pointer; border: none; width: 100%; text-align: left;
+      background: transparent; font-family: inherit;
+      font-size: 13px; font-weight: 500; color: #555;
+      transition: background .15s, color .15s;
+    }
+    .sb-group-toggle:hover { background: #1a1a1e; color: #999; }
+    .sb-group-toggle .sb-icon { flex-shrink: 0; opacity: .5; transition: opacity .15s; }
+    .sb-group-toggle:hover .sb-icon { opacity: .7; }
+
+    .sb-chevron {
+      margin-left: auto; display: flex; flex-shrink: 0;
+      opacity: .5; transition: transform .2s ease, opacity .15s;
+    }
+    .sb-group.open > .sb-group-toggle .sb-chevron { transform: rotate(180deg); opacity: .8; }
+    .sb-group.open > .sb-group-toggle { color: #999; }
+
+    .sb-submenu {
+      list-style: none; padding: 0; margin: 2px 0 0;
+      max-height: 0; overflow: hidden;
+      transition: max-height .25s ease;
+    }
+    .sb-group.open > .sb-submenu { max-height: 400px; }
+    .sb-submenu li { margin-bottom: 2px; }
+    .sb-submenu .sb-link { padding-left: 22px; font-size: 12.5px; }
+
     .sb-link.active {
       background: #fff; color: #111;
     }
@@ -808,52 +838,114 @@
 
     <ul class="sb-nav" id="sbNav">
 
-      <!-- Dashboard -->
-      <li>
-        <button class="sb-link" id="nav-dashboard" data-view="dashboard" data-src="dashboard-admin.html" onclick="switchView(this)">
+      <!-- ══ GRUPO: Análisis ══ -->
+      <li class="sb-group" data-group="analisis">
+        <button class="sb-group-toggle" onclick="toggleGroup(this)">
           <span class="sb-icon">
             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
-              <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
-              <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+              <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
             </svg>
           </span>
-          Dashboard
-          <span class="sb-access admin-only" data-roles="admin">Admin</span>
+          Análisis
+          <span class="sb-chevron">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+          </span>
         </button>
+        <ul class="sb-submenu">
+          <!-- Dashboard -->
+          <li>
+            <button class="sb-link" id="nav-dashboard" data-view="dashboard" data-src="dashboard-admin.html" onclick="switchView(this)">
+              <span class="sb-icon">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
+                  <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+                  <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+                </svg>
+              </span>
+              Dashboard
+              <span class="sb-access admin-only" data-roles="admin">Admin</span>
+            </button>
+          </li>
+          <!-- Movilidad Diaria (Ingreso + Historial unificados) -->
+          <li>
+            <button class="sb-link" id="nav-historial" data-view="historial" data-src="historial-movilidad.html" onclick="switchView(this)">
+              <span class="sb-icon">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
+                  <rect x="3" y="4" width="18" height="18" rx="2"/>
+                  <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
+                  <line x1="3" y1="10" x2="21" y2="10"/>
+                  <line x1="8" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="12" y2="18"/>
+                </svg>
+              </span>
+              Movilidad Diaria
+              <span class="sb-access" style="background:rgba(99,102,241,.1);color:#818cf8;" data-roles="admin,analista">Analista</span>
+            </button>
+          </li>
+        </ul>
       </li>
 
-      <!-- Movilidad Diaria (Ingreso + Historial unificados) -->
-      <li>
-        <button class="sb-link" id="nav-historial" data-view="historial" data-src="historial-movilidad.html" onclick="switchView(this)">
+      <!-- ══ GRUPO: Operación ══ -->
+      <li class="sb-group" data-group="operacion">
+        <button class="sb-group-toggle" onclick="toggleGroup(this)">
           <span class="sb-icon">
             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
-              <rect x="3" y="4" width="18" height="18" rx="2"/>
-              <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
-              <line x1="3" y1="10" x2="21" y2="10"/>
-              <line x1="8" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="12" y2="18"/>
+              <path d="M9 11l3 3L22 4"/>
+              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
             </svg>
           </span>
-          Movilidad Diaria
-          <span class="sb-access" style="background:rgba(99,102,241,.1);color:#818cf8;" data-roles="admin,analista">Analista</span>
-        </button>
-      </li>
-
-      <!-- Mantenimiento -->
-      <li>
-        <button class="sb-link" id="nav-mant" data-view="mant" data-src="mantenimiento.html" onclick="switchView(this)">
-          <span class="sb-icon">
-            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
-              <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
-            </svg>
+          Operación
+          <span class="sb-chevron">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
           </span>
-          Mantenimiento
-          <span class="sb-access" style="background:rgba(245,158,11,.1);color:var(--yellow);" data-roles="admin,tecnico">Tec.</span>
         </button>
+        <ul class="sb-submenu">
+          <!-- Despacho -->
+          <li>
+            <button class="sb-link" id="nav-despacho" data-view="despacho" data-src="despacho.html" onclick="switchView(this)">
+              <span class="sb-icon">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
+                  <path d="M9 11l3 3L22 4"/>
+                  <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                </svg>
+              </span>
+              Despacho
+              <span class="sb-access" style="background:rgba(34,197,94,.1);color:#16a34a;" data-roles="admin,despachador">Desp.</span>
+            </button>
+          </li>
+          <!-- Historial Despacho -->
+          <li>
+            <button class="sb-link" id="nav-historial-despacho" data-view="historial-despacho" data-src="historial-despacho.html" onclick="switchView(this)">
+              <span class="sb-icon">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
+                  <rect x="3" y="4" width="18" height="18" rx="2"/>
+                  <line x1="16" y1="2" x2="16" y2="6"/>
+                  <line x1="8" y1="2" x2="8" y2="6"/>
+                  <line x1="3" y1="10" x2="21" y2="10"/>
+                  <path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/>
+                </svg>
+              </span>
+              Historial Despacho
+              <span class="sb-access" style="background:rgba(34,197,94,.1);color:#16a34a;" data-roles="admin,despachador">Desp.</span>
+            </button>
+          </li>
+          <!-- Alistamiento -->
+          <li>
+            <button class="sb-link" id="nav-alistamiento" data-view="alistamiento" data-src="alistamiento.html" onclick="switchView(this)">
+              <span class="sb-icon">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
+                  <path d="M9 11l3 3L22 4"/>
+                  <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                </svg>
+              </span>
+              Alistamiento
+              <span class="sb-access" style="background:rgba(34,197,94,.1);color:#16a34a;" data-roles="conductor">Cond.</span>
+            </button>
+          </li>
+        </ul>
       </li>
 
-      <!-- Propietario -->
-      <li>
-        <button class="sb-link" id="nav-propietario" data-view="propietario" data-src="dashboard-propietario.html" onclick="switchView(this)">
+      <!-- ══ GRUPO: Flota ══ -->
+      <li class="sb-group" data-group="flota">
+        <button class="sb-group-toggle" onclick="toggleGroup(this)">
           <span class="sb-icon">
             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
               <rect x="1" y="3" width="15" height="13" rx="2"/>
@@ -862,71 +954,74 @@
               <circle cx="18.5" cy="18.5" r="2.5"/>
             </svg>
           </span>
-          Mis Buses
-          <span class="sb-access" style="background:rgba(245,158,11,.08);color:#f59e0b;" data-roles="admin,propietario">Prop.</span>
+          Flota
+          <span class="sb-chevron">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+          </span>
         </button>
+        <ul class="sb-submenu">
+          <!-- Propietario -->
+          <li>
+            <button class="sb-link" id="nav-propietario" data-view="propietario" data-src="dashboard-propietario.html" onclick="switchView(this)">
+              <span class="sb-icon">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
+                  <rect x="1" y="3" width="15" height="13" rx="2"/>
+                  <path d="M16 8h4l3 5v5h-7V8z"/>
+                  <circle cx="5.5" cy="18.5" r="2.5"/>
+                  <circle cx="18.5" cy="18.5" r="2.5"/>
+                </svg>
+              </span>
+              Mis Buses
+              <span class="sb-access" style="background:rgba(245,158,11,.08);color:#f59e0b;" data-roles="admin,propietario">Prop.</span>
+            </button>
+          </li>
+          <!-- Mantenimiento -->
+          <li>
+            <button class="sb-link" id="nav-mant" data-view="mant" data-src="mantenimiento.html" onclick="switchView(this)">
+              <span class="sb-icon">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
+                  <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+                </svg>
+              </span>
+              Mantenimiento
+              <span class="sb-access" style="background:rgba(245,158,11,.1);color:var(--yellow);" data-roles="admin,tecnico">Tec.</span>
+            </button>
+          </li>
+        </ul>
       </li>
 
-      <!-- Catálogo -->
-      <li>
-        <button class="sb-link" id="nav-catalogo" data-view="catalogo" data-src="catalogo.html" onclick="switchView(this)">
+      <!-- ══ GRUPO: Configuración ══ -->
+      <li class="sb-group" data-group="configuracion">
+        <button class="sb-group-toggle" onclick="toggleGroup(this)">
           <span class="sb-icon">
             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-              <polyline points="14 2 14 8 20 8"/>
-              <line x1="16" y1="13" x2="8" y2="13"/>
-              <line x1="16" y1="17" x2="8" y2="17"/>
-              <polyline points="10 9 9 9 8 9"/>
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
             </svg>
           </span>
-          Catálogo
-          <span class="sb-access admin-only" data-roles="admin">Admin</span>
-        </button>
-      </li>
-
-      <!-- Despacho -->
-      <li>
-        <button class="sb-link" id="nav-despacho" data-view="despacho" data-src="despacho.html" onclick="switchView(this)">
-          <span class="sb-icon">
-            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
-              <path d="M9 11l3 3L22 4"/>
-              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
-            </svg>
+          Configuración
+          <span class="sb-chevron">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
           </span>
-          Despacho
-          <span class="sb-access" style="background:rgba(34,197,94,.1);color:#16a34a;" data-roles="admin,despachador">Desp.</span>
         </button>
-      </li>
-
-      <!-- Historial Despacho -->
-      <li>
-        <button class="sb-link" id="nav-historial-despacho" data-view="historial-despacho" data-src="historial-despacho.html" onclick="switchView(this)">
-          <span class="sb-icon">
-            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
-              <rect x="3" y="4" width="18" height="18" rx="2"/>
-              <line x1="16" y1="2" x2="16" y2="6"/>
-              <line x1="8" y1="2" x2="8" y2="6"/>
-              <line x1="3" y1="10" x2="21" y2="10"/>
-              <path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/>
-            </svg>
-          </span>
-          Historial Despacho
-          <span class="sb-access" style="background:rgba(34,197,94,.1);color:#16a34a;" data-roles="admin,despachador">Desp.</span>
-        </button>
-      </li>
-
-      <!-- Alistamiento -->
-      <li>
-        <button class="sb-link" id="nav-alistamiento" data-view="alistamiento" data-src="alistamiento.html" onclick="switchView(this)">
-          <span class="sb-icon">
-            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
-              <path d="M9 11l3 3L22 4"/>
-              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
-            </svg>
-          </span>
-          Alistamiento
-          <span class="sb-access" style="background:rgba(34,197,94,.1);color:#16a34a;" data-roles="conductor">Cond.</span>
-        </button>
+        <ul class="sb-submenu">
+          <!-- Catálogo -->
+          <li>
+            <button class="sb-link" id="nav-catalogo" data-view="catalogo" data-src="catalogo.html" onclick="switchView(this)">
+              <span class="sb-icon">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="16" y1="13" x2="8" y2="13"/>
+                  <line x1="16" y1="17" x2="8" y2="17"/>
+                  <polyline points="10 9 9 9 8 9"/>
+                </svg>
+              </span>
+              Catálogo
+              <span class="sb-access admin-only" data-roles="admin">Admin</span>
+            </button>
+          </li>
+        </ul>
       </li>
 
     </ul>
@@ -1319,6 +1414,16 @@
       const roles = badge.dataset.roles?.split(',') || [];
       badge.style.display = roles.includes(currentUser.username) ? '' : 'none';
     });
+
+    // Ocultar grupos sin ningún ítem accesible; auto-abrir los que sí tengan
+    document.querySelectorAll('.sb-group').forEach(group => {
+      const links = group.querySelectorAll('.sb-link[data-view]');
+      const hasAccess = Array.from(links).some(
+        l => currentUser.allowedViews.includes(l.dataset.view)
+      );
+      group.style.display = hasAccess ? '' : 'none';
+      group.classList.toggle('open', hasAccess);
+    });
   }
 
   /* ═══════════════════════════════════════
@@ -1390,6 +1495,11 @@
     document.getElementById('sidebarOverlay').classList.remove('visible');
   }
 
+  // Expandir/colapsar un grupo del sidebar (acordeón)
+  function toggleGroup(headerBtn) {
+    headerBtn.closest('.sb-group').classList.toggle('open');
+  }
+
   function switchView(btn) {
     closeSidebar(); // cierra el menú al navegar en móvil
     const viewId = btn.dataset.view;
@@ -1405,6 +1515,10 @@
     panel.classList.add('active');
     btn.classList.add('active');
     currentView = viewId;
+
+    // Mantener abierto el grupo que contiene la vista activa
+    const parentGroup = btn.closest('.sb-group');
+    if (parentGroup) parentGroup.classList.add('open');
 
     // Cargar iframe siempre con cache-busting para reflejar cambios al instante
     const iframe = document.getElementById(`iframe-${viewId}`);
