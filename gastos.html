@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>La Milagrosa — Gastos y Facturas</title>
+  <script>
+    (function(){
+      document.addEventListener('contextmenu',function(e){e.preventDefault();});
+      document.addEventListener('keydown',function(e){
+        if(e.key==='F12'){e.preventDefault();return false;}
+        if(e.ctrlKey&&e.shiftKey&&['I','J','C','U'].includes(e.key.toUpperCase())){e.preventDefault();return false;}
+        if(e.ctrlKey&&e.key.toUpperCase()==='U'){e.preventDefault();return false;}
+      });
+    })();
+  </script>
+  <script>
+    (function() {
+      if (window.location === window.parent.location) {
+        const token = localStorage.getItem('authToken');
+        if (!token) { window.location.href = '/index.html'; }
+      }
+    })();
+  </script>
+  <style>
+    :root{
+      --bg:#f1f2f6; --surface:#fff; --border:#e5e5eb;
+      --blue:#6366f1; --green:#22c55e; --yellow:#f59e0b; --red:#ef4444;
+      --text:#111; --muted:#6b7280;
+      --radius:14px; --radius-sm:10px;
+      --shadow:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
+    }
+    *{margin:0;padding:0;box-sizing:border-box;}
+    html{-webkit-text-size-adjust:100%;}
+    img,svg,video{max-width:100%;}
+    body{
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+      background:var(--bg); color:var(--text);
+      padding:20px; padding-top:24px;
+    }
+    .wrap{max-width:1040px;margin:0 auto;}
+    .page-head{margin-bottom:20px;}
+    .page-head h1{font-size:1.4rem;font-weight:700;display:flex;align-items:center;gap:10px;}
+    .page-head p{color:var(--muted);font-size:.9rem;margin-top:4px;}
+    .page-head .ico{color:var(--yellow);display:inline-flex;}
+
+    .card{
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:var(--radius); box-shadow:var(--shadow);
+      padding:20px; margin-bottom:20px;
+    }
+    .card h2{font-size:1.05rem;font-weight:650;margin-bottom:16px;display:flex;align-items:center;gap:8px;}
+    .card h2 .badge{font-size:.68rem;font-weight:600;background:rgba(245,158,11,.1);color:var(--yellow);padding:2px 8px;border-radius:20px;}
+
+    /* ── FORM ── */
+    .form-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;}
+    .field{display:flex;flex-direction:column;gap:6px;}
+    .field.full{grid-column:1/-1;}
+    label{font-size:.82rem;font-weight:600;color:#374151;}
+    input,select,textarea{
+      font-family:inherit;font-size:.95rem;color:var(--text);
+      background:#fafafb;border:1px solid var(--border);border-radius:var(--radius-sm);
+      padding:11px 12px;width:100%;outline:none;transition:border-color .15s,box-shadow .15s;
+    }
+    input:focus,select:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(99,102,241,.12);}
+    textarea{resize:vertical;min-height:70px;}
+
+    /* ── COMPROBANTE ── */
+    .comp-btns{display:flex;gap:12px;flex-wrap:wrap;}
+    .comp-btn{
+      flex:1;min-width:140px;display:flex;flex-direction:column;align-items:center;gap:8px;
+      padding:18px 12px;border:2px dashed var(--border);border-radius:var(--radius);
+      background:#fafafb;cursor:pointer;transition:all .15s;text-align:center;
+    }
+    .comp-btn:hover{border-color:var(--yellow);background:#fffdf6;}
+    .comp-btn svg{color:var(--yellow);}
+    .comp-btn span{font-size:.85rem;font-weight:600;color:#374151;}
+    .comp-btn small{font-size:.72rem;color:var(--muted);font-weight:500;}
+    .comp-preview{
+      display:none;margin-top:14px;padding:12px;border:1px solid var(--border);
+      border-radius:var(--radius-sm);background:#fafafb;align-items:center;gap:12px;
+    }
+    .comp-preview.show{display:flex;}
+    .comp-preview img{width:64px;height:64px;object-fit:cover;border-radius:8px;flex-shrink:0;}
+    .comp-preview .pdf-ico{width:64px;height:64px;display:flex;align-items:center;justify-content:center;background:#fee2e2;border-radius:8px;color:var(--red);flex-shrink:0;}
+    .comp-preview .pinfo{flex:1;min-width:0;}
+    .comp-preview .pinfo strong{display:block;font-size:.86rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .comp-preview .pinfo small{color:var(--muted);font-size:.76rem;}
+    .comp-preview .rm{background:none;border:none;color:var(--red);font-size:.82rem;font-weight:600;cursor:pointer;padding:6px;flex-shrink:0;}
+
+    .btn-primary{
+      background:var(--blue);color:#fff;border:none;border-radius:var(--radius-sm);
+      padding:13px 22px;font-size:.95rem;font-weight:650;cursor:pointer;
+      transition:background .15s,transform .1s;width:100%;margin-top:4px;
+    }
+    .btn-primary:hover{background:#4f52d6;}
+    .btn-primary:active{transform:scale(.99);}
+    .btn-primary:disabled{opacity:.6;cursor:not-allowed;}
+    .btn-primary.ok{background:var(--green);}
+
+    /* ── LISTADO ── */
+    .list-tools{display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;}
+    .search{flex:1;min-width:200px;position:relative;}
+    .search svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);}
+    .search input{padding-left:38px;}
+    .filter-sel{max-width:190px;}
+
+    table{width:100%;border-collapse:collapse;font-size:.9rem;}
+    thead th{
+      text-align:left;font-size:.74rem;font-weight:600;text-transform:uppercase;
+      letter-spacing:.03em;color:var(--muted);padding:10px 12px;border-bottom:2px solid var(--border);
+    }
+    tbody td{padding:12px;border-bottom:1px solid var(--border);vertical-align:middle;}
+    tbody tr:last-child td{border-bottom:none;}
+    .cat-pill{display:inline-block;font-size:.78rem;font-weight:600;padding:3px 10px;border-radius:20px;background:rgba(99,102,241,.1);color:var(--blue);}
+    .monto{font-weight:650;white-space:nowrap;}
+    .btn-sm{font-size:.8rem;font-weight:600;padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:#fff;cursor:pointer;transition:all .15s;}
+    .btn-sm.ver{color:var(--blue);border-color:rgba(99,102,241,.3);}
+    .btn-sm.ver:hover{background:rgba(99,102,241,.08);}
+    .btn-sm.del{color:var(--red);border-color:rgba(239,68,68,.3);}
+    .btn-sm.del:hover{background:rgba(239,68,68,.08);}
+    .no-comp{color:var(--muted);font-size:.8rem;}
+    .empty{text-align:center;padding:40px 20px;color:var(--muted);}
+    .empty svg{color:#d1d5db;margin-bottom:12px;}
+
+    /* ── MODAL ── */
+    .modal-bg{
+      display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);
+      z-index:1000;align-items:center;justify-content:center;padding:20px;
+    }
+    .modal-bg.show{display:flex;}
+    .modal{
+      background:var(--surface);border-radius:var(--radius);max-width:640px;width:100%;
+      max-height:90vh;display:flex;flex-direction:column;overflow:hidden;
+    }
+    .modal-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);}
+    .modal-head h3{font-size:1rem;font-weight:650;}
+    .modal-head .x{background:none;border:none;font-size:1.4rem;color:var(--muted);cursor:pointer;line-height:1;}
+    .modal-body{padding:20px;overflow:auto;text-align:center;}
+    .modal-body img{border-radius:8px;}
+    .modal-body embed{width:100%;height:60vh;border-radius:8px;}
+    .modal-foot{padding:14px 20px;border-top:1px solid var(--border);text-align:right;}
+    .btn-dl{display:inline-block;background:var(--blue);color:#fff;text-decoration:none;padding:10px 18px;border-radius:var(--radius-sm);font-weight:600;font-size:.9rem;}
+
+    /* ── TOAST ── */
+    .toast{
+      position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(120%);
+      background:var(--text);color:#fff;padding:13px 22px;border-radius:var(--radius-sm);
+      font-size:.9rem;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,.2);z-index:1100;
+      transition:transform .3s cubic-bezier(.2,.8,.3,1);
+    }
+    .toast.show{transform:translateX(-50%) translateY(0);}
+    .toast.err{background:var(--red);}
+
+    /* ── RESPONSIVE (tarjetas apiladas) ── */
+    @media (max-width:720px){
+      body{padding:14px;padding-top:18px;}
+      .form-grid{grid-template-columns:1fr;}
+      thead{display:none;}
+      table,tbody,tr,td{display:block;width:100%;}
+      tbody tr{border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:12px;padding:6px 4px;background:#fafafb;}
+      tbody td{border:none;padding:8px 14px;display:flex;justify-content:space-between;align-items:center;gap:12px;}
+      tbody td::before{content:attr(data-label);font-size:.74rem;font-weight:600;text-transform:uppercase;color:var(--muted);}
+      tbody td.acciones{justify-content:flex-end;gap:8px;}
+      tbody td.acciones::before{display:none;}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="page-head">
+      <h1>
+        <span class="ico">
+          <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1-2-1z"/><path d="M8 7h8M8 11h8M8 15h5"/></svg>
+        </span>
+        Gastos y Facturas
+      </h1>
+      <p>Registra los gastos y facturas del mantenimiento de tus vehículos. Toma la foto de la factura o adjunta un PDF.</p>
+    </div>
+
+    <!-- ── REGISTRAR ── -->
+    <div class="card">
+      <h2>Registrar gasto</h2>
+      <form id="gastoForm">
+        <div class="form-grid">
+          <div class="field">
+            <label for="f-bus">Vehículo</label>
+            <select id="f-bus" required></select>
+          </div>
+          <div class="field">
+            <label for="f-fecha">Fecha</label>
+            <input type="date" id="f-fecha" required>
+          </div>
+          <div class="field">
+            <label for="f-cat">Categoría</label>
+            <select id="f-cat" required></select>
+          </div>
+          <div class="field">
+            <label for="f-taller">Taller / Proveedor <small style="color:var(--muted);font-weight:500;">(opcional)</small></label>
+            <input type="text" id="f-taller" placeholder="Ej: Taller El Rápido">
+          </div>
+          <div class="field full">
+            <label for="f-desc">¿Qué se le hizo al carro? <small style="color:var(--muted);font-weight:500;">(opcional)</small></label>
+            <textarea id="f-desc" placeholder="Describe el mantenimiento o gasto…"></textarea>
+          </div>
+          <div class="field">
+            <label for="f-monto">Monto</label>
+            <input type="number" id="f-monto" inputmode="decimal" min="0" step="0.01" placeholder="0" required>
+          </div>
+          <div class="field full">
+            <label>Comprobante <small style="color:var(--muted);font-weight:500;">(foto de la factura o PDF)</small></label>
+            <div class="comp-btns">
+              <label class="comp-btn">
+                <svg width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                <span>Tomar foto</span>
+                <small>Usa la cámara</small>
+                <input type="file" accept="image/*" capture="environment" id="f-camera" hidden>
+              </label>
+              <label class="comp-btn">
+                <svg width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                <span>Adjuntar archivo</span>
+                <small>Foto o PDF</small>
+                <input type="file" accept="image/*,application/pdf" id="f-file" hidden>
+              </label>
+            </div>
+            <div class="comp-preview" id="comp-preview">
+              <img id="prev-img" src="" alt="" style="display:none;">
+              <div class="pdf-ico" id="prev-pdf" style="display:none;">
+                <svg width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              </div>
+              <div class="pinfo">
+                <strong id="prev-name">—</strong>
+                <small id="prev-size">—</small>
+              </div>
+              <button type="button" class="rm" id="prev-rm">Quitar</button>
+            </div>
+          </div>
+        </div>
+        <button type="submit" class="btn-primary" id="submitBtn">Guardar gasto</button>
+      </form>
+    </div>
+
+    <!-- ── LISTADO ── -->
+    <div class="card">
+      <h2>Mis facturas</h2>
+      <div class="list-tools">
+        <div class="search">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="searchInput" placeholder="Buscar por fecha, categoría, taller…">
+        </div>
+        <select id="filterBus" class="filter-sel"><option value="">Todos los vehículos</option></select>
+      </div>
+      <div id="listContainer"></div>
+    </div>
+  </div>
+
+  <!-- ── MODAL COMPROBANTE ── -->
+  <div class="modal-bg" id="modalBg">
+    <div class="modal">
+      <div class="modal-head">
+        <h3 id="modalTitle">Comprobante</h3>
+        <button class="x" onclick="closeModal()">&times;</button>
+      </div>
+      <div class="modal-body" id="modalBody"></div>
+      <div class="modal-foot"><a href="#" class="btn-dl" id="modalDl" download>Descargar</a></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const API = (window.location.port === '3030') ? 'http://localhost:8001/api' : (window.location.origin + '/api');
+    function apiFetch(url, options = {}) {
+      const token = localStorage.getItem('authToken');
+      return fetch(url, { ...options, headers: { 'Content-Type':'application/json', ...(token ? {'Authorization':`Bearer ${token}`} : {}), ...(options.headers || {}) } });
+    }
+    const CATEGORIAS = ["Cambio de aceite","Frenos","Llantas","Motor","Suspensión","Eléctrico","Combustible","Repuestos","Lavado","Otro"];
+
+    let currentUser = null;
+    let gastosData  = [];
+    let comprobante = null; // {base64, mime, nombre}
+
+    // ── INIT ──
+    document.addEventListener('DOMContentLoaded', async () => {
+      currentUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
+      // categorías
+      const catSel = document.getElementById('f-cat');
+      catSel.innerHTML = '<option value="" disabled selected>Selecciona…</option>' +
+        CATEGORIAS.map(c => `<option value="${c}">${c}</option>`).join('');
+      // fecha default hoy
+      document.getElementById('f-fecha').value = new Date().toISOString().slice(0,10);
+
+      await cargarBuses();
+      await cargarGastos();
+
+      document.getElementById('f-camera').addEventListener('change', onFilePicked);
+      document.getElementById('f-file').addEventListener('change', onFilePicked);
+      document.getElementById('prev-rm').addEventListener('click', clearComprobante);
+      document.getElementById('gastoForm').addEventListener('submit', onSubmit);
+      document.getElementById('searchInput').addEventListener('input', renderList);
+      document.getElementById('filterBus').addEventListener('change', renderList);
+    });
+
+    // ── CARGAR BUSES ──
+    async function cargarBuses() {
+      const uid = currentUser ? currentUser.id : null;
+      const qs  = uid ? `?user_id=${uid}` : '';
+      try {
+        const res = await apiFetch(`${API}/buses${qs}`);
+        const buses = await res.json();
+        const busSel    = document.getElementById('f-bus');
+        const filterSel = document.getElementById('filterBus');
+        if (!Array.isArray(buses) || buses.length === 0) {
+          busSel.innerHTML = '<option value="" disabled selected>No tienes vehículos asignados</option>';
+          return;
+        }
+        const opts = buses.map(b =>
+          `<option value="${b.id}">${b.numero ? 'Bus '+b.numero : ''}${b.placa ? ' — '+b.placa : ''}</option>`
+        ).join('');
+        busSel.innerHTML = '<option value="" disabled selected>Selecciona…</option>' + opts;
+        filterSel.innerHTML = '<option value="">Todos los vehículos</option>' + opts;
+      } catch (e) {
+        showToast('No se pudieron cargar los vehículos', true);
+      }
+    }
+
+    // ── COMPRESIÓN / LECTURA ──
+    function onFilePicked(ev) {
+      const file = ev.target.files && ev.target.files[0];
+      if (!file) return;
+      if (file.type === 'application/pdf') {
+        readPdf(file);
+      } else if (file.type.startsWith('image/')) {
+        compressImage(file);
+      } else {
+        showToast('Formato no soportado. Usa imagen o PDF.', true);
+      }
+      ev.target.value = ''; // permite re-seleccionar el mismo archivo
+    }
+
+    function compressImage(file) {
+      const reader = new FileReader();
+      reader.onload = e => {
+        const img = new Image();
+        img.onload = () => {
+          const MAX = 1600;
+          let { width, height } = img;
+          if (width > height && width > MAX) { height = Math.round(height * MAX / width); width = MAX; }
+          else if (height > MAX) { width = Math.round(width * MAX / height); height = MAX; }
+          const canvas = document.createElement('canvas');
+          canvas.width = width; canvas.height = height;
+          canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+          comprobante = { base64: dataUrl, mime: 'image/jpeg', nombre: (file.name||'foto').replace(/\.[^.]+$/, '') + '.jpg' };
+          showPreview(dataUrl, comprobante.nombre, dataUrl.length);
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function readPdf(file) {
+      if (file.size > 3 * 1024 * 1024) {
+        showToast('El PDF pesa mucho (>3MB). Mejor toma una foto.', true);
+      }
+      const reader = new FileReader();
+      reader.onload = e => {
+        comprobante = { base64: e.target.result, mime: 'application/pdf', nombre: file.name || 'documento.pdf' };
+        showPreview(null, comprobante.nombre, e.target.result.length);
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function showPreview(imgSrc, name, b64len) {
+      const box = document.getElementById('comp-preview');
+      const img = document.getElementById('prev-img');
+      const pdf = document.getElementById('prev-pdf');
+      if (imgSrc) { img.src = imgSrc; img.style.display = ''; pdf.style.display = 'none'; }
+      else { img.style.display = 'none'; pdf.style.display = 'flex'; }
+      document.getElementById('prev-name').textContent = name;
+      const kb = Math.round(b64len * 0.75 / 1024); // base64 → bytes aprox
+      document.getElementById('prev-size').textContent = kb >= 1024 ? (kb/1024).toFixed(1)+' MB' : kb+' KB';
+      box.classList.add('show');
+    }
+
+    function clearComprobante() {
+      comprobante = null;
+      document.getElementById('comp-preview').classList.remove('show');
+      document.getElementById('prev-img').src = '';
+    }
+
+    // ── GUARDAR ──
+    async function onSubmit(ev) {
+      ev.preventDefault();
+      const btn = document.getElementById('submitBtn');
+      const busId = document.getElementById('f-bus').value;
+      const fecha = document.getElementById('f-fecha').value;
+      const cat   = document.getElementById('f-cat').value;
+      const monto = document.getElementById('f-monto').value;
+      if (!busId || !fecha || !cat || monto === '') { showToast('Completa los campos obligatorios', true); return; }
+
+      const payload = {
+        bus_id: parseInt(busId), fecha, categoria: cat,
+        descripcion: document.getElementById('f-desc').value.trim(),
+        taller: document.getElementById('f-taller').value.trim(),
+        monto: parseFloat(monto),
+        usuario_id: currentUser ? currentUser.id : null,
+        comprobante_base64: comprobante ? comprobante.base64 : null,
+        comprobante_mime:   comprobante ? comprobante.mime : null,
+        comprobante_nombre: comprobante ? comprobante.nombre : null,
+      };
+
+      btn.disabled = true; btn.textContent = 'Guardando…';
+      try {
+        const res = await apiFetch(`${API}/gastos`, { method:'POST', body: JSON.stringify(payload) });
+        if (!res.ok) {
+          const err = await res.json().catch(()=>({}));
+          throw new Error(err.error || 'Error al guardar');
+        }
+        btn.classList.add('ok'); btn.textContent = '✓ Registrado';
+        showToast('Gasto registrado correctamente');
+        resetForm();
+        await cargarGastos();
+        setTimeout(() => { btn.classList.remove('ok'); btn.textContent = 'Guardar gasto'; btn.disabled = false; }, 1700);
+      } catch (e) {
+        showToast(e.message || 'Error al guardar', true);
+        btn.disabled = false; btn.textContent = 'Guardar gasto';
+      }
+    }
+
+    function resetForm() {
+      document.getElementById('f-bus').selectedIndex = 0;
+      document.getElementById('f-cat').selectedIndex = 0;
+      document.getElementById('f-desc').value = '';
+      document.getElementById('f-taller').value = '';
+      document.getElementById('f-monto').value = '';
+      document.getElementById('f-fecha').value = new Date().toISOString().slice(0,10);
+      clearComprobante();
+    }
+
+    // ── LISTAR ──
+    async function cargarGastos() {
+      const uid = currentUser ? currentUser.id : null;
+      const qs  = uid ? `?user_id=${uid}` : '';
+      try {
+        const res = await apiFetch(`${API}/gastos${qs}`);
+        gastosData = await res.json();
+        if (!Array.isArray(gastosData)) gastosData = [];
+      } catch (e) {
+        gastosData = [];
+      }
+      renderList();
+    }
+
+    function fmtMoney(n) {
+      return '$' + Number(n||0).toLocaleString('es-CO', { maximumFractionDigits: 0 });
+    }
+    function fmtFecha(f) {
+      if (!f) return '—';
+      const d = new Date(f + 'T00:00:00');
+      if (isNaN(d)) return f;
+      return d.toLocaleDateString('es-CO', { day:'2-digit', month:'short', year:'numeric' });
+    }
+
+    function renderList() {
+      const cont = document.getElementById('listContainer');
+      const q = document.getElementById('searchInput').value.trim().toLowerCase();
+      const busFilter = document.getElementById('filterBus').value;
+
+      let rows = gastosData;
+      if (busFilter) rows = rows.filter(g => String(g.bus_id) === busFilter);
+      if (q) rows = rows.filter(g => {
+        const hay = [g.fecha, g.categoria, g.taller, g.descripcion, g.numero, g.placa]
+          .filter(Boolean).join(' ').toLowerCase();
+        return hay.includes(q);
+      });
+
+      if (rows.length === 0) {
+        cont.innerHTML = `<div class="empty">
+          <svg width="46" height="46" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1-2-1z"/><path d="M8 7h8M8 11h8M8 15h5"/></svg>
+          <div>${gastosData.length === 0 ? 'Aún no has registrado gastos.' : 'No hay resultados para tu búsqueda.'}</div>
+        </div>`;
+        return;
+      }
+
+      const body = rows.map(g => `
+        <tr>
+          <td data-label="Fecha">${fmtFecha(g.fecha)}</td>
+          <td data-label="Vehículo">${g.numero ? 'Bus '+g.numero : ''}${g.placa ? ' · '+g.placa : ''}</td>
+          <td data-label="Categoría"><span class="cat-pill">${g.categoria||''}</span></td>
+          <td data-label="Taller">${g.taller || '—'}</td>
+          <td data-label="Monto" class="monto">${fmtMoney(g.monto)}</td>
+          <td data-label="Comprobante">${g.tiene_comprobante
+            ? `<button class="btn-sm ver" onclick="verComprobante(${g.id})">Ver</button>`
+            : '<span class="no-comp">Sin foto</span>'}</td>
+          <td class="acciones"><button class="btn-sm del" onclick="eliminarGasto(${g.id})">Eliminar</button></td>
+        </tr>`).join('');
+
+      cont.innerHTML = `<table>
+        <thead><tr>
+          <th>Fecha</th><th>Vehículo</th><th>Categoría</th><th>Taller</th><th>Monto</th><th>Comprobante</th><th></th>
+        </tr></thead>
+        <tbody>${body}</tbody>
+      </table>`;
+    }
+
+    // ── VER COMPROBANTE ──
+    async function verComprobante(id) {
+      const uid = currentUser ? `?user_id=${currentUser.id}` : '';
+      try {
+        const res = await apiFetch(`${API}/gastos/${id}/comprobante${uid}`);
+        if (!res.ok) throw new Error('No se pudo cargar');
+        const data = await res.json();
+        const body = document.getElementById('modalBody');
+        const dl   = document.getElementById('modalDl');
+        if (!data.comprobante_base64) { showToast('Sin comprobante', true); return; }
+        if ((data.comprobante_mime||'').startsWith('image/')) {
+          body.innerHTML = `<img src="${data.comprobante_base64}" alt="Comprobante" style="max-width:100%;">`;
+        } else {
+          body.innerHTML = `<embed src="${data.comprobante_base64}" type="application/pdf">`;
+        }
+        dl.href = data.comprobante_base64;
+        dl.setAttribute('download', data.comprobante_nombre || 'comprobante');
+        document.getElementById('modalBg').classList.add('show');
+      } catch (e) {
+        showToast('No se pudo abrir el comprobante', true);
+      }
+    }
+    function closeModal() {
+      document.getElementById('modalBg').classList.remove('show');
+      document.getElementById('modalBody').innerHTML = '';
+    }
+    document.getElementById('modalBg').addEventListener('click', e => { if (e.target.id === 'modalBg') closeModal(); });
+
+    // ── ELIMINAR ──
+    async function eliminarGasto(id) {
+      if (!confirm('¿Eliminar este gasto? Esta acción no se puede deshacer.')) return;
+      const uid = currentUser ? `?user_id=${currentUser.id}` : '';
+      try {
+        const res = await apiFetch(`${API}/gastos/${id}${uid}`, { method:'DELETE' });
+        if (!res.ok) throw new Error('Error');
+        showToast('Gasto eliminado');
+        await cargarGastos();
+      } catch (e) {
+        showToast('No se pudo eliminar', true);
+      }
+    }
+
+    // ── TOAST ──
+    let toastT;
+    function showToast(msg, isErr) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.toggle('err', !!isErr);
+      t.classList.add('show');
+      clearTimeout(toastT);
+      toastT = setTimeout(() => t.classList.remove('show'), 2600);
+    }
+  </script>
+</body>
+</html>

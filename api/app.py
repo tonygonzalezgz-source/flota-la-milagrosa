@@ -97,10 +97,10 @@ SCHEMA_PATH  = os.path.join(os.path.dirname(__file__), "schema.sql")
 PG_SCHEMA    = os.path.join(os.path.dirname(__file__), "supabase_schema.sql")
 
 ROLE_VIEWS = {
-    "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho", "historial-despacho"],
+    "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho", "historial-despacho", "gastos"],
     "Analista":       ["historial"],
     "Técnico Mant.":  ["mant"],
-    "Propietario":    ["propietario"],
+    "Propietario":    ["propietario", "gastos"],
     "Operador":       ["operador"],
     "Despachador":    ["despacho", "historial-despacho"],
     "Conductor":      ["alistamiento"],
@@ -355,6 +355,22 @@ def migrate_db():
                 updated_at                 TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(bus_id, fecha)
             )""",
+            """CREATE TABLE IF NOT EXISTS gastos_mantenimiento (
+                id                 SERIAL PRIMARY KEY,
+                bus_id             INTEGER NOT NULL REFERENCES buses(id) ON DELETE CASCADE,
+                fecha              DATE    NOT NULL,
+                categoria          TEXT    NOT NULL,
+                descripcion        TEXT,
+                taller             TEXT,
+                monto              NUMERIC(12,2) NOT NULL DEFAULT 0,
+                comprobante_base64 TEXT,
+                comprobante_mime   TEXT,
+                comprobante_nombre TEXT,
+                usuario_id         INTEGER REFERENCES usuarios(id),
+                created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )""",
+            "CREATE INDEX IF NOT EXISTS idx_gastos_bus   ON gastos_mantenimiento(bus_id)",
+            "CREATE INDEX IF NOT EXISTS idx_gastos_fecha ON gastos_mantenimiento(fecha)",
         ]:
             try:
                 db.execute(tbl_sql)
@@ -531,6 +547,24 @@ def migrate_db():
                 UNIQUE(bus_id, fecha)
             )
         """)
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS gastos_mantenimiento (
+                id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+                bus_id             INTEGER NOT NULL REFERENCES buses(id) ON DELETE CASCADE,
+                fecha              DATE    NOT NULL,
+                categoria          TEXT    NOT NULL,
+                descripcion        TEXT,
+                taller             TEXT,
+                monto              NUMERIC(12,2) NOT NULL DEFAULT 0,
+                comprobante_base64 TEXT,
+                comprobante_mime   TEXT,
+                comprobante_nombre TEXT,
+                usuario_id         INTEGER REFERENCES usuarios(id),
+                created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        db.execute("CREATE INDEX IF NOT EXISTS idx_gastos_bus   ON gastos_mantenimiento(bus_id)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_gastos_fecha ON gastos_mantenimiento(fecha)")
         for col_sql in [
             "ALTER TABLE buses ADD COLUMN propietario_id INTEGER REFERENCES propietarios(id)",
             "ALTER TABLE registros_movilidad ADD COLUMN ruta_id INTEGER REFERENCES rutas(id)",
@@ -1875,6 +1909,145 @@ def get_movilidad_fechas():
         ).fetchall()
     db.close()
     return jsonify([r["fecha"] for r in rows])
+
+
+# ──────────────────────────────────────────
+#  Gastos / Facturas de mantenimiento
+# ──────────────────────────────────────────
+
+GASTO_CATEGORIAS = [
+    "Cambio de aceite", "Frenos", "Llantas", "Motor", "Suspensión",
+    "Eléctrico", "Combustible", "Repuestos", "Lavado", "Otro",
+]
+
+
+@app.route("/api/gastos", methods=["POST"])
+@require_auth
+def create_gasto():
+    data       = request.get_json(force=True)
+    bus_id     = data.get("bus_id")
+    fecha      = data.get("fecha")
+    categoria  = (data.get("categoria") or "").strip()
+    descripcion = (data.get("descripcion") or "").strip()
+    taller     = (data.get("taller") or "").strip()
+    monto      = data.get("monto")
+    usuario_id = data.get("usuario_id")
+    comp_b64   = data.get("comprobante_base64")
+    comp_mime  = data.get("comprobante_mime")
+    comp_nombre = data.get("comprobante_nombre")
+
+    if not bus_id or not fecha or not categoria or monto is None:
+        return jsonify({"error": "Faltan campos requeridos (vehículo, fecha, categoría, monto)."}), 400
+
+    db = get_db()
+    is_prop, bus_ids = _bus_ids_for_user(db, usuario_id)
+    if is_prop and int(bus_id) not in bus_ids:
+        db.close()
+        return jsonify({"error": "No autorizado para este vehículo."}), 403
+
+    cursor = db.execute(
+        """INSERT INTO gastos_mantenimiento
+               (bus_id, fecha, categoria, descripcion, taller, monto,
+                comprobante_base64, comprobante_mime, comprobante_nombre, usuario_id)
+           VALUES (?,?,?,?,?,?,?,?,?,?)""",
+        (bus_id, fecha, categoria, descripcion or None, taller or None, monto,
+         comp_b64 or None, comp_mime or None, comp_nombre or None, usuario_id),
+    )
+    db.commit()
+    new_id = cursor.lastrowid
+    db.close()
+    return jsonify({"ok": True, "id": new_id}), 201
+
+
+@app.route("/api/gastos", methods=["GET"])
+@require_auth
+def get_gastos():
+    """Lista metadata (SIN el base64) filtrada por dueño."""
+    user_id   = request.args.get("user_id", type=int)
+    bus_id    = request.args.get("bus_id", type=int)
+    categoria = request.args.get("categoria")
+    desde     = request.args.get("desde")
+    hasta     = request.args.get("hasta")
+
+    db = get_db()
+    is_prop, bus_ids = _bus_ids_for_user(db, user_id)
+
+    where  = []
+    params = []
+    if is_prop:
+        if not bus_ids:
+            db.close(); return jsonify([])
+        where.append("g.bus_id IN (%s)" % ",".join("?" * len(bus_ids)))
+        params.extend(bus_ids)
+    if bus_id:
+        where.append("g.bus_id = ?"); params.append(bus_id)
+    if categoria:
+        where.append("g.categoria = ?"); params.append(categoria)
+    if desde:
+        where.append("g.fecha >= ?"); params.append(desde)
+    if hasta:
+        where.append("g.fecha <= ?"); params.append(hasta)
+
+    where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+    rows = db.execute(
+        f"""SELECT g.id, g.bus_id, g.fecha, g.categoria, g.descripcion, g.taller,
+                   g.monto, g.comprobante_mime, g.comprobante_nombre, g.created_at,
+                   b.numero, b.placa,
+                   CASE WHEN g.comprobante_base64 IS NOT NULL THEN 1 ELSE 0 END AS tiene_comprobante
+            FROM gastos_mantenimiento g
+            JOIN buses b ON b.id = g.bus_id
+            {where_sql}
+            ORDER BY g.fecha DESC, g.id DESC""",
+        params,
+    ).fetchall()
+    db.close()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/gastos/<int:gasto_id>/comprobante", methods=["GET"])
+@require_auth
+def get_gasto_comprobante(gasto_id):
+    user_id = request.args.get("user_id", type=int)
+    db = get_db()
+    row = db.execute(
+        "SELECT bus_id, comprobante_base64, comprobante_mime, comprobante_nombre "
+        "FROM gastos_mantenimiento WHERE id = ?",
+        (gasto_id,),
+    ).fetchone()
+    if not row:
+        db.close(); return jsonify({"error": "No encontrado"}), 404
+
+    is_prop, bus_ids = _bus_ids_for_user(db, user_id)
+    if is_prop and row["bus_id"] not in bus_ids:
+        db.close(); return jsonify({"error": "No autorizado"}), 403
+
+    db.close()
+    return jsonify({
+        "comprobante_base64": row["comprobante_base64"],
+        "comprobante_mime":   row["comprobante_mime"],
+        "comprobante_nombre": row["comprobante_nombre"],
+    })
+
+
+@app.route("/api/gastos/<int:gasto_id>", methods=["DELETE"])
+@require_auth
+def delete_gasto(gasto_id):
+    user_id = request.args.get("user_id", type=int)
+    db = get_db()
+    row = db.execute(
+        "SELECT bus_id FROM gastos_mantenimiento WHERE id = ?", (gasto_id,)
+    ).fetchone()
+    if not row:
+        db.close(); return jsonify({"error": "No encontrado"}), 404
+
+    is_prop, bus_ids = _bus_ids_for_user(db, user_id)
+    if is_prop and row["bus_id"] not in bus_ids:
+        db.close(); return jsonify({"error": "No autorizado"}), 403
+
+    db.execute("DELETE FROM gastos_mantenimiento WHERE id = ?", (gasto_id,))
+    db.commit()
+    db.close()
+    return jsonify({"ok": True})
 
 
 # ──────────────────────────────────────────
