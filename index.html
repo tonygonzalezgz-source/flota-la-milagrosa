@@ -471,17 +471,16 @@
       position: relative; overflow: hidden;
     }
 
-    /* View containers */
+    /* View containers.
+       Ocultos con display:none (NO con opacity/transition): un iframe dentro
+       de una capa compuesta por opacidad congela su scroll táctil en iOS. */
     .view-panel {
       position: absolute; inset: 0;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity .3s ease;
+      display: none;
     }
 
     .view-panel.active {
-      opacity: 1;
-      pointer-events: all;
+      display: block;
     }
 
     .view-panel iframe {
