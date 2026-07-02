@@ -673,14 +673,19 @@
       /* El contenido principal ocupa todo el ancho */
       #appShell { flex-direction: column; }
 
-      /* Iframe ocupa toda la pantalla y puede hacer scroll táctil */
+      /* Scroll táctil en iOS: el scroll NO puede ir en el <iframe> (iOS ignora
+         su overflow y expande el iframe al alto de su contenido). La región
+         scrollable debe ser un ANCESTRO de altura fija → el propio .view-panel
+         (position:absolute; inset:0). Así iOS scrollea el contenido expandido
+         y Android sigue haciendo scroll interno del iframe. 100dvh = alto
+         visible real en iOS (evita el hueco de la barra de direcciones). */
       #mainContent {
-        height: 100vh;
+        height: 100dvh;
         overflow: hidden;
       }
-      .view-panel iframe {
-        -webkit-overflow-scrolling: touch;
+      .view-panel {
         overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
       }
 
       /* Toast en móvil (sin sidebar offset) */

@@ -68,9 +68,17 @@
     /* ── COMPROBANTE ── */
     .comp-btns{display:flex;gap:12px;flex-wrap:wrap;}
     .comp-btn{
+      position:relative;overflow:hidden;
       flex:1;min-width:140px;display:flex;flex-direction:column;align-items:center;gap:8px;
       padding:18px 12px;border:2px dashed var(--border);border-radius:var(--radius);
       background:#fafafb;cursor:pointer;transition:all .15s;text-align:center;
+    }
+    /* El input cubre todo el botón con opacity 0: al tocarlo directamente,
+       los navegadores móviles respetan `capture` y abren la cámara.
+       (Un input display:none/hidden hace que varios ignoren `capture`.) */
+    .comp-btn input[type=file]{
+      position:absolute;top:0;left:0;right:0;bottom:0;
+      opacity:0;cursor:pointer;font-size:0;
     }
     .comp-btn:hover{border-color:var(--yellow);background:#fffdf6;}
     .comp-btn svg{color:var(--yellow);}
@@ -154,7 +162,7 @@
 
     /* ── RESPONSIVE (tarjetas apiladas) ── */
     @media (max-width:720px){
-      body{padding:14px;padding-top:18px;}
+      body{padding:14px;padding-top:64px;} /* deja libre el botón de menú flotante de la shell */
       .form-grid{grid-template-columns:1fr;}
       thead{display:none;}
       table,tbody,tr,td{display:block;width:100%;}
@@ -214,13 +222,13 @@
                 <svg width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
                 <span>Tomar foto</span>
                 <small>Usa la cámara</small>
-                <input type="file" accept="image/*" capture="environment" id="f-camera" hidden>
+                <input type="file" accept="image/*" capture="environment" id="f-camera">
               </label>
               <label class="comp-btn">
                 <svg width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
                 <span>Adjuntar archivo</span>
                 <small>Foto o PDF</small>
-                <input type="file" accept="image/*,application/pdf" id="f-file" hidden>
+                <input type="file" accept="image/*,application/pdf" id="f-file">
               </label>
             </div>
             <div class="comp-preview" id="comp-preview">
