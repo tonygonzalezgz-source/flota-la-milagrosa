@@ -477,11 +477,14 @@
     }
 
     @media (max-width: 768px) {
-      html { height: 100%; overflow-y: scroll; overflow-x: hidden; -webkit-overflow-scrolling: touch; }
-      body { min-height: 100%; overflow-y: visible; overflow-x: hidden; max-width: 100%; }
+      /* iOS: el iframe de la shell hace el scroll. NO fijar height/overflow en
+         html (crea un segundo scroll que rompe el táctil) y NO dejar la topbar
+         sticky (position:sticky dentro del iframe también lo desactiva). */
+      html { height: auto; overflow: visible; overflow-x: hidden; }
+      body { height: auto; min-height: 100vh; overflow: visible; overflow-x: hidden; max-width: 100%; }
       .page { height: auto; min-height: 100vh; }
       /* padding-left deja libre el botón de menú flotante de la shell */
-      .topbar { padding: 8px 12px 8px 60px; gap: 8px; }
+      .topbar { position: static; padding: 8px 12px 8px 60px; gap: 8px; }
       .topbar-title { font-size: 14px; }
       .topbar-sep { display: none; }
       .stats-bar { flex-wrap: wrap; gap: 8px; padding: 10px 12px; }

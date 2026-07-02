@@ -581,11 +581,14 @@
     }
 
     @media (max-width: 768px) {
-      html { height: 100%; overflow-y: scroll; overflow-x: hidden; -webkit-overflow-scrolling: touch; }
-      body { min-height: 100%; overflow-y: visible; overflow-x: hidden; max-width: 100%; }
+      /* iOS: el iframe de la shell hace el scroll. NO fijar height/overflow en
+         html (crea un segundo scroll que rompe el táctil) y NO dejar los headers
+         sticky (position:sticky dentro del iframe también lo desactiva). */
+      html { height: auto; overflow: visible; overflow-x: hidden; }
+      body { height: auto; min-height: 100vh; overflow: visible; overflow-x: hidden; max-width: 100%; }
       .split-wrap { display: block; height: auto; }
       .half-top, .half-btm { height: auto; min-height: 50vh; overflow: visible; }
-      .panel-header { padding: 12px 14px; flex-wrap: wrap; gap: 8px; }
+      .panel-header { position: static; padding: 12px 14px; flex-wrap: wrap; gap: 8px; }
       /* el header de la mitad superior queda bajo el botón de menú flotante */
       .half-top .panel-header { padding-left: 60px; }
       .form-body { padding: 14px; gap: 14px; }
