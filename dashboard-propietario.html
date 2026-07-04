@@ -1613,7 +1613,7 @@
         const mantItems  = await mantRes.json();
         const movRows    = (await movRes.json())
           .filter(r => r.bus_id === bus.id)
-          .sort((a,b) => b.fecha.localeCompare(a.fecha));
+          .sort((a,b) => new Date(b.fecha) - new Date(a.fecha));
         const tarifas     = await tarifasRes.json();
         const tarifasActivas = tarifas.filter(t => t.activa);
         const tarifaPromedio = tarifasActivas.length
