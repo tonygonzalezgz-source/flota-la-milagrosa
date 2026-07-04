@@ -759,22 +759,23 @@ def get_current_user():
 @app.route("/api/buses", methods=["GET"])
 @require_auth
 def get_buses():
-    user_id = request.args.get("user_id", type=int)
+    # La identidad SIEMPRE se toma del token JWT, nunca de un parámetro del
+    # cliente. Así un Propietario/Técnico no puede pedir buses ajenos.
+    uid = request.jwt_user_id
     db = get_db()
-    if user_id:
-        user = db.execute(
-            "SELECT rol FROM usuarios WHERE id = ? AND activo = 1", (user_id,)
-        ).fetchone()
-        if user and user["rol"] in ("Propietario", "Técnico Mant."):
-            rows = db.execute(
-                """SELECT b.* FROM buses b
-                   JOIN usuario_buses ub ON ub.bus_id = b.id
-                   WHERE ub.usuario_id = ?
-                   ORDER BY b.numero""",
-                (user_id,),
-            ).fetchall()
-            db.close()
-            return jsonify([dict(r) for r in rows])
+    user = db.execute(
+        "SELECT rol FROM usuarios WHERE id = ? AND activo = 1", (uid,)
+    ).fetchone()
+    if user and user["rol"] in ("Propietario", "Técnico Mant."):
+        rows = db.execute(
+            """SELECT b.* FROM buses b
+               JOIN usuario_buses ub ON ub.bus_id = b.id
+               WHERE ub.usuario_id = ?
+               ORDER BY b.numero""",
+            (uid,),
+        ).fetchall()
+        db.close()
+        return jsonify([dict(r) for r in rows])
     rows = db.execute("SELECT * FROM buses ORDER BY numero").fetchall()
     db.close()
     return jsonify([dict(r) for r in rows])
@@ -1254,12 +1255,9 @@ def get_historial_despacho():
 
 
 @app.route("/api/despacho/batch", methods=["PUT"])
-@require_auth
+@require_role("Administrador", "Despachador")
 def batch_upsert_despacho():
     """Guardado instantáneo del despacho del día (upsert por bus/fecha)."""
-    if getattr(request, "jwt_user_rol", None) == "Conductor":
-        return jsonify({"error": "No autorizado"}), 403
-
     data       = request.get_json(force=True)
     fecha      = data.get("fecha")
     registros  = data.get("registros", [])
@@ -1360,7 +1358,7 @@ def get_alistamiento():
 
 
 @app.route("/api/alistamiento", methods=["POST"])
-@require_auth
+@require_role("Administrador", "Despachador", "Conductor")
 def upsert_alistamiento():
     """Crea o actualiza el alistamiento de un bus (UPSERT por bus_id + fecha)."""
     data           = request.get_json(force=True)
@@ -1489,7 +1487,7 @@ def get_tipos_novedad():
 # ──────────────────────────────────────────
 
 @app.route("/api/pasajeros", methods=["POST"])
-@require_auth
+@require_role("Administrador", "Analista", "Operador")
 def create_pasajeros():
     data = request.get_json(force=True)
     bus_id     = data.get("bus_id")
@@ -1578,7 +1576,7 @@ def get_maint_estado(bus_id):
 
 
 @app.route("/api/mantenimiento/estado", methods=["PUT"])
-@require_auth
+@require_role("Administrador", "Técnico Mant.")
 def update_maint_estado():
     data = request.get_json(force=True)
     bus_id          = data.get("bus_id")
@@ -1612,7 +1610,7 @@ def update_maint_estado():
 
 
 @app.route("/api/mantenimiento/registro", methods=["POST"])
-@require_auth
+@require_role("Administrador", "Técnico Mant.")
 def create_maint_registro():
     data = request.get_json(force=True)
     bus_id          = data.get("bus_id")
@@ -1667,19 +1665,18 @@ def get_maint_registros():
 @require_auth
 def dashboard_propietario():
     today = date.today().isoformat()
-    user_id = request.args.get("user_id", type=int)
+    uid = request.jwt_user_id  # identidad del token, no del cliente
     db = get_db()
 
     bus_ids = []
-    if user_id:
-        user = db.execute(
-            "SELECT rol FROM usuarios WHERE id = ? AND activo = 1", (user_id,)
-        ).fetchone()
-        if user and user["rol"] == "Propietario":
-            rows = db.execute(
-                "SELECT bus_id FROM usuario_buses WHERE usuario_id = ?", (user_id,)
-            ).fetchall()
-            bus_ids = [r["bus_id"] for r in rows]
+    user = db.execute(
+        "SELECT rol FROM usuarios WHERE id = ? AND activo = 1", (uid,)
+    ).fetchone()
+    if user and user["rol"] == "Propietario":
+        rows = db.execute(
+            "SELECT bus_id FROM usuario_buses WHERE usuario_id = ?", (uid,)
+        ).fetchall()
+        bus_ids = [r["bus_id"] for r in rows]
 
     if bus_ids:
         ph = ",".join("?" * len(bus_ids))
@@ -1752,9 +1749,8 @@ def _bus_ids_for_user(db, user_id):
 @require_auth
 def get_movilidad():
     fecha            = request.args.get("fecha", date.today().isoformat())
-    user_id          = request.args.get("user_id", type=int)
     db               = get_db()
-    is_prop, bus_ids = _bus_ids_for_user(db, user_id)
+    is_prop, bus_ids = _bus_ids_for_user(db, request.jwt_user_id)
 
     if is_prop:
         if not bus_ids:
@@ -1790,9 +1786,8 @@ def get_movilidad():
 def get_movilidad_rango():
     desde            = request.args.get("desde", date.today().isoformat())
     hasta            = request.args.get("hasta", date.today().isoformat())
-    user_id          = request.args.get("user_id", type=int)
     db               = get_db()
-    is_prop, bus_ids = _bus_ids_for_user(db, user_id)
+    is_prop, bus_ids = _bus_ids_for_user(db, request.jwt_user_id)
 
     if is_prop:
         if not bus_ids:
@@ -1820,7 +1815,7 @@ def get_movilidad_rango():
 
 
 @app.route("/api/movilidad/batch", methods=["PUT"])
-@require_auth
+@require_role("Administrador", "Analista")
 def batch_upsert_movilidad():
     data       = request.get_json(force=True)
     fecha      = data.get("fecha")
@@ -1876,7 +1871,7 @@ def batch_upsert_movilidad():
 
 
 @app.route("/api/movilidad/fecha/<fecha>", methods=["DELETE"])
-@require_auth
+@require_role("Administrador", "Analista")
 def delete_movilidad_fecha(fecha):
     """Elimina todos los registros de movilidad para una fecha dada."""
     db      = get_db()
@@ -1891,9 +1886,8 @@ def delete_movilidad_fecha(fecha):
 @require_auth
 def get_movilidad_fechas():
     """Fechas que tienen al menos un registro (para resaltar el calendario)."""
-    user_id = request.args.get("user_id", type=int)
     db      = get_db()
-    is_prop, bus_ids = _bus_ids_for_user(db, user_id)
+    is_prop, bus_ids = _bus_ids_for_user(db, request.jwt_user_id)
 
     if is_prop:
         if not bus_ids:
@@ -1922,7 +1916,7 @@ GASTO_CATEGORIAS = [
 
 
 @app.route("/api/gastos", methods=["POST"])
-@require_auth
+@require_role("Administrador", "Propietario")
 def create_gasto():
     data       = request.get_json(force=True)
     bus_id     = data.get("bus_id")
@@ -1931,7 +1925,7 @@ def create_gasto():
     descripcion = (data.get("descripcion") or "").strip()
     taller     = (data.get("taller") or "").strip()
     monto      = data.get("monto")
-    usuario_id = data.get("usuario_id")
+    usuario_id = request.jwt_user_id  # autor real, tomado del token
     comp_b64   = data.get("comprobante_base64")
     comp_mime  = data.get("comprobante_mime")
     comp_nombre = data.get("comprobante_nombre")
@@ -1963,14 +1957,13 @@ def create_gasto():
 @require_auth
 def get_gastos():
     """Lista metadata (SIN el base64) filtrada por dueño."""
-    user_id   = request.args.get("user_id", type=int)
     bus_id    = request.args.get("bus_id", type=int)
     categoria = request.args.get("categoria")
     desde     = request.args.get("desde")
     hasta     = request.args.get("hasta")
 
     db = get_db()
-    is_prop, bus_ids = _bus_ids_for_user(db, user_id)
+    is_prop, bus_ids = _bus_ids_for_user(db, request.jwt_user_id)
 
     where  = []
     params = []
@@ -2007,7 +2000,6 @@ def get_gastos():
 @app.route("/api/gastos/<int:gasto_id>/comprobante", methods=["GET"])
 @require_auth
 def get_gasto_comprobante(gasto_id):
-    user_id = request.args.get("user_id", type=int)
     db = get_db()
     row = db.execute(
         "SELECT bus_id, comprobante_base64, comprobante_mime, comprobante_nombre "
@@ -2017,7 +2009,7 @@ def get_gasto_comprobante(gasto_id):
     if not row:
         db.close(); return jsonify({"error": "No encontrado"}), 404
 
-    is_prop, bus_ids = _bus_ids_for_user(db, user_id)
+    is_prop, bus_ids = _bus_ids_for_user(db, request.jwt_user_id)
     if is_prop and row["bus_id"] not in bus_ids:
         db.close(); return jsonify({"error": "No autorizado"}), 403
 
@@ -2030,9 +2022,8 @@ def get_gasto_comprobante(gasto_id):
 
 
 @app.route("/api/gastos/<int:gasto_id>", methods=["DELETE"])
-@require_auth
+@require_role("Administrador", "Propietario")
 def delete_gasto(gasto_id):
-    user_id = request.args.get("user_id", type=int)
     db = get_db()
     row = db.execute(
         "SELECT bus_id FROM gastos_mantenimiento WHERE id = ?", (gasto_id,)
@@ -2040,7 +2031,7 @@ def delete_gasto(gasto_id):
     if not row:
         db.close(); return jsonify({"error": "No encontrado"}), 404
 
-    is_prop, bus_ids = _bus_ids_for_user(db, user_id)
+    is_prop, bus_ids = _bus_ids_for_user(db, request.jwt_user_id)
     if is_prop and row["bus_id"] not in bus_ids:
         db.close(); return jsonify({"error": "No autorizado"}), 403
 
@@ -2289,7 +2280,7 @@ def get_bus_mant_config(bus_id):
 
 
 @app.route("/api/mantenimiento/config", methods=["POST"])
-@require_auth
+@require_role("Administrador", "Técnico Mant.")
 def upsert_bus_mant_config():
     """Bulk upsert de la config de un bus.
     Body: { bus_id, km_inicial, items: [{ item_id, intervalo_km, intervalo_dias,
@@ -2356,7 +2347,7 @@ def upsert_bus_mant_config():
 
 
 @app.route("/api/mantenimiento/historial", methods=["POST"])
-@require_auth
+@require_role("Administrador", "Técnico Mant.")
 def add_mant_historial():
     """Registra un mantenimiento realizado (rol mecánico/admin)."""
     data = request.get_json(force=True)
