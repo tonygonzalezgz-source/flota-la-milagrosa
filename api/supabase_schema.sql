@@ -111,6 +111,16 @@ CREATE TABLE IF NOT EXISTS registros_pasajeros (
     timestamp  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Catálogo de conductores (antes de registros_movilidad: esta lo referencia)
+CREATE TABLE IF NOT EXISTS conductores (
+    id         SERIAL PRIMARY KEY,
+    nombre     TEXT    NOT NULL,
+    cedula     TEXT,
+    telefono   TEXT,
+    activo     INTEGER NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Movilidad diaria por bus (resumen por fecha)
 CREATE TABLE IF NOT EXISTS registros_movilidad (
     id            SERIAL PRIMARY KEY,
@@ -121,20 +131,11 @@ CREATE TABLE IF NOT EXISTS registros_movilidad (
     km_recorridos REAL    NOT NULL DEFAULT 0,
     novedades     TEXT    NOT NULL DEFAULT '',
     ruta_id       INTEGER REFERENCES rutas(id),
+    conductor_id  INTEGER REFERENCES conductores(id),
     usuario_id    INTEGER REFERENCES usuarios(id),
     created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(bus_id, fecha)
-);
-
--- Catálogo de conductores
-CREATE TABLE IF NOT EXISTS conductores (
-    id         SERIAL PRIMARY KEY,
-    nombre     TEXT    NOT NULL,
-    cedula     TEXT,
-    telefono   TEXT,
-    activo     INTEGER NOT NULL DEFAULT 1,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Rutas asignadas a cada despachador

@@ -328,6 +328,30 @@
     .estado-badge.guardado   { background: rgba(34,197,94,.12);  color: var(--green); }
     .estado-badge.modificado { background: rgba(245,158,11,.12); color: var(--yellow); }
 
+    /* Estado del despacho del día (sincronizado, informativo) */
+    .desp-badge {
+      display: inline-block;
+      margin-top: 3px;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .desp-badge.taller       { background: rgba(245,158,11,.14);  color: var(--yellow); }
+    .desp-badge.descanso     { background: rgba(148,163,184,.14); color: var(--txt2); }
+    .desp-badge.sin-despacho { background: rgba(239,68,68,.10);   color: var(--red); font-style: italic; }
+
+    /* Valor sincronizado desde despacho (solo lectura) */
+    .sync-ro {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 12px; color: var(--txt);
+    }
+    .sync-ro::before {
+      content: '⇄';
+      font-size: 11px;
+      color: var(--txt3);
+    }
+
     .btn-row-save {
       padding: 5px 12px;
       background: var(--card);
@@ -450,8 +474,9 @@
     .import-preview-table tbody tr.row-ok  { background: rgba(34,197,94,.04); }
     .import-preview-table tbody tr.row-err { background: rgba(239,68,68,.06); }
 
-    .tag-ok  { display:inline-block; padding:2px 7px; border-radius:20px; font-size:10px; font-weight:700; background:rgba(34,197,94,.15); color:var(--green); }
-    .tag-err { display:inline-block; padding:2px 7px; border-radius:20px; font-size:10px; font-weight:700; background:rgba(239,68,68,.15); color:var(--red); }
+    .tag-ok   { display:inline-block; padding:2px 7px; border-radius:20px; font-size:10px; font-weight:700; background:rgba(34,197,94,.15); color:var(--green); }
+    .tag-err  { display:inline-block; padding:2px 7px; border-radius:20px; font-size:10px; font-weight:700; background:rgba(239,68,68,.15); color:var(--red); }
+    .tag-warn { display:inline-block; padding:2px 7px; border-radius:20px; font-size:10px; font-weight:700; background:rgba(245,158,11,.15); color:var(--yellow); }
 
     .import-modal-foot {
       padding: 14px 22px;
@@ -616,6 +641,10 @@
       <div class="stat-val sky"     id="statConRuta">—</div>
       <div class="stat-lbl">Con Ruta</div>
     </div>
+    <div class="stat-item">
+      <div class="stat-val green"   id="statKm">—</div>
+      <div class="stat-lbl">Km del día</div>
+    </div>
   </div>
 
   <!-- PROGRESS -->
@@ -636,6 +665,8 @@
             <th>Grupo</th>
             <th>Vueltas</th>
             <th>Pasajeros</th>
+            <th>Km</th>
+            <th>Conductor</th>
             <th>Ruta</th>
             <th>Novedades</th>
             <th>Estado</th>
@@ -674,7 +705,7 @@
             <th>Vueltas</th>
             <th>Pasajeros</th>
             <th>Km</th>
-            <th>Ruta BEA</th>
+            <th>Ruta</th>
             <th>Conductor</th>
             <th>Estado</th>
           </tr>
@@ -698,35 +729,43 @@
     const token = localStorage.getItem('authToken');
     return fetch(url, { ...options, headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}), ...(options.headers || {}) } });
   }
-  let currentUser = null;
-  let allBuses    = [];
-  let allRutas    = [];
-  let records     = {};   // bus_id → record
-  let grupoFiltro = 'todos';
-  let dirty       = new Set();
+  let currentUser    = null;
+  let allBuses       = [];
+  let allRutas       = [];
+  let allConductores = [];
+  let records        = {};   // bus_id → record
+  let despachoMap    = {};   // bus_id → {estado, conductor_id, ruta_id} del despacho de la fecha
+  let grupoFiltro    = 'todos';
+  let dirty          = new Set();
 
   /* ── INIT ── */
   document.addEventListener('DOMContentLoaded', async () => {
     currentUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
 
-    const ayer = new Date();
-    ayer.setDate(ayer.getDate() - 1);
-    document.getElementById('datePicker').value = isoDate(ayer);
+    document.getElementById('datePicker').value = shiftIso(hoyBogota(), -1);
     document.getElementById('datePicker').addEventListener('change', () => loadFecha());
     document.getElementById('btnPrevDay').onclick = () => shiftDay(-1);
     document.getElementById('btnNextDay').onclick = () => shiftDay(1);
 
-    await Promise.all([loadBuses(), loadRutas()]);
+    await Promise.all([loadBuses(), loadRutas(), loadConductores()]);
     await loadFecha();
   });
 
   /* ── HELPERS ── */
-  function isoDate(d) { return d.toISOString().slice(0, 10); }
+  /* Fecha calendario en Colombia (no UTC: toISOString corre el día después de las 7pm) */
+  function isoDate(d) { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(d); }
+  function hoyBogota() { return isoDate(new Date()); }
+
+  /* Suma días a una fecha ISO sin depender de la zona horaria del equipo */
+  function shiftIso(iso, delta) {
+    const d = new Date(iso + 'T12:00:00Z');
+    d.setUTCDate(d.getUTCDate() + delta);
+    return d.toISOString().slice(0, 10);
+  }
 
   function shiftDay(delta) {
-    const d = new Date(document.getElementById('datePicker').value + 'T12:00:00');
-    d.setDate(d.getDate() + delta);
-    document.getElementById('datePicker').value = isoDate(d);
+    const picker = document.getElementById('datePicker');
+    picker.value = shiftIso(picker.value, delta);
     loadFecha();
   }
 
@@ -752,16 +791,48 @@
     } catch (_) { allRutas = []; }
   }
 
-  /* ── CARGAR REGISTROS ── */
+  /* ── CARGAR CONDUCTORES ── */
+  async function loadConductores() {
+    try {
+      const res = await apiFetch(`${API}/conductores`);
+      allConductores = await res.json();
+    } catch (_) { allConductores = []; }
+  }
+
+  function conductorNombre(id) {
+    const c = allConductores.find(c => c.id == id);
+    return c ? c.nombre : '—';
+  }
+
+  function rutaNombreById(id) {
+    const r = allRutas.find(r => r.id == id);
+    return r ? r.nombre : '—';
+  }
+
+  /* ── CARGAR REGISTROS + DESPACHO DE LA MISMA FECHA ── */
   async function loadFecha() {
     const fecha = document.getElementById('datePicker').value;
     if (!fecha) return;
     dirty.clear();
 
-    const res  = await apiFetch(`${API}/movilidad?fecha=${fecha}`);
+    const [res, despRes] = await Promise.all([
+      apiFetch(`${API}/movilidad?fecha=${fecha}`),
+      apiFetch(`${API}/despacho?fecha=${fecha}`),
+    ]);
     const data = await res.json();
     records = {};
     data.forEach(r => { records[r.bus_id] = r; });
+
+    /* estado === null ⇔ el bus no tiene despacho para esta fecha */
+    despachoMap = {};
+    try {
+      const despJson = await despRes.json();
+      (despJson.buses || []).forEach(b => {
+        if (b.estado != null) {
+          despachoMap[b.id] = { estado: b.estado, conductor_id: b.conductor_id, ruta_id: b.ruta_id };
+        }
+      });
+    } catch (_) { despachoMap = {}; }
 
     renderTable();
     updateStats();
@@ -780,28 +851,61 @@
     const tbody = document.getElementById('tbody');
 
     if (!buses.length) {
-      tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><p>No hay buses para mostrar</p></div></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="10"><div class="empty-state"><p>No hay buses para mostrar</p></div></td></tr>`;
       return;
     }
 
     tbody.innerHTML = buses.map(b => {
       const rec      = records[b.id];
+      const desp     = despachoMap[b.id];
       const cls      = rec ? 'has-data' : '';
       const est      = dirty.has(b.id) ? 'modificado' : (rec ? 'guardado' : 'sin-datos');
       const estLabel = { 'sin-datos': 'Sin datos', guardado: 'Guardado', modificado: 'Modificado' }[est];
       const rutasBus = rutasForGrupo(b.grupo);
 
-      const rutaOptions = rutasBus.length
-        ? rutasBus.map(r =>
-            `<option value="${r.id}" ${rec && rec.ruta_id == r.id ? 'selected' : ''}>${r.nombre}</option>`
-          ).join('')
+      /* Etiqueta informativa del despacho del día (no bloquea la captura) */
+      const despBadge = !desp
+        ? `<span class="desp-badge sin-despacho">Sin despacho</span>`
+        : desp.estado === 'taller'   ? `<span class="desp-badge taller">Taller</span>`
+        : desp.estado === 'descanso' ? `<span class="desp-badge descanso">Descanso</span>`
         : '';
+
+      /* Conductor: sincronizado del despacho; select de respaldo si no hay */
+      let conductorCell;
+      if (desp && desp.conductor_id) {
+        conductorCell = `<span class="sync-ro" title="Asignado por el despachador">${escHtml(conductorNombre(desp.conductor_id))}</span>`;
+      } else {
+        const condOptions = allConductores.map(c =>
+          `<option value="${c.id}" ${rec && rec.conductor_id == c.id ? 'selected' : ''}>${escHtml(c.nombre)}</option>`
+        ).join('');
+        conductorCell = `<select class="ruta-select" id="c-${b.id}" onchange="markDirty(${b.id})">
+                 <option value="">— Sin conductor —</option>
+                 ${condOptions}
+               </select>`;
+      }
+
+      /* Ruta: sincronizada del despacho; select de respaldo si no hay */
+      let rutaCell;
+      if (desp && desp.ruta_id) {
+        rutaCell = `<span class="sync-ro" title="Asignada por el despachador">${escHtml(rutaNombreById(desp.ruta_id))}</span>`;
+      } else if (rutasBus.length) {
+        const rutaOptions = rutasBus.map(r =>
+          `<option value="${r.id}" ${rec && rec.ruta_id == r.id ? 'selected' : ''}>${r.nombre}</option>`
+        ).join('');
+        rutaCell = `<select class="ruta-select" id="ruta-${b.id}" onchange="markDirty(${b.id})">
+                 <option value="">— Sin ruta —</option>
+                 ${rutaOptions}
+               </select>`;
+      } else {
+        rutaCell = `<span class="no-rutas-tip">Sin rutas Gr.${b.grupo}</span>`;
+      }
 
       return `
       <tr id="row-${b.id}" class="${cls}">
         <td class="cell-unidad">
           <div class="bus-num">${b.numero}</div>
           <div class="bus-placa">${b.placa || '—'}</div>
+          ${despBadge}
         </td>
         <td data-label="Grupo"><span class="badge-grupo badge-${(b.grupo || 'A').toLowerCase()}">${b.grupo}</span></td>
         <td data-label="Vueltas"><input  class="num-input"   id="v-${b.id}"    type="number" min="0"
@@ -810,15 +914,11 @@
         <td data-label="Pasajeros"><input  class="num-input"   id="p-${b.id}"    type="number" min="0"
                     value="${rec ? rec.pasajeros : ''}" placeholder="0"
                     oninput="markDirty(${b.id})" /></td>
-        <td data-label="Ruta">
-          ${rutasBus.length
-            ? `<select class="ruta-select" id="ruta-${b.id}" onchange="markDirty(${b.id})">
-                 <option value="">— Sin ruta —</option>
-                 ${rutaOptions}
-               </select>`
-            : `<span class="no-rutas-tip">Sin rutas Gr.${b.grupo}</span>`
-          }
-        </td>
+        <td data-label="Km"><input  class="num-input"   id="k-${b.id}"    type="number" min="0" step="0.1"
+                    value="${rec && rec.km_recorridos != null ? Math.round(rec.km_recorridos * 10) / 10 : ''}" placeholder="0"
+                    oninput="markDirty(${b.id})" /></td>
+        <td data-label="Conductor">${conductorCell}</td>
+        <td data-label="Ruta">${rutaCell}</td>
         <td data-label="Novedades"><input  class="nov-input"   id="n-${b.id}"    type="text"
                     value="${rec ? escHtml(rec.novedades) : ''}" placeholder="Sin novedades"
                     oninput="markDirty(${b.id})" /></td>
@@ -844,12 +944,14 @@
     const conDatos   = Object.keys(records).length;
     const vueltas    = visible.reduce((s, r) => s + (r.vueltas   || 0), 0);
     const pasajeros  = visible.reduce((s, r) => s + (r.pasajeros || 0), 0);
+    const km         = visible.reduce((s, r) => s + (parseFloat(r.km_recorridos) || 0), 0);
     const conRuta    = visible.filter(r => r.ruta_id).length;
 
     document.getElementById('statConDatos').textContent  = conDatos;
     document.getElementById('statVueltas').textContent   = vueltas.toLocaleString();
     document.getElementById('statPasajeros').textContent = pasajeros.toLocaleString();
     document.getElementById('statConRuta').textContent   = conRuta;
+    document.getElementById('statKm').textContent        = km.toLocaleString(undefined, { maximumFractionDigits: 1 });
 
     const total = allBuses.length;
     const pct   = total > 0 ? (conDatos / total) * 100 : 0;
@@ -860,10 +962,15 @@
   /* ── GUARDAR FILA ── */
   async function saveRow(busId) {
     const fecha   = document.getElementById('datePicker').value;
+    const desp    = despachoMap[busId];
     const vueltas = parseInt(document.getElementById(`v-${busId}`).value)   || 0;
     const pax     = parseInt(document.getElementById(`p-${busId}`).value)   || 0;
+    const km      = parseFloat(document.getElementById(`k-${busId}`).value) || 0;
     const rutaEl  = document.getElementById(`ruta-${busId}`);
-    const rutaId  = rutaEl ? (parseInt(rutaEl.value) || null) : null;
+    const condEl  = document.getElementById(`c-${busId}`);
+    /* Despacho manda; los selects solo existen como respaldo cuando no hay despacho */
+    const rutaId  = desp?.ruta_id      ?? (rutaEl ? (parseInt(rutaEl.value) || null) : null);
+    const condId  = desp?.conductor_id ?? (condEl ? (parseInt(condEl.value) || null) : null);
     const nov     = document.getElementById(`n-${busId}`).value.trim();
 
     const btn = document.getElementById(`brs-${busId}`);
@@ -876,11 +983,11 @@
         body: JSON.stringify({
           fecha,
           usuario_id: currentUser?.id,
-          registros: [{ bus_id: busId, vueltas, pasajeros: pax, ruta_id: rutaId, novedades: nov }],
+          registros: [{ bus_id: busId, vueltas, pasajeros: pax, km_recorridos: km, ruta_id: rutaId, conductor_id: condId, novedades: nov }],
         }),
       });
 
-      records[busId] = { bus_id: busId, vueltas, pasajeros: pax, ruta_id: rutaId, novedades: nov };
+      records[busId] = { bus_id: busId, vueltas, pasajeros: pax, km_recorridos: km, ruta_id: rutaId, conductor_id: condId, novedades: nov };
       dirty.delete(busId);
 
       const row = document.getElementById(`row-${busId}`);
@@ -908,15 +1015,21 @@
 
     const buses = grupoFiltro === 'todos' ? allBuses : allBuses.filter(b => b.grupo === grupoFiltro);
     const registros = buses.map(b => {
+      const desp   = despachoMap[b.id];
       const rutaEl = document.getElementById(`ruta-${b.id}`);
+      const condEl = document.getElementById(`c-${b.id}`);
       return {
-        bus_id:    b.id,
-        vueltas:   parseInt(document.getElementById(`v-${b.id}`)?.value)  || 0,
-        pasajeros: parseInt(document.getElementById(`p-${b.id}`)?.value)  || 0,
-        ruta_id:   rutaEl ? (parseInt(rutaEl.value) || null) : null,
-        novedades: document.getElementById(`n-${b.id}`)?.value.trim() || '',
+        bus_id:        b.id,
+        vueltas:       parseInt(document.getElementById(`v-${b.id}`)?.value)    || 0,
+        pasajeros:     parseInt(document.getElementById(`p-${b.id}`)?.value)    || 0,
+        km_recorridos: parseFloat(document.getElementById(`k-${b.id}`)?.value)  || 0,
+        ruta_id:       desp?.ruta_id      ?? (rutaEl ? (parseInt(rutaEl.value) || null) : null),
+        conductor_id:  desp?.conductor_id ?? (condEl ? (parseInt(condEl.value) || null) : null),
+        novedades:     document.getElementById(`n-${b.id}`)?.value.trim() || '',
       };
-    }).filter(r => r.vueltas > 0 || r.pasajeros > 0 || r.ruta_id || r.novedades);
+      /* Solo filas con datos digitados o tocadas por el usuario: con la sincronización,
+         ruta/conductor vienen llenos del despacho y no cuentan como "datos nuevos" */
+    }).filter(r => r.vueltas > 0 || r.pasajeros > 0 || r.km_recorridos > 0 || r.novedades || dirty.has(r.bus_id));
 
     if (!registros.length) {
       btn.disabled = false; btn.textContent = 'Guardar Todo';
@@ -999,13 +1112,19 @@
     _importParsed = [];
   }
 
+  /* Normaliza nombres para comparar BEA vs despacho (tildes, espacios, mayúsculas) */
+  function normNombre(s) {
+    return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, ' ').trim().toUpperCase();
+  }
+
   function handleImportFile(e) {
     const file = e.target.files[0];
     if (!file) return;
     e.target.value = '';
 
     const reader = new FileReader();
-    reader.onload = function(evt) {
+    reader.onload = async function(evt) {
       try {
         const wb   = XLSX.read(evt.target.result, { type: 'array', cellDates: true });
         const ws   = wb.Sheets[wb.SheetNames[0]];
@@ -1041,7 +1160,8 @@
           let fechaRaw = r[C.fecha];
           let fechaStr;
           if (fechaRaw instanceof Date) {
-            fechaStr = fechaRaw.toISOString().slice(0, 10);
+            /* Componentes locales: toISOString (UTC) corre la fecha un día en horas de la tarde */
+            fechaStr = `${fechaRaw.getFullYear()}-${String(fechaRaw.getMonth()+1).padStart(2,'0')}-${String(fechaRaw.getDate()).padStart(2,'0')}`;
           } else if (typeof fechaRaw === 'number') {
             const d = XLSX.SSF.parse_date_code(fechaRaw);
             fechaStr = `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`;
@@ -1063,28 +1183,68 @@
           if (rut && !a.rutas.includes(rut)) a.rutas.push(rut);
         }
 
-        /* Cruzar con buses y rutas de la app */
-        _importParsed = Object.values(aggMap).map(a => {
-          const bus = allBuses.find(b => String(b.numero) === String(a.busNum));
+        /* Fechas: la del ARCHIVO manda; las futuras se bloquean */
+        const hoy = hoyBogota();
+        const fechasValidas = [...new Set(Object.values(aggMap).map(a => a.fecha))].filter(f => f <= hoy);
 
-          let rutaId = null, rutaMatch = '';
-          for (const rn of a.rutas) {
-            const found = allRutas.find(r => r.nombre.trim().toLowerCase() === rn.toLowerCase());
-            if (found) { rutaId = found.id; rutaMatch = found.nombre; break; }
+        /* Cruzar con el despacho de cada fecha del archivo (misma fecha, nunca desplazada) */
+        const despachoByFecha = {};
+        await Promise.all(fechasValidas.map(async f => {
+          despachoByFecha[f] = {};
+          try {
+            const res  = await apiFetch(`${API}/despacho?fecha=${f}`);
+            const json = await res.json();
+            (json.buses || []).forEach(b => { if (b.estado != null) despachoByFecha[f][b.id] = b; });
+          } catch (_) { /* sin despacho disponible: se usa el respaldo por nombre */ }
+        }));
+
+        /* Cruzar con buses, despacho y rutas de la app */
+        _importParsed = Object.values(aggMap).map(a => {
+          const bus    = allBuses.find(b => String(b.numero) === String(a.busNum));
+          const futura = a.fecha > hoy;
+          const desp   = (bus && !futura) ? (despachoByFecha[a.fecha] || {})[bus.id] : null;
+
+          /* Ruta: la del despacho manda; el match por nombre BEA queda como respaldo */
+          let rutaId = desp?.ruta_id || null;
+          const rutaDeDespacho = !!rutaId;
+          if (!rutaId) {
+            for (const rn of a.rutas) {
+              const found = allRutas.find(r => r.nombre.trim().toLowerCase() === rn.toLowerCase());
+              if (found) { rutaId = found.id; break; }
+            }
           }
 
+          /* Conductor: el del despacho manda; respaldo = match del nombre BEA */
+          const beaNombre = [...a.nombres].join(', ');
+          let conductorId = desp?.conductor_id || null;
+          if (!conductorId && beaNombre) {
+            const found = allConductores.find(c => normNombre(c.nombre) === normNombre([...a.nombres][0]));
+            if (found) conductorId = found.id;
+          }
+          const despConductorNombre = desp?.conductor_id ? conductorNombre(desp.conductor_id) : '';
+          const discrepancia = !!(despConductorNombre && beaNombre &&
+                                  normNombre(despConductorNombre) !== normNombre([...a.nombres][0]));
+
           return {
-            busNum   : a.busNum,
-            bus_id   : bus?.id   || null,
-            busPlaca : bus?.placa || '—',
-            fecha    : a.fecha,
-            vueltas  : a.vueltas,
-            pasajeros: a.pasajeros,
-            km       : Math.round(a.km * 10) / 10,
-            novedades: '',
-            ruta_id  : rutaId,
-            rutaLabel: a.rutas.join(', '),
-            matched  : !!bus,
+            busNum        : a.busNum,
+            bus_id        : bus?.id   || null,
+            busPlaca      : bus?.placa || '—',
+            fecha         : a.fecha,
+            vueltas       : a.vueltas,
+            pasajeros     : a.pasajeros,
+            km            : Math.round(a.km * 10) / 10,
+            novedades     : '',
+            ruta_id       : rutaId,
+            rutaLabel     : rutaDeDespacho ? rutaNombreById(rutaId) : (a.rutas.join(', ') || ''),
+            rutaDeDespacho,
+            conductor_id  : conductorId,
+            beaNombre,
+            despConductorNombre,
+            discrepancia,
+            tieneDespacho : !!desp,
+            despEstado    : desp ? desp.estado : null,
+            futura,
+            matched       : !!bus && !futura,
           };
         }).sort((a, b) => a.fecha.localeCompare(b.fecha) || a.busNum - b.busNum);
 
@@ -1098,33 +1258,55 @@
   }
 
   function showImportPreview(data) {
-    const total    = data.length;
-    const matched  = data.filter(d => d.matched).length;
-    const noMatch  = total - matched;
-    const fechas   = [...new Set(data.map(d => d.fecha))];
+    const total       = data.length;
+    const matched     = data.filter(d => d.matched).length;
+    const futuras     = data.filter(d => d.futura).length;
+    const noMatch     = total - matched - futuras;
+    const fechas      = [...new Set(data.map(d => d.fecha))];
+    const pickerFecha = document.getElementById('datePicker').value;
+    const fechaDistinta = fechas.some(f => f !== pickerFecha);
 
     document.getElementById('importSummary').innerHTML = `
       <span class="imp-stat">Registros: <b>${total}</b></span>
       <span class="imp-stat">Buses encontrados: <b style="color:var(--green)">${matched}</b></span>
       ${noMatch > 0 ? `<span class="imp-stat">No encontrados: <b style="color:var(--red)">${noMatch}</b></span>` : ''}
-      <span class="imp-stat">Fecha(s): <b>${fechas.join(', ')}</b></span>
+      ${futuras > 0 ? `<span class="imp-stat">Fechas futuras: <b style="color:var(--red)">${futuras}</b></span>` : ''}
+      <span class="imp-stat">Fecha(s) del archivo: <b>${fechas.join(', ')}</b></span>
+      ${fechaDistinta ? `<span class="imp-stat" style="color:var(--yellow)">⚠ Distinta a la fecha seleccionada (${pickerFecha}): se importará con la fecha del ARCHIVO y su despacho de ese día.</span>` : ''}
     `;
 
-    document.getElementById('importTbody').innerHTML = data.map(d => `
+    document.getElementById('importTbody').innerHTML = data.map(d => {
+      const conductorCell = d.despConductorNombre
+        ? `${escHtml(d.despConductorNombre)}${d.discrepancia ? `<br><span class="tag-warn" title="El conductor del archivo BEA no coincide con el del despacho">BEA: ${escHtml(d.beaNombre)}</span>` : ''}`
+        : (d.beaNombre ? `<span style="color:var(--txt2)">${escHtml(d.beaNombre)}</span>` : '—');
+
+      const estadoCell = !d.matched
+        ? (d.futura ? '<span class="tag-err">Fecha futura</span>' : '<span class="tag-err">Sin bus</span>')
+        : `<span class="tag-ok">OK</span>${
+            d.despEstado === 'taller'   ? ' <span class="tag-warn">Taller</span>'
+          : d.despEstado === 'descanso' ? ' <span class="tag-warn">Descanso</span>'
+          : !d.tieneDespacho            ? ' <span class="tag-warn" title="No hay despacho registrado para este bus en esa fecha">Sin despacho</span>'
+          : ''}`;
+
+      return `
       <tr class="${d.matched ? 'row-ok' : 'row-err'}">
         <td><b>${d.busNum}</b>${d.busPlaca !== '—' ? `<br><small style="color:var(--txt2);font-family:monospace">${d.busPlaca}</small>` : ''}</td>
         <td>${d.fecha}</td>
         <td style="text-align:right">${d.vueltas}</td>
         <td style="text-align:right">${d.pasajeros.toLocaleString()}</td>
         <td style="text-align:right">${d.km}</td>
-        <td style="color:var(--txt2)">${d.rutaLabel || '—'}</td>
-        <td style="color:var(--txt2);font-size:11px">${d.novedades || '—'}</td>
-        <td>${d.matched ? '<span class="tag-ok">OK</span>' : '<span class="tag-err">Sin bus</span>'}</td>
-      </tr>`).join('');
+        <td style="color:var(--txt2)">${d.rutaLabel ? escHtml(d.rutaLabel) : '—'}${d.rutaDeDespacho ? '' : (d.rutaLabel ? ' <small style="color:var(--txt3)">(BEA)</small>' : '')}</td>
+        <td style="font-size:11px">${conductorCell}</td>
+        <td style="white-space:nowrap">${estadoCell}</td>
+      </tr>`;
+    }).join('');
 
-    const warn = document.getElementById('importWarn');
-    if (noMatch > 0) {
-      warn.textContent = `⚠ ${noMatch} bus(es) del archivo no existen en la app y serán omitidos.`;
+    const warn  = document.getElementById('importWarn');
+    const avisos = [];
+    if (noMatch > 0) avisos.push(`${noMatch} bus(es) del archivo no existen en la app y serán omitidos.`);
+    if (futuras > 0) avisos.push(`${futuras} registro(s) con fecha futura serán omitidos.`);
+    if (avisos.length) {
+      warn.textContent = '⚠ ' + avisos.join(' ');
       warn.style.display = 'block';
     } else {
       warn.style.display = 'none';
@@ -1142,6 +1324,19 @@
     const valid = _importParsed.filter(d => d.matched);
     if (!valid.length) return;
 
+    /* La fecha del archivo manda: si difiere de la seleccionada, pedir confirmación explícita */
+    const pickerFecha = document.getElementById('datePicker').value;
+    const fechasImp   = [...new Set(valid.map(d => d.fecha))].sort();
+    if (fechasImp.some(f => f !== pickerFecha)) {
+      const ok = confirm(
+        `El archivo trae fecha(s): ${fechasImp.join(', ')}\n` +
+        `La fecha seleccionada en pantalla es: ${pickerFecha}\n\n` +
+        `Los datos se importarán con la fecha del ARCHIVO, cruzando conductor y ruta ` +
+        `con el despacho de esa misma fecha.\n\n¿Continuar?`
+      );
+      if (!ok) return;
+    }
+
     const btn = document.getElementById('btnConfirmImport');
     btn.disabled = true; btn.textContent = 'Importando…';
 
@@ -1156,6 +1351,7 @@
         km_recorridos: d.km,
         novedades    : d.novedades,
         ruta_id      : d.ruta_id,
+        conductor_id : d.conductor_id,
       });
     });
 

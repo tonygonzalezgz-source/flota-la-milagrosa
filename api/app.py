@@ -229,6 +229,7 @@ def migrate_db():
         for col_sql in [
             "ALTER TABLE buses ADD COLUMN IF NOT EXISTS propietario_id INTEGER REFERENCES propietarios(id)",
             "ALTER TABLE registros_movilidad ADD COLUMN IF NOT EXISTS ruta_id INTEGER REFERENCES rutas(id)",
+            "ALTER TABLE registros_movilidad ADD COLUMN IF NOT EXISTS conductor_id INTEGER REFERENCES conductores(id)",
             "ALTER TABLE buses ADD COLUMN IF NOT EXISTS km_inicial INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE alistamiento_vehicular ADD COLUMN IF NOT EXISTS novedades TEXT",
         ]:
@@ -568,6 +569,7 @@ def migrate_db():
         for col_sql in [
             "ALTER TABLE buses ADD COLUMN propietario_id INTEGER REFERENCES propietarios(id)",
             "ALTER TABLE registros_movilidad ADD COLUMN ruta_id INTEGER REFERENCES rutas(id)",
+            "ALTER TABLE registros_movilidad ADD COLUMN conductor_id INTEGER REFERENCES conductores(id)",
             "ALTER TABLE buses ADD COLUMN km_inicial INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE alistamiento_vehicular ADD COLUMN novedades TEXT",
         ]:
@@ -1762,10 +1764,21 @@ def get_movilidad():
         ph   = ",".join("?" * len(bus_ids))
         rows = db.execute(
             f"""SELECT rm.*, b.numero, b.placa, b.modelo, b.grupo,
-                       ru.nombre AS ruta_nombre
+                       ru.nombre AS ruta_nombre,
+                       cm.nombre AS conductor_nombre,
+                       CASE WHEN d.id IS NOT NULL THEN 1 ELSE 0 END AS tiene_despacho,
+                       d.estado       AS despacho_estado,
+                       d.conductor_id AS despacho_conductor_id,
+                       dc.nombre      AS despacho_conductor_nombre,
+                       d.ruta_id      AS despacho_ruta_id,
+                       dr.nombre      AS despacho_ruta_nombre
                 FROM registros_movilidad rm
                 JOIN buses b ON b.id = rm.bus_id
                 LEFT JOIN rutas ru ON ru.id = rm.ruta_id
+                LEFT JOIN conductores cm ON cm.id = rm.conductor_id
+                LEFT JOIN despacho_diario d ON d.bus_id = rm.bus_id AND d.fecha = rm.fecha
+                LEFT JOIN conductores dc ON dc.id = d.conductor_id
+                LEFT JOIN rutas dr ON dr.id = d.ruta_id
                 WHERE rm.fecha = ? AND rm.bus_id IN ({ph})
                 ORDER BY b.numero""",
             [fecha] + bus_ids,
@@ -1773,10 +1786,21 @@ def get_movilidad():
     else:
         rows = db.execute(
             """SELECT rm.*, b.numero, b.placa, b.modelo, b.grupo,
-                      ru.nombre AS ruta_nombre
+                      ru.nombre AS ruta_nombre,
+                      cm.nombre AS conductor_nombre,
+                      CASE WHEN d.id IS NOT NULL THEN 1 ELSE 0 END AS tiene_despacho,
+                      d.estado       AS despacho_estado,
+                      d.conductor_id AS despacho_conductor_id,
+                      dc.nombre      AS despacho_conductor_nombre,
+                      d.ruta_id      AS despacho_ruta_id,
+                      dr.nombre      AS despacho_ruta_nombre
                FROM registros_movilidad rm
                JOIN buses b ON b.id = rm.bus_id
                LEFT JOIN rutas ru ON ru.id = rm.ruta_id
+               LEFT JOIN conductores cm ON cm.id = rm.conductor_id
+               LEFT JOIN despacho_diario d ON d.bus_id = rm.bus_id AND d.fecha = rm.fecha
+               LEFT JOIN conductores dc ON dc.id = d.conductor_id
+               LEFT JOIN rutas dr ON dr.id = d.ruta_id
                WHERE rm.fecha = ?
                ORDER BY b.numero""",
             (fecha,),
@@ -1799,18 +1823,44 @@ def get_movilidad_rango():
             db.close(); return jsonify([])
         ph   = ",".join("?" * len(bus_ids))
         rows = db.execute(
-            f"""SELECT rm.*, b.numero, b.placa, b.modelo, b.grupo
+            f"""SELECT rm.*, b.numero, b.placa, b.modelo, b.grupo,
+                       ru.nombre AS ruta_nombre,
+                       cm.nombre AS conductor_nombre,
+                       CASE WHEN d.id IS NOT NULL THEN 1 ELSE 0 END AS tiene_despacho,
+                       d.estado       AS despacho_estado,
+                       d.conductor_id AS despacho_conductor_id,
+                       dc.nombre      AS despacho_conductor_nombre,
+                       d.ruta_id      AS despacho_ruta_id,
+                       dr.nombre      AS despacho_ruta_nombre
                 FROM registros_movilidad rm
                 JOIN buses b ON b.id = rm.bus_id
+                LEFT JOIN rutas ru ON ru.id = rm.ruta_id
+                LEFT JOIN conductores cm ON cm.id = rm.conductor_id
+                LEFT JOIN despacho_diario d ON d.bus_id = rm.bus_id AND d.fecha = rm.fecha
+                LEFT JOIN conductores dc ON dc.id = d.conductor_id
+                LEFT JOIN rutas dr ON dr.id = d.ruta_id
                 WHERE rm.fecha BETWEEN ? AND ? AND rm.bus_id IN ({ph})
                 ORDER BY b.numero, rm.fecha""",
             [desde, hasta] + bus_ids,
         ).fetchall()
     else:
         rows = db.execute(
-            """SELECT rm.*, b.numero, b.placa, b.modelo, b.grupo
+            """SELECT rm.*, b.numero, b.placa, b.modelo, b.grupo,
+                      ru.nombre AS ruta_nombre,
+                      cm.nombre AS conductor_nombre,
+                      CASE WHEN d.id IS NOT NULL THEN 1 ELSE 0 END AS tiene_despacho,
+                      d.estado       AS despacho_estado,
+                      d.conductor_id AS despacho_conductor_id,
+                      dc.nombre      AS despacho_conductor_nombre,
+                      d.ruta_id      AS despacho_ruta_id,
+                      dr.nombre      AS despacho_ruta_nombre
                FROM registros_movilidad rm
                JOIN buses b ON b.id = rm.bus_id
+               LEFT JOIN rutas ru ON ru.id = rm.ruta_id
+               LEFT JOIN conductores cm ON cm.id = rm.conductor_id
+               LEFT JOIN despacho_diario d ON d.bus_id = rm.bus_id AND d.fecha = rm.fecha
+               LEFT JOIN conductores dc ON dc.id = d.conductor_id
+               LEFT JOIN rutas dr ON dr.id = d.ruta_id
                WHERE rm.fecha BETWEEN ? AND ?
                ORDER BY b.numero, rm.fecha""",
             (desde, hasta),
@@ -1833,25 +1883,40 @@ def batch_upsert_movilidad():
     db    = get_db()
     saved = 0
     buses_afectados = set()
+
+    # Sincronización despacho → movilidad: para la MISMA fecha del batch
+    # (nunca se desplazan días), el conductor y la ruta del despacho mandan.
+    # Lo que envíe el cliente solo se usa como respaldo cuando no hay
+    # despacho o el despacho tiene ese campo vacío.
+    desp_rows = db.execute(
+        "SELECT bus_id, conductor_id, ruta_id FROM despacho_diario WHERE fecha = ?",
+        (fecha,),
+    ).fetchall()
+    despacho = {d["bus_id"]: d for d in desp_rows}
+
     for r in registros:
         bus_id = r.get("bus_id")
         if not bus_id:
             continue
+        d = despacho.get(bus_id)
+        conductor_id = (d["conductor_id"] if d and d["conductor_id"] else None) or r.get("conductor_id") or None
+        ruta_id      = (d["ruta_id"]      if d and d["ruta_id"]      else None) or r.get("ruta_id") or None
         db.execute(
             """INSERT INTO registros_movilidad
-                   (bus_id, fecha, vueltas, pasajeros, km_recorridos, novedades, ruta_id, usuario_id, updated_at)
-               VALUES (?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+                   (bus_id, fecha, vueltas, pasajeros, km_recorridos, novedades, ruta_id, conductor_id, usuario_id, updated_at)
+               VALUES (?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
                ON CONFLICT(bus_id, fecha) DO UPDATE SET
                    vueltas       = excluded.vueltas,
                    pasajeros     = excluded.pasajeros,
                    km_recorridos = excluded.km_recorridos,
                    novedades     = excluded.novedades,
                    ruta_id       = excluded.ruta_id,
+                   conductor_id  = excluded.conductor_id,
                    usuario_id    = excluded.usuario_id,
                    updated_at    = CURRENT_TIMESTAMP""",
             (bus_id, fecha, r.get("vueltas", 0), r.get("pasajeros", 0),
              r.get("km_recorridos", 0), r.get("novedades", ""),
-             r.get("ruta_id") or None, usuario_id),
+             ruta_id, conductor_id, usuario_id),
         )
         buses_afectados.add(bus_id)
         saved += 1
