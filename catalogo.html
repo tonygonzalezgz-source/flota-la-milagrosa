@@ -228,6 +228,8 @@
 
     .icon-btn:hover { background: var(--bg); color: var(--txt); }
     .icon-btn.del:hover { background: var(--red2); color: var(--red); }
+    .icon-btn.activar { color: #16a34a; }
+    .icon-btn.activar:hover { background: var(--green2); color: #15803d; }
 
     /* ── BADGES ── */
     .badge {
@@ -1081,9 +1083,7 @@
         <button class="icon-btn" onclick="openModal('condacceso', ${u.id})" title="Editar">
           <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         </button>
-        <button class="icon-btn del" onclick="deleteItem('condacceso', ${u.id})" title="Desactivar">
-          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
-        </button>
+        ${accionEstadoUsuario('condacceso', u)}
       </div></td>
     </tr>`).join('');
   }
@@ -1214,9 +1214,7 @@
         <button class="icon-btn" onclick="openModal('despachador', ${u.id})" title="Editar">
           <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         </button>
-        <button class="icon-btn del" onclick="deleteItem('despachador', ${u.id})" title="Desactivar">
-          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
-        </button>
+        ${accionEstadoUsuario('despachador', u)}
       </div></td>
     </tr>`).join('');
   }
@@ -1253,9 +1251,7 @@
         <button class="icon-btn" onclick="openModal('usuario', ${u.id})" title="Editar">
           <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         </button>
-        <button class="icon-btn del" onclick="deleteItem('usuario', ${u.id})" title="Desactivar">
-          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
-        </button>
+        ${accionEstadoUsuario('usuario', u)}
       </div></td>
     </tr>`).join('');
   }
@@ -1299,9 +1295,7 @@
         <button class="icon-btn" onclick="openModal('${type}', ${u.id})" title="Editar">
           <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         </button>
-        <button class="icon-btn del" onclick="deleteItem('${type}', ${u.id})" title="Desactivar">
-          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
-        </button>
+        ${accionEstadoUsuario(type, u)}
       </div></td>
     </tr>`;
   }
@@ -1783,6 +1777,33 @@
     } finally {
       btn.disabled    = false;
       btn.textContent = 'Guardar';
+    }
+  }
+
+  /* ─── ACCIÓN DE ESTADO (activar / desactivar) para cuentas de acceso ─── */
+  // Botón contextual: si la cuenta está activa → desactivar; si está inactiva → activar.
+  function accionEstadoUsuario(type, u) {
+    return u.activo
+      ? `<button class="icon-btn del" onclick="deleteItem('${type}', ${u.id})" title="Desactivar">
+           <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+         </button>`
+      : `<button class="icon-btn activar" onclick="activarUsuario(${u.id})" title="Activar">
+           <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+         </button>`;
+  }
+
+  async function activarUsuario(id) {
+    try {
+      await apiFetch(`/api/admin/usuarios/${id}`, {
+        method:  'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ activo: 1 }),
+      });
+      await loadAll();
+      notifyParent('usuario');
+      showToast('Cuenta activada correctamente');
+    } catch (e) {
+      showToast(e.message, 'error');
     }
   }
 
