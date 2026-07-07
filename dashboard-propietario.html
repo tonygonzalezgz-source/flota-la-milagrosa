@@ -702,27 +702,6 @@
       color: #aaa; font-size: 12px;
     }
 
-    .modal-mant-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-    }
-
-    .modal-mant-item {
-      background: #f8f8f8;
-      border-radius: 10px;
-      padding: 10px 12px;
-    }
-
-    .mmi-label { font-size: 10px; font-weight: 700; color: #aaa; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 6px; }
-    .mmi-bar-wrap { background: #eee; border-radius: 4px; height: 5px; margin-bottom: 5px; overflow: hidden; }
-    .mmi-bar { height: 100%; border-radius: 4px; transition: width 0.5s; }
-    .mmi-bar.ok    { background: #22c55e; }
-    .mmi-bar.warn  { background: #f59e0b; }
-    .mmi-bar.alert { background: #ef4444; }
-    .mmi-obs { font-size: 11px; color: #555; }
-    .mmi-date { font-size: 10px; color: #aaa; margin-top: 2px; }
-
     .modal-ingreso-row {
       display: flex;
       justify-content: space-between;
@@ -1605,12 +1584,10 @@
         const hace30 = new Date(Date.now()-30*86400000).toISOString().slice(0,10);
         const uid    = currentUser ? '&user_id='+currentUser.id : '';
 
-        const [mantRes, movRes, tarifasRes] = await Promise.all([
-          apiFetch(`${API}/mantenimiento/estado/${bus.id}`),
+        const [movRes, tarifasRes] = await Promise.all([
           apiFetch(`${API}/movilidad/rango?desde=${hace30}&hasta=${hoy}${uid}`),
           apiFetch(`${API}/tarifas`),
         ]);
-        const mantItems  = await mantRes.json();
         const movRows    = (await movRes.json())
           .filter(r => r.bus_id === bus.id)
           .sort((a,b) => new Date(b.fecha) - new Date(a.fecha));
@@ -1619,20 +1596,6 @@
         const tarifaPromedio = tarifasActivas.length
           ? tarifasActivas.reduce((s,t) => s + t.valor, 0) / tarifasActivas.length
           : 0;
-
-        // Mantenimiento
-        const mantHtml = mantItems.length
-          ? `<div class="modal-mant-grid">${mantItems.map(m => `
-              <div class="modal-mant-item">
-                <div class="mmi-label">${escH(m.label)}</div>
-                <div class="mmi-bar-wrap">
-                  <div class="mmi-bar ${m.estado==='alert'?'alert':m.estado==='warn'?'warn':'ok'}"
-                       style="width:${m.progreso||0}%"></div>
-                </div>
-                <div class="mmi-obs">${escH(m.ultima_obs||'—')}</div>
-                <div class="mmi-date">${escH(m.ultima_fecha||'—')}</div>
-              </div>`).join('')}</div>`
-          : '<p style="font-size:12px;color:#aaa;padding:6px 0">Sin datos de mantenimiento registrados.</p>';
 
         // Movilidad diaria
         const totalPax      = movRows.reduce((s,r) => s + (r.pasajeros||0), 0);
@@ -1689,9 +1652,6 @@
             <div><div style="font-size:10px;color:#aaa;text-transform:uppercase;font-weight:700;letter-spacing:.4px;margin-bottom:3px">Estado</div>
                  <div style="font-size:13px;font-weight:600;text-transform:capitalize">${escH(bus.estado||'—')}</div></div>
           </div>
-
-          <div class="modal-section-title">Estado de Mantenimiento</div>
-          ${mantHtml}
 
           <div class="modal-section-title">
             <span>Movilidad por Día — Últimos 30 días</span>

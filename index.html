@@ -345,7 +345,7 @@
     }
 
     .sb-logo-text span {
-      font-size: 10px; color: var(--txt-dim);
+      font-size: 10px; color: #9a9aa4;
       letter-spacing: .5px; text-transform: uppercase;
     }
 
@@ -353,7 +353,7 @@
     .sb-section {
       padding: 16px 16px 5px;
       font-size: 9px; font-weight: 700; letter-spacing: 1.2px;
-      text-transform: uppercase; color: #333;
+      text-transform: uppercase; color: #8a8a94;
     }
 
     /* Nav */
@@ -366,12 +366,12 @@
       text-decoration: none; cursor: pointer;
       border: none; width: 100%; text-align: left;
       background: transparent; font-family: inherit;
-      font-size: 13px; font-weight: 500; color: #555;
+      font-size: 13px; font-weight: 500; color: #c2c2cc;
       transition: background .15s, color .15s;
       position: relative;
     }
 
-    .sb-link:hover { background: #1a1a1e; color: #999; }
+    .sb-link:hover { background: #1a1a1e; color: #ffffff; }
 
     /* Grupo acordeón */
     .sb-group { list-style: none; }
@@ -380,19 +380,19 @@
       padding: 9px 10px; border-radius: 10px;
       cursor: pointer; border: none; width: 100%; text-align: left;
       background: transparent; font-family: inherit;
-      font-size: 13px; font-weight: 500; color: #555;
+      font-size: 13px; font-weight: 500; color: #c2c2cc;
       transition: background .15s, color .15s;
     }
-    .sb-group-toggle:hover { background: #1a1a1e; color: #999; }
-    .sb-group-toggle .sb-icon { flex-shrink: 0; opacity: .5; transition: opacity .15s; }
-    .sb-group-toggle:hover .sb-icon { opacity: .7; }
+    .sb-group-toggle:hover { background: #1a1a1e; color: #ffffff; }
+    .sb-group-toggle .sb-icon { flex-shrink: 0; opacity: .75; transition: opacity .15s; }
+    .sb-group-toggle:hover .sb-icon { opacity: 1; }
 
     .sb-chevron {
       margin-left: auto; display: flex; flex-shrink: 0;
-      opacity: .5; transition: transform .2s ease, opacity .15s;
+      opacity: .7; transition: transform .2s ease, opacity .15s;
     }
-    .sb-group.open > .sb-group-toggle .sb-chevron { transform: rotate(180deg); opacity: .8; }
-    .sb-group.open > .sb-group-toggle { color: #999; }
+    .sb-group.open > .sb-group-toggle .sb-chevron { transform: rotate(180deg); opacity: 1; }
+    .sb-group.open > .sb-group-toggle { color: #ffffff; }
 
     .sb-submenu {
       list-style: none; padding: 0; margin: 2px 0 0;
@@ -410,8 +410,8 @@
     .sb-link.active .sb-icon { opacity: 1; }
     .sb-link.active svg { stroke: #111; }
 
-    .sb-icon { flex-shrink: 0; opacity: .5; transition: opacity .15s; }
-    .sb-link:hover .sb-icon { opacity: .7; }
+    .sb-icon { flex-shrink: 0; opacity: .75; transition: opacity .15s; }
+    .sb-link:hover .sb-icon { opacity: 1; }
 
     /* Access badge on link */
     .sb-access {
@@ -1443,14 +1443,15 @@
       badge.style.display = roles.includes(currentUser.username) ? '' : 'none';
     });
 
-    // Ocultar grupos sin ningún ítem accesible; auto-abrir los que sí tengan
+    // Ocultar grupos sin ningún ítem accesible. Los grupos arrancan CERRADOS
+    // para que el menú se vea ordenado; switchView reabre el de la vista activa.
     document.querySelectorAll('.sb-group').forEach(group => {
       const links = group.querySelectorAll('.sb-link[data-view]');
       const hasAccess = Array.from(links).some(
         l => currentUser.allowedViews.includes(l.dataset.view)
       );
       group.style.display = hasAccess ? '' : 'none';
-      group.classList.toggle('open', hasAccess);
+      group.classList.remove('open');
     });
   }
 
