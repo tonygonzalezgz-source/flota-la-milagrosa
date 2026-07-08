@@ -1279,23 +1279,12 @@
           const futura = a.fecha > hoy;
           const desp   = (bus && !futura) ? (despachoByFecha[a.fecha] || {})[bus.id] : null;
 
-          /* Ruta: la del despacho manda; el match por nombre BEA queda como respaldo */
-          let rutaId = desp?.ruta_id || null;
+          /* Ruta y conductor NO se importan del BEA: se muestran solo como
+             referencia. Los que quedan guardados son los del despacho. */
+          const rutaId = desp?.ruta_id || null;
           const rutaDeDespacho = !!rutaId;
-          if (!rutaId) {
-            for (const rn of a.rutas) {
-              const found = allRutas.find(r => r.nombre.trim().toLowerCase() === rn.toLowerCase());
-              if (found) { rutaId = found.id; break; }
-            }
-          }
 
-          /* Conductor: el del despacho manda; respaldo = match del nombre BEA */
           const beaNombre = [...a.nombres].join(', ');
-          let conductorId = desp?.conductor_id || null;
-          if (!conductorId && beaNombre) {
-            const found = allConductores.find(c => normNombre(c.nombre) === normNombre([...a.nombres][0]));
-            if (found) conductorId = found.id;
-          }
           const despConductorNombre = desp?.conductor_id ? conductorNombre(desp.conductor_id) : '';
           const discrepancia = !!(despConductorNombre && beaNombre &&
                                   normNombre(despConductorNombre) !== normNombre([...a.nombres][0]));
@@ -1308,11 +1297,8 @@
             vueltas       : a.vueltas,
             pasajeros     : a.pasajeros,
             km            : Math.round(a.km * 10) / 10,
-            novedades     : '',
-            ruta_id       : rutaId,
             rutaLabel     : rutaDeDespacho ? rutaNombreById(rutaId) : (a.rutas.join(', ') || ''),
             rutaDeDespacho,
-            conductor_id  : conductorId,
             beaNombre,
             despConductorNombre,
             discrepancia,
@@ -1348,6 +1334,7 @@
       ${futuras > 0 ? `<span class="imp-stat">Fechas futuras: <b style="color:var(--red)">${futuras}</b></span>` : ''}
       <span class="imp-stat">Fecha(s) del archivo: <b>${fechas.join(', ')}</b></span>
       ${fechaDistinta ? `<span class="imp-stat" style="color:var(--yellow)">⚠ Distinta a la fecha seleccionada (${pickerFecha}): se importará con la fecha del ARCHIVO y su despacho de ese día.</span>` : ''}
+      <span class="imp-stat" style="color:var(--txt2)">Solo se importan vueltas, pasajeros y km. Conductor y ruta se mantienen del despacho (aquí solo como referencia).</span>
     `;
 
     document.getElementById('importTbody').innerHTML = data.map(d => {
@@ -1406,8 +1393,8 @@
       const ok = confirm(
         `El archivo trae fecha(s): ${fechasImp.join(', ')}\n` +
         `La fecha seleccionada en pantalla es: ${pickerFecha}\n\n` +
-        `Los datos se importarán con la fecha del ARCHIVO, cruzando conductor y ruta ` +
-        `con el despacho de esa misma fecha.\n\n¿Continuar?`
+        `Se importarán solo vueltas, pasajeros y km con la fecha del ARCHIVO. ` +
+        `Conductor y ruta no se modifican: se mantienen los del despacho.\n\n¿Continuar?`
       );
       if (!ok) return;
     }
@@ -1419,14 +1406,13 @@
     const byFecha = {};
     valid.forEach(d => {
       if (!byFecha[d.fecha]) byFecha[d.fecha] = [];
+      /* Solo datos numéricos: conductor, ruta y novedades no se envían para
+         no pisar lo que viene del despacho ni lo ya registrado */
       byFecha[d.fecha].push({
         bus_id       : d.bus_id,
         vueltas      : d.vueltas,
         pasajeros    : d.pasajeros,
         km_recorridos: d.km,
-        novedades    : d.novedades,
-        ruta_id      : d.ruta_id,
-        conductor_id : d.conductor_id,
       });
     });
 
@@ -1435,7 +1421,7 @@
         await apiFetch(`${API}/movilidad/batch`, {
           method : 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body   : JSON.stringify({ fecha, usuario_id: currentUser?.id, registros }),
+          body   : JSON.stringify({ fecha, usuario_id: currentUser?.id, registros, solo_datos: true }),
         });
       }
 

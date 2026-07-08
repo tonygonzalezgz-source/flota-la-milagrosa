@@ -1876,6 +1876,10 @@ def batch_upsert_movilidad():
     fecha      = data.get("fecha")
     registros  = data.get("registros", [])
     usuario_id = data.get("usuario_id")
+    # solo_datos=True (importación BEA): solo escribe vueltas/pasajeros/km.
+    # Conductor, ruta y novedades existentes no se modifican; en registros
+    # nuevos, conductor y ruta salen únicamente del despacho del día.
+    solo_datos = bool(data.get("solo_datos"))
 
     if not fecha:
         return jsonify({"error": "fecha es requerida"}), 400
@@ -1899,6 +1903,26 @@ def batch_upsert_movilidad():
         if not bus_id:
             continue
         d = despacho.get(bus_id)
+        if solo_datos:
+            db.execute(
+                """INSERT INTO registros_movilidad
+                       (bus_id, fecha, vueltas, pasajeros, km_recorridos, novedades, ruta_id, conductor_id, usuario_id, updated_at)
+                   VALUES (?,?,?,?,?,'',?,?,?,CURRENT_TIMESTAMP)
+                   ON CONFLICT(bus_id, fecha) DO UPDATE SET
+                       vueltas       = excluded.vueltas,
+                       pasajeros     = excluded.pasajeros,
+                       km_recorridos = excluded.km_recorridos,
+                       usuario_id    = excluded.usuario_id,
+                       updated_at    = CURRENT_TIMESTAMP""",
+                (bus_id, fecha, r.get("vueltas", 0), r.get("pasajeros", 0),
+                 r.get("km_recorridos", 0),
+                 d["ruta_id"] if d else None,
+                 d["conductor_id"] if d else None,
+                 usuario_id),
+            )
+            buses_afectados.add(bus_id)
+            saved += 1
+            continue
         conductor_id = (d["conductor_id"] if d and d["conductor_id"] else None) or r.get("conductor_id") or None
         ruta_id      = (d["ruta_id"]      if d and d["ruta_id"]      else None) or r.get("ruta_id") or None
         db.execute(
