@@ -1338,7 +1338,6 @@
 
     // ── RENDER TARJETAS DE BUSES ──
     function renderBuses(lista) {
-      console.log('🚌 renderBuses llamado con:', lista);
       const grid = document.getElementById('busGrid');
       if (!lista.length) {
         grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
@@ -1403,38 +1402,31 @@
         </div>`;
       }).join('');
 
-      // Cargar mantención para cada bus
-      lista.forEach(bus => cargarMantCard(bus.id));
-      
+      // Cargar mantención de TODA la flota en una sola petición (antes era una por bus)
+      cargarMantTodos(lista);
+
       // Cargar vueltas UNA SOLA VEZ para todos los buses
       cargarVueltasParaTodos(lista);
     }
 
     async function cargarVueltasParaTodos(buses) {
-      console.log('📞 cargarVueltasParaTodos llamado con buses:', buses);
       try {
         // Cargar ÚLTIMAS FECHAS disponibles
         const res = await apiFetch(`${API}/movilidad/fechas`);
         const fechas = await res.json();
-        console.log('📅 Fechas disponibles:', fechas);
-        
+
         if (!fechas.length) {
-          console.log('❌ No hay fechas disponibles');
           document.querySelectorAll('[id^="vueltas-"]').forEach(el => el.textContent = '—');
           return;
         }
-        
+
         // Usar la fecha más reciente disponible
         const fechaMasReciente = fechas[0];
-        console.log(`📅 Usando fecha más reciente: ${fechaMasReciente}`);
-        
+
         // Cargar registros de esa fecha
         const movRes = await apiFetch(`${API}/movilidad?fecha=${fechaMasReciente}`);
         const registros = await movRes.json();
-        
-        console.log(`📊 Registros para ${fechaMasReciente}: ${registros.length}`);
-        console.log('Registros:', registros);
-        
+
         // SUMAR vueltas por bus_id
         const vueltasPorBus = {};
         registros.forEach(r => {
@@ -1444,26 +1436,35 @@
             vueltasPorBus[bid] = (vueltasPorBus[bid] || 0) + vueltas;
           }
         });
-        
-        console.log('Resumen vueltas por bus:', vueltasPorBus);
-        
+
         // Llenar cada bus
         buses.forEach(bus => {
           const vueltas = vueltasPorBus[bus.id] || 0;
           const el = document.getElementById(`vueltas-${bus.id}`);
-          console.log(`✅ Bus ${bus.numero} (id=${bus.id}): ${vueltas} vueltas`);
           if (el) el.textContent = vueltas.toString();
         });
       } catch(e) {
-        console.error('❌ Error cargarVueltasParaTodos:', e);
+        console.error('Error cargarVueltasParaTodos:', e);
         document.querySelectorAll('[id^="vueltas-"]').forEach(el => el.textContent = '—');
       }
     }
 
-    async function cargarMantCard(busId) {
+    async function cargarMantTodos(lista) {
       try {
-        const res   = await apiFetch(`${API}/mantenimiento/estado/${busId}`);
-        const items = await res.json();
+        const uid   = currentUser ? `?user_id=${currentUser.id}` : '';
+        const res   = await apiFetch(`${API}/mantenimiento/estado-flota${uid}`);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const porBus = await res.json();
+        lista.forEach(bus => pintarMantCard(bus.id, porBus[String(bus.id)] || []));
+      } catch(e) {
+        document.querySelectorAll('[id^="mant-card-"]').forEach(el => {
+          el.innerHTML = '<span style="font-size:10px;color:#ccc">Sin datos de mantenimiento</span>';
+        });
+      }
+    }
+
+    function pintarMantCard(busId, items) {
+      try {
         const el = document.getElementById(`mant-card-${busId}`);
         if (!el) return;
         if (!items.length) { el.innerHTML = '<span style="font-size:10px;color:#ccc">Sin mantenimiento registrado</span>'; return; }
@@ -1578,20 +1579,44 @@
       await cargarContenidoModal(bus);
     }
 
-    async function cargarContenidoModal(bus) {
-      try {
-        const hoy    = new Date().toISOString().slice(0,10);
-        const hace30 = new Date(Date.now()-30*86400000).toISOString().slice(0,10);
-        const uid    = currentUser ? '&user_id='+currentUser.id : '';
+    /* Caché corto para que reabrir el modal sea instantáneo y no repita
+       las mismas dos peticiones por cada bus consultado */
+    let _modalCache = { mov: null, tarifas: null, ts: 0 };
+    const MODAL_CACHE_MS = 2 * 60 * 1000;
 
-        const [movRes, tarifasRes] = await Promise.all([
-          apiFetch(`${API}/movilidad/rango?desde=${hace30}&hasta=${hoy}${uid}`),
-          apiFetch(`${API}/tarifas`),
-        ]);
-        const movRows    = (await movRes.json())
+    async function _fetchDatosModal(forzar) {
+      if (!forzar && _modalCache.mov && (Date.now() - _modalCache.ts) < MODAL_CACHE_MS) {
+        return _modalCache;
+      }
+      const hoy    = new Date().toISOString().slice(0,10);
+      const hace30 = new Date(Date.now()-30*86400000).toISOString().slice(0,10);
+      const uid    = currentUser ? '&user_id='+currentUser.id : '';
+      const [movRes, tarifasRes] = await Promise.all([
+        apiFetch(`${API}/movilidad/rango?desde=${hace30}&hasta=${hoy}${uid}`),
+        apiFetch(`${API}/tarifas`),
+      ]);
+      if (!movRes.ok || !tarifasRes.ok) {
+        throw new Error('HTTP ' + (movRes.ok ? tarifasRes.status : movRes.status));
+      }
+      _modalCache = { mov: await movRes.json(), tarifas: await tarifasRes.json(), ts: Date.now() };
+      return _modalCache;
+    }
+
+    async function cargarContenidoModal(bus, opts = {}) {
+      try {
+        let datos;
+        try {
+          datos = await _fetchDatosModal(!!opts.forzar);
+        } catch (_) {
+          /* Reintento automático: en Vercel una petición puede fallar de forma
+             transitoria; esperar un momento y volver a intentar una vez */
+          await new Promise(r => setTimeout(r, 1200));
+          datos = await _fetchDatosModal(!!opts.forzar);
+        }
+        const movRows = datos.mov
           .filter(r => r.bus_id === bus.id)
           .sort((a,b) => new Date(b.fecha) - new Date(a.fecha));
-        const tarifas     = await tarifasRes.json();
+        const tarifas = datos.tarifas;
         const tarifasActivas = tarifas.filter(t => t.activa);
         const tarifaPromedio = tarifasActivas.length
           ? tarifasActivas.reduce((s,t) => s + t.valor, 0) / tarifasActivas.length
@@ -1665,8 +1690,14 @@
           </div>
           ${movHtml}`;
       } catch(err) {
-        document.getElementById('modalBody').innerHTML =
-          '<div style="text-align:center;padding:40px 0;color:#aaa;font-size:13px">Error al cargar datos del bus.</div>';
+        document.getElementById('modalBody').innerHTML = `
+          <div style="text-align:center;padding:40px 0;color:#aaa;font-size:13px">
+            No se pudieron cargar los datos del bus.<br>
+            <button onclick="refrescarModal()" style="margin-top:14px;padding:8px 18px;border:1px solid #ddd;
+                    border-radius:8px;background:#fff;font-size:13px;font-weight:600;color:#333;cursor:pointer">
+              ↻ Reintentar
+            </button>
+          </div>`;
       }
     }
 
@@ -1676,7 +1707,7 @@
       if (!bus) return;
       document.getElementById('modalBody').innerHTML =
         '<div style="text-align:center;padding:48px 0;color:#aaa;font-size:13px">Actualizando…</div>';
-      await cargarContenidoModal(bus);
+      await cargarContenidoModal(bus, { forzar: true });
     }
 
     function cerrarModal() {

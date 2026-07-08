@@ -1579,6 +1579,37 @@ def get_maint_estado(bus_id):
     return jsonify([dict(r) for r in rows])
 
 
+@app.route("/api/mantenimiento/estado-flota", methods=["GET"])
+@require_auth
+def get_maint_estado_flota():
+    """Estado de mantenimiento de TODOS los buses en una sola petición
+    (evita el N+1 de una llamada por bus desde los dashboards).
+    Respuesta: { "<bus_id>": [items...] }. Con user_id de un Propietario,
+    solo sus buses."""
+    user_id = request.args.get("user_id", type=int)
+    db      = get_db()
+    is_prop, bus_ids = _bus_ids_for_user(db, user_id)
+
+    base = """
+        SELECT em.*, tn.clave, tn.label, tn.color
+        FROM   estado_mantenimiento em
+        JOIN   tipos_novedad tn ON tn.id = em.tipo_novedad_id
+    """
+    if is_prop:
+        if not bus_ids:
+            db.close(); return jsonify({})
+        ph   = ",".join("?" * len(bus_ids))
+        rows = db.execute(base + f" WHERE em.bus_id IN ({ph})", bus_ids).fetchall()
+    else:
+        rows = db.execute(base).fetchall()
+    db.close()
+
+    por_bus = {}
+    for r in rows:
+        por_bus.setdefault(str(r["bus_id"]), []).append(dict(r))
+    return jsonify(por_bus)
+
+
 @app.route("/api/mantenimiento/estado", methods=["PUT"])
 @require_auth
 def update_maint_estado():
