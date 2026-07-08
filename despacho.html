@@ -132,6 +132,26 @@
     .estado-sel.trabajando { border-color: var(--green); color: #15803d; font-weight: 600; }
     .estado-sel.taller     { border-color: var(--yellow); color: #b45309; font-weight: 600; }
     .estado-sel.descanso   { border-color: var(--border2); color: var(--txt2); }
+    .estado-sel.sin-confirmar { border-color: var(--primary); color: var(--primary); font-weight: 600; }
+
+    /* Sugerencias copiadas del día anterior (sin guardar aún) */
+    .btn-copiar-ayer {
+      display: inline-flex; align-items: center; gap: 7px;
+      background: var(--primary); color: #fff; border: none;
+      border-radius: var(--radius-s); padding: 9px 14px;
+      font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit;
+      box-shadow: var(--shadow); transition: opacity .15s;
+    }
+    .btn-copiar-ayer:hover { opacity: .88; }
+    .btn-copiar-ayer:disabled { opacity: .55; cursor: default; }
+    .btn-copiar-ayer.hidden { display: none; }
+    tr.row-sugerida td { background: rgba(99,102,241,.06); }
+    .tag-ayer {
+      display: inline-block; margin-top: 4px; font-size: 10px; font-weight: 700;
+      color: var(--primary); background: var(--primary2);
+      border-radius: 5px; padding: 2px 7px;
+      text-transform: uppercase; letter-spacing: .4px;
+    }
 
     .empty-state { padding: 40px; text-align: center; color: var(--txt3); }
 
@@ -318,7 +338,10 @@
       <div class="page-title">Despacho del día</div>
       <div class="page-sub">Asigna conductor y estado operativo a cada unidad. Los cambios se guardan automáticamente.</div>
     </div>
-    <div class="fecha-pill" id="fechaPill">—</div>
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+      <button class="btn-copiar-ayer hidden" id="btnCopiarAyer" onclick="copiarDiaAnterior()" title="Sugiere el conductor y la ruta del último día hábil; nada se guarda hasta confirmar el estado de cada bus">⤺ Copiar conductores de ayer</button>
+      <div class="fecha-pill" id="fechaPill">—</div>
+    </div>
   </div>
 
   <div class="summary">
@@ -395,6 +418,7 @@
 
   function render() {
     renderSummary();
+    actualizarBtnCopiar();
     if (!buses.length) {
       document.getElementById('content').innerHTML =
         `<div class="table-wrap"><div class="empty-state">No tienes buses ni rutas asignadas. Pide a un administrador que te asigne rutas en Catálogos.</div></div>`;
@@ -437,12 +461,16 @@
       .filter(r => r.grupo === b.grupo)
       .map(r => `<option value="${r.id}" ${b.ruta_id === r.id ? 'selected' : ''}>${escapeHtml(r.nombre)}</option>`)
       .join('');
+    /* Fila sugerida: conductor/ruta copiados del día anterior, sin guardar.
+       El select de estado muestra "— Confirmar —" para que elegir Trabajando
+       dispare el onchange y guarde la fila completa. */
+    const sugerida = !!b._sugerido && !b.estado;
     const estado = b.estado || 'trabajando';
     const condNombre = b.conductor_id ? (conductores.find(c => c.id === b.conductor_id)?.nombre || '') : '';
     const condOpts = `<div class="cond-opt" data-id="" onclick="selectCond(${b.id},'',this)">— Sin conductor —</div>`
       + conductores.map(c => `<div class="cond-opt" data-id="${c.id}" onclick="selectCond(${b.id},'${c.id}',this)">${escapeHtml(c.nombre)}</div>`).join('');
-    return `<tr>
-      <td class="cell-unidad"><span class="bus-num">${b.numero}</span>${b.placa ? `<div class="bus-placa">${escapeHtml(b.placa)}</div>` : ''}</td>
+    return `<tr class="${sugerida ? 'row-sugerida' : ''}">
+      <td class="cell-unidad"><span class="bus-num">${b.numero}</span>${b.placa ? `<div class="bus-placa">${escapeHtml(b.placa)}</div>` : ''}${sugerida ? '<div class="tag-ayer">Sugerido</div>' : ''}</td>
       <td data-label="Ruta"><select onchange="onChange(${b.id}, 'ruta_id', this.value)">${rutaOpts}</select></td>
       <td data-label="Conductor">
         <div class="cond-combo" id="combo-${b.id}">
@@ -453,10 +481,11 @@
         </div>
       </td>
       <td data-label="Estado">
-        <select class="estado-sel ${estado}" onchange="onChange(${b.id}, 'estado', this.value)">
-          <option value="trabajando" ${estado === 'trabajando' ? 'selected' : ''}>Trabajando</option>
-          <option value="taller"     ${estado === 'taller'     ? 'selected' : ''}>En taller</option>
-          <option value="descanso"   ${estado === 'descanso'   ? 'selected' : ''}>Descanso</option>
+        <select class="estado-sel ${sugerida ? 'sin-confirmar' : estado}" onchange="onChange(${b.id}, 'estado', this.value)">
+          ${sugerida ? '<option value="" selected disabled>— Confirmar —</option>' : ''}
+          <option value="trabajando" ${!sugerida && estado === 'trabajando' ? 'selected' : ''}>Trabajando</option>
+          <option value="taller"     ${!sugerida && estado === 'taller'     ? 'selected' : ''}>En taller</option>
+          <option value="descanso"   ${!sugerida && estado === 'descanso'   ? 'selected' : ''}>Descanso</option>
         </select>
       </td>
       <td class="cell-alist" data-label="Alistamiento" id="alist-cell-${b.id}">${alistCellHtml(b)}</td>
@@ -465,6 +494,7 @@
 
   // Solo los buses que trabajarán ese día requieren alistamiento.
   function alistCellHtml(b) {
+    if (b._sugerido && !b.estado) return `<span class="alist-na">—</span>`;
     const estado = b.estado || 'trabajando';
     if (estado !== 'trabajando') return `<span class="alist-na">—</span>`;
     const ok = !!b.tiene_alistamiento;
@@ -478,6 +508,68 @@
     document.getElementById('sumTrabajando').textContent = c.trabajando;
     document.getElementById('sumTaller').textContent     = c.taller;
     document.getElementById('sumDescanso').textContent   = c.descanso;
+  }
+
+  /* ── Copiar conductores del día anterior (sugerencias sin guardar) ── */
+  function actualizarBtnCopiar() {
+    const btn = document.getElementById('btnCopiarAyer');
+    if (!btn) return;
+    const hayVacios = buses.some(b => !b.estado && !b.conductor_id && !b.ruta_id);
+    btn.classList.toggle('hidden', !hayVacios);
+  }
+
+  function fechaMenos(iso, dias) {
+    const d = new Date(iso + 'T00:00:00');
+    d.setDate(d.getDate() - dias);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  async function copiarDiaAnterior() {
+    const btn = document.getElementById('btnCopiarAyer');
+    btn.disabled = true;
+    try {
+      /* Buscar el último día hábil con despacho: hasta 7 días atrás,
+         saltando domingos (el lunes copia del sábado) */
+      let fuente = null, busesFuente = null;
+      for (let i = 1; i <= 7; i++) {
+        const f = fechaMenos(HOY, i);
+        if (new Date(f + 'T00:00:00').getDay() === 0) continue;
+        const resp = await apiFetch(`/api/despacho?fecha=${f}`);
+        const lista = resp.buses || [];
+        if (lista.some(b => b.estado != null)) { fuente = f; busesFuente = lista; break; }
+      }
+      if (!fuente) {
+        showToast('No se encontró despacho en los últimos 7 días', 'error');
+        return;
+      }
+
+      const prevByBus = {};
+      busesFuente.forEach(b => { prevByBus[b.id] = b; });
+
+      /* Solo se sugieren conductor y ruta, en memoria. El estado queda sin
+         definir: nada se guarda hasta que el despachador lo confirme. */
+      let n = 0;
+      buses.forEach(b => {
+        if (b.estado || b.conductor_id || b.ruta_id) return;
+        const prev = prevByBus[b.id];
+        if (!prev || (!prev.conductor_id && !prev.ruta_id)) return;
+        b.conductor_id = prev.conductor_id || null;
+        b.ruta_id      = prev.ruta_id || null;
+        b._sugerido    = true;
+        n++;
+      });
+
+      if (!n) {
+        showToast(`El despacho del ${formatoFecha(fuente)} no tiene conductores para sugerir`);
+        return;
+      }
+      render();
+      showToast(`${n} buses sugeridos del ${formatoFecha(fuente)} — confirma el estado de cada uno`);
+    } catch (e) {
+      showToast(e.message, 'error');
+    } finally {
+      btn.disabled = false;
+    }
   }
 
   /* ── Combobox buscable de conductores ── */
@@ -550,6 +642,7 @@
           }],
         }),
       });
+      if (bus._sugerido) { bus._sugerido = false; render(); }
       showToast(`Bus ${bus.numero} actualizado`);
     } catch (e) {
       showToast(e.message, 'error');
