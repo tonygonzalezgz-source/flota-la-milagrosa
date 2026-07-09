@@ -221,6 +221,45 @@
     /* ─── CHART ─── */
     .chart-wrapper { height: 240px; position: relative; }
 
+    /* ─── DARK CARD: pasajeros diarios ─── */
+    .dark-card {
+      background: #0d0d10; border-radius: 20px; padding: 22px 24px 16px;
+      box-shadow: 0 4px 20px rgba(0,0,0,.25);
+      position: relative; overflow: hidden;
+    }
+    .dc-header {
+      display: flex; justify-content: space-between;
+      align-items: flex-start; gap: 16px; margin-bottom: 8px;
+    }
+    .dc-label {
+      font-size: 11px; font-weight: 600; color: #6b7280;
+      text-transform: uppercase; letter-spacing: .8px;
+    }
+    .dc-big-row { display: flex; align-items: baseline; gap: 10px; margin-top: 6px; }
+    .dc-big { font-size: 36px; font-weight: 800; color: #fff; letter-spacing: -1.5px; }
+    .dc-badge {
+      font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 20px;
+    }
+    .dc-badge.up   { background: rgba(34,197,94,.15);  color: #4ade80; }
+    .dc-badge.down { background: rgba(239,68,68,.15);  color: #f87171; }
+    .dc-badge.flat { background: rgba(255,255,255,.08); color: #9ca3af; }
+    .dc-period { font-size: 11px; color: #4b5563; margin-top: 4px; }
+    .dc-stats { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+    .dc-stat { display: flex; align-items: baseline; gap: 8px; }
+    .dc-stat-lbl {
+      font-size: 10px; font-weight: 600; color: #6b7280;
+      text-transform: uppercase; letter-spacing: .5px;
+    }
+    .dc-stat-val { font-size: 13px; font-weight: 700; color: #e5e7eb; }
+    .dc-stat-val.blue  { color: #60a5fa; }
+    .dc-stat-val.amber { color: #fbbf24; }
+    .dc-stat-val.up    { color: #4ade80; }
+    .dc-stat-val.down  { color: #f87171; }
+    .dc-chart-wrap { height: 230px; position: relative; margin: 8px -6px 0; }
+    .dark-card .empty-state p     { color: #9ca3af; }
+    .dark-card .empty-state small { color: #4b5563; }
+    .dark-card .empty-state svg   { color: #374151; }
+
     /* ─── RUTAS CARD ─── */
     .rutas-list { display: flex; flex-direction: column; gap: 12px; }
 
@@ -520,6 +559,11 @@
       .trend-card { padding: 18px 16px 16px; border-radius: 16px; }
       .trend-big { font-size: 28px; letter-spacing: -1px; }
       .chart-wrapper { height: 200px; }
+      .dark-card { padding: 18px 16px 12px; border-radius: 16px; }
+      .dc-header { flex-direction: column; gap: 10px; }
+      .dc-big { font-size: 28px; letter-spacing: -1px; }
+      .dc-stats { flex-direction: row; align-items: baseline; gap: 14px; }
+      .dc-chart-wrap { height: 190px; }
     }
 
     @media (max-width: 768px) {
@@ -715,24 +759,25 @@
     <!-- CONTENT GRID -->
     <div class="content-grid">
 
-      <!-- LEFT: Chart pasajeros por bus -->
-      <div class="card">
-        <div class="card-header">
-          <div>
-            <div class="card-title">Pasajeros por Bus</div>
-            <div class="card-sub" id="chartSub">Día anterior — todas las rutas</div>
+      <!-- LEFT: Pasajeros diarios (14 días) -->
+      <div class="dark-card">
+        <div class="dc-header">
+          <div class="dc-left">
+            <div class="dc-label">Pasajeros diarios · Últimos 14 días</div>
+            <div class="dc-big-row">
+              <span class="dc-big" id="dcTotal">—</span>
+              <span class="dc-badge flat" id="dcBadge">—</span>
+            </div>
+            <div class="dc-period" id="dcPeriod">—</div>
           </div>
-          <div style="display:flex;gap:8px;align-items:center">
-            <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:#666">
-              <div style="width:8px;height:8px;border-radius:2px;background:#111"></div> Pasajeros
-            </div>
-            <div style="display:flex;align-items:center;gap:5px;font-size:11px;color:#666">
-              <div style="width:8px;height:8px;border-radius:2px;background:#c7d2fe"></div> Vueltas ×10
-            </div>
+          <div class="dc-stats">
+            <div class="dc-stat"><span class="dc-stat-lbl">Máx</span><span class="dc-stat-val blue" id="dcMax">—</span></div>
+            <div class="dc-stat"><span class="dc-stat-lbl">Mín</span><span class="dc-stat-val amber" id="dcMin">—</span></div>
+            <div class="dc-stat"><span class="dc-stat-lbl">Cambio</span><span class="dc-stat-val" id="dcCambio">—</span></div>
           </div>
         </div>
-        <div class="chart-wrapper" id="chartWrapper">
-          <div class="loading-shimmer"></div>
+        <div class="dc-chart-wrap" id="dcChartWrap">
+          <canvas id="chartPaxDiarios"></canvas>
         </div>
       </div>
 
@@ -839,7 +884,7 @@
     let allBuses       = [];
     let allRutas       = [];
     let despachoBuses  = [];
-    let chartInstance  = null;
+    let paxDiariosChart = null;
     let trendPaxChart  = null;
     let trendViajesChart = null;
     let fechaAyer      = '';
@@ -1069,9 +1114,10 @@
         const rangoData = Array.isArray(rangoJson) ? rangoJson : [];
 
         renderKpis();
-        renderChart();
         renderRutas();
-        renderTendencias(rangoData, hace14);
+        const series = buildSeriesDiarias(rangoData);
+        renderPaxDiarios(series);
+        renderTendencias(series);
       } catch(e) {
         console.error('Error cargando dashboard:', e);
       }
@@ -1109,73 +1155,168 @@
       }
     }
 
-    function renderChart() {
-      const wrapper = document.getElementById('chartWrapper');
+    /* Crosshair vertical punteado que sigue al tooltip (solo esta gráfica) */
+    const dcCrosshairPlugin = {
+      id: 'dcCrosshair',
+      afterDatasetsDraw(chart) {
+        const actives = chart.tooltip && chart.tooltip.getActiveElements();
+        if (!actives || !actives.length) return;
+        const x = actives[0].element.x;
+        const { top, bottom } = chart.chartArea;
+        const ctx = chart.ctx;
+        ctx.save();
+        ctx.setLineDash([4, 4]);
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = 'rgba(255,255,255,.25)';
+        ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke();
+        ctx.restore();
+      }
+    };
 
-      if (!allMovData.length) {
-        wrapper.innerHTML = `
+    /* Glow morado sutil bajo la línea */
+    const dcGlowPlugin = {
+      id: 'dcGlow',
+      beforeDatasetDraw(chart) {
+        chart.ctx.save();
+        chart.ctx.shadowColor = 'rgba(139,92,246,.4)';
+        chart.ctx.shadowBlur = 10;
+        chart.ctx.shadowOffsetY = 3;
+      },
+      afterDatasetDraw(chart) { chart.ctx.restore(); }
+    };
+
+    function renderPaxDiarios(series) {
+      const { fechas, labelsCortos, paxSerie } = series;
+      const wrap = document.getElementById('dcChartWrap');
+
+      if (paxSerie.every(v => v === 0)) {
+        wrap.innerHTML = `
           <div class="empty-state">
             <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
               <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/>
             </svg>
-            <p>Sin datos de movilidad para el ${fmtFecha(fechaAyer)}</p>
-            <small>El analista aún no ha registrado información para este día.</small>
+            <p>Sin datos de movilidad en los últimos 14 días</p>
+            <small>El analista aún no ha registrado información en este período.</small>
           </div>`;
         return;
       }
 
-      wrapper.innerHTML = '<canvas id="barChart"></canvas>';
-      wrapper.style.height = '240px';
+      /* ── Stats del encabezado ── */
+      const total = paxSerie.reduce((s,v) => s + v, 0);
+      document.getElementById('dcTotal').textContent  = total.toLocaleString();
+      document.getElementById('dcPeriod').textContent = `${fmtFecha(fechas[0])} — ${fmtFecha(fechas[13])}`;
 
-      const sorted = [...allMovData].sort((a,b) => (b.pasajeros||0) - (a.pasajeros||0));
-      const labels = sorted.map(r => `Bus ${r.numero}`);
-      const pax    = sorted.map(r => r.pasajeros || 0);
-      const vueltas = sorted.map(r => (r.vueltas || 0) * 10);
+      const sem1 = paxSerie.slice(0,7).reduce((s,v)=>s+v,0);
+      const sem2 = paxSerie.slice(7).reduce((s,v)=>s+v,0);
+      const pctSem = pctChange(sem1, sem2);
+      const badge = document.getElementById('dcBadge');
+      if (pctSem === null) {
+        badge.className = 'dc-badge flat';
+        badge.textContent = 'Sin comparar';
+      } else {
+        badge.className = `dc-badge ${pctSem >= 0 ? 'up' : 'down'}`;
+        badge.textContent = `${pctSem >= 0 ? '↑' : '↓'} ${Math.abs(pctSem)}% vs sem. ant.`;
+      }
 
-      if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+      const conDatos = paxSerie.filter(v => v > 0);
+      const minVal = Math.min(...conDatos);
+      const maxVal = Math.max(...conDatos);
+      document.getElementById('dcMax').textContent = maxVal.toLocaleString();
+      document.getElementById('dcMin').textContent = minVal.toLocaleString();
 
-      const ctx = document.getElementById('barChart').getContext('2d');
-      chartInstance = new Chart(ctx, {
-        type: 'bar',
+      /* Cambio diario: último día con datos vs el anterior con datos */
+      const idxDatos = paxSerie.map((v,i) => v > 0 ? i : -1).filter(i => i >= 0);
+      const cambioEl = document.getElementById('dcCambio');
+      if (idxDatos.length >= 2) {
+        const ult = paxSerie[idxDatos[idxDatos.length-1]];
+        const ant = paxSerie[idxDatos[idxDatos.length-2]];
+        const pctDia = pctChange(ant, ult);
+        cambioEl.textContent = pctDia === null ? '—' : `${pctDia >= 0 ? '+' : ''}${pctDia}%`;
+        cambioEl.className = `dc-stat-val ${pctDia >= 0 ? 'up' : 'down'}`;
+      } else {
+        cambioEl.textContent = '—';
+        cambioEl.className = 'dc-stat-val';
+      }
+
+      /* ── Marcadores: primer dato, mínimo y máximo ── */
+      const marcados = new Set([
+        idxDatos[0],
+        paxSerie.indexOf(minVal),
+        paxSerie.indexOf(maxVal),
+      ]);
+
+      /* ── Chart ── */
+      if (paxDiariosChart) { paxDiariosChart.destroy(); paxDiariosChart = null; }
+      wrap.innerHTML = '<canvas id="chartPaxDiarios"></canvas>';
+      const ctx = document.getElementById('chartPaxDiarios').getContext('2d');
+
+      const grad = ctx.createLinearGradient(0, 0, 0, 230);
+      grad.addColorStop(0, 'rgba(139,92,246,.10)');
+      grad.addColorStop(1, 'rgba(139,92,246,0)');
+
+      /* Animación de dibujo progresivo (patrón oficial Chart.js 4) */
+      const totalDuration = 1100;
+      const delayBetween  = totalDuration / paxSerie.length;
+      const previousY = c => c.index === 0
+        ? c.chart.scales.y.getPixelForValue(0)
+        : c.chart.getDatasetMeta(c.datasetIndex).data[c.index - 1].getProps(['y'], true).y;
+      const progressiveAnim = {
+        x: {
+          type: 'number', easing: 'linear', duration: delayBetween, from: NaN,
+          delay(c) {
+            if (c.type !== 'data' || c.xStarted) return 0;
+            c.xStarted = true;
+            return c.index * delayBetween;
+          }
+        },
+        y: {
+          type: 'number', easing: 'linear', duration: delayBetween, from: previousY,
+          delay(c) {
+            if (c.type !== 'data' || c.yStarted) return 0;
+            c.yStarted = true;
+            return c.index * delayBetween;
+          }
+        }
+      };
+
+      paxDiariosChart = new Chart(ctx, {
+        type: 'line',
         data: {
-          labels,
-          datasets: [
-            {
-              label: 'Pasajeros',
-              data: pax,
-              backgroundColor: '#111',
-              borderRadius: 4,
-              borderSkipped: false,
-              barPercentage: 0.45,
-              categoryPercentage: 0.75
-            },
-            {
-              label: 'Vueltas ×10',
-              data: vueltas,
-              backgroundColor: '#c7d2fe',
-              borderRadius: 4,
-              borderSkipped: false,
-              barPercentage: 0.45,
-              categoryPercentage: 0.75
-            }
-          ]
+          labels: labelsCortos,
+          datasets: [{
+            data: paxSerie,
+            borderColor: '#8b5cf6',
+            borderWidth: 2.5,
+            tension: 0.4,
+            fill: true,
+            backgroundColor: grad,
+            pointRadius: c => marcados.has(c.dataIndex) ? 4.5 : 0,
+            pointBackgroundColor: '#a855f7',
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2,
+            pointHoverRadius: 5,
+            pointHoverBackgroundColor: '#a855f7',
+            pointHoverBorderColor: '#fff',
+          }]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          animation: progressiveAnim,
+          interaction: { mode: 'index', intersect: false },
           plugins: {
             legend: { display: false },
             tooltip: {
-              backgroundColor: '#111',
+              backgroundColor: '#1a1a20',
+              borderColor: 'rgba(255,255,255,.1)',
+              borderWidth: 1,
               titleColor: '#fff',
-              bodyColor: '#ccc',
+              bodyColor: '#c4b5fd',
+              displayColors: false,
               padding: 10,
-              cornerRadius: 8,
+              cornerRadius: 10,
               callbacks: {
-                label: ctx => {
-                  if (ctx.datasetIndex === 0) return ` ${ctx.raw.toLocaleString()} pasajeros`;
-                  return ` ${Math.round(ctx.raw / 10)} vueltas`;
-                }
+                label: item => ` ${item.raw.toLocaleString()} pasajeros`
               }
             }
           },
@@ -1183,16 +1324,17 @@
             x: {
               grid: { display: false },
               border: { display: false },
-              ticks: { color: '#aaa', font: { size: 11 } }
+              ticks: { color: '#6b7280', font: { size: 10 }, maxTicksLimit: 7, maxRotation: 0 }
             },
             y: {
-              grid: { color: '#f0f0f0', drawTicks: false },
-              border: { display: false, dash: [4,4] },
-              ticks: { color: '#aaa', font: { size: 11 } },
+              grid: { color: 'rgba(255,255,255,.06)', drawTicks: false },
+              border: { display: false, dash: [3,3] },
+              ticks: { color: '#6b7280', font: { size: 10 }, maxTicksLimit: 5 },
               min: 0
             }
           }
-        }
+        },
+        plugins: [dcCrosshairPlugin, dcGlowPlugin]
       });
     }
 
@@ -1252,12 +1394,15 @@
       document.getElementById('rsVueltas').textContent = totalVuelt;
       document.getElementById('rsRutas').textContent  = rutasCount;
       document.getElementById('resumenStats').style.display = 'grid';
-      document.getElementById('chartSub').textContent =
-        `${fmtFecha(fechaAyer)} · ${allMovData.length} bus${allMovData.length!==1?'es':''} con datos`;
     }
 
-    function renderTendencias(rangoData, desde) {
-      /* Agrupa por fecha → suma pax y vueltas de todos los buses ese día */
+    function pctChange(a, b) {
+      if (!a) return null;
+      return Math.round((b - a) / a * 100);
+    }
+
+    /* Agrupa los registros del rango por fecha y arma las series de 14 días */
+    function buildSeriesDiarias(rangoData) {
       const byFecha = {};
       rangoData.forEach(r => {
         const key = toISODate(r.fecha);
@@ -1284,6 +1429,12 @@
         return `${parseInt(p[1])} ${m[parseInt(p[0])-1]}`;
       });
 
+      return { fechas, labelsCortos, paxSerie, viajesSerie };
+    }
+
+    function renderTendencias(series) {
+      const { fechas, labelsCortos, paxSerie, viajesSerie } = series;
+
       const totalPax    = paxSerie.reduce((s,v)=>s+v,0);
       const totalViajes = viajesSerie.reduce((s,v)=>s+v,0);
 
@@ -1292,11 +1443,6 @@
       const pax2    = paxSerie.slice(7).reduce((s,v)=>s+v,0);
       const viajes1 = viajesSerie.slice(0,7).reduce((s,v)=>s+v,0);
       const viajes2 = viajesSerie.slice(7).reduce((s,v)=>s+v,0);
-
-      function pctChange(a, b) {
-        if (!a) return null;
-        return Math.round((b - a) / a * 100);
-      }
 
       function badgeHtml(pct, id) {
         if (pct === null) return `<span class="trend-badge flat" id="${id}">Sin comparar</span>`;
