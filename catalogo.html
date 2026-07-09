@@ -598,7 +598,7 @@
     <div class="page-header-top">
       <div>
         <div class="page-title">Catálogo</div>
-        <div class="page-sub">Administra buses, propietarios, tarifas y rutas de la flota</div>
+        <div class="page-sub">Administra buses, tarifas, rutas y cuentas de acceso de la flota</div>
       </div>
     </div>
 
@@ -607,10 +607,6 @@
       <button class="tab active" onclick="showTab('buses')">
         <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="2"/><path d="M16 8h4l3 5v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
         Buses
-      </button>
-      <button class="tab" onclick="showTab('propietarios')">
-        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-        Propietarios
       </button>
       <button class="tab" onclick="showTab('tarifas')">
         <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
@@ -679,37 +675,6 @@
         </thead>
         <tbody id="tbody-buses">
           <tr class="loading-row"><td colspan="8">Cargando…</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- ── TAB: PROPIETARIOS ── -->
-  <div id="panel-propietarios" class="panel hidden">
-    <div class="sec-header">
-      <div>
-        <div class="sec-title">Propietarios</div>
-        <div class="sec-sub">Gestiona los dueños de los buses</div>
-      </div>
-      <button class="btn btn-primary" onclick="openModal('propietario')">
-        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        Nuevo Propietario
-      </button>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Nombre</th>
-            <th>Cédula</th>
-            <th>Teléfono</th>
-            <th>Email</th>
-            <th>Buses</th>
-            <th style="text-align:right">Acciones</th>
-          </tr>
-        </thead>
-        <tbody id="tbody-propietarios">
-          <tr class="loading-row"><td colspan="6">Cargando…</td></tr>
         </tbody>
       </table>
     </div>
@@ -1038,7 +1003,7 @@
   function showTab(tab) {
     currentTab = tab;
     document.querySelectorAll('.tab').forEach((el, i) => {
-      const ids = ['buses', 'propietarios', 'tarifas', 'rutas', 'placas', 'usuarios', 'analistas', 'mecanicos', 'conductores', 'despachadores', 'condacceso'];
+      const ids = ['buses', 'tarifas', 'rutas', 'placas', 'usuarios', 'analistas', 'mecanicos', 'conductores', 'despachadores', 'condacceso'];
       el.classList.toggle('active', ids[i] === tab);
     });
     document.querySelectorAll('.panel').forEach(el => el.classList.add('hidden'));
@@ -1048,7 +1013,6 @@
   /* ─── RENDER ALL ─── */
   function renderAll() {
     renderBuses();
-    renderPropietarios();
     renderTarifas();
     renderRutas();
     renderPlacas();
@@ -1330,30 +1294,6 @@
     }).join('');
   }
 
-  /* ─── RENDER: PROPIETARIOS ─── */
-  function renderPropietarios() {
-    const tbody = document.getElementById('tbody-propietarios');
-    if (!propietarios.length) {
-      tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><p>No hay propietarios registrados</p></div></td></tr>`;
-      return;
-    }
-    tbody.innerHTML = propietarios.map(p => `<tr>
-      <td><strong>${p.nombre}</strong></td>
-      <td>${p.cedula || '<span style="color:var(--txt3)">—</span>'}</td>
-      <td>${p.telefono || '<span style="color:var(--txt3)">—</span>'}</td>
-      <td>${p.email || '<span style="color:var(--txt3)">—</span>'}</td>
-      <td><span class="badge badge-a">${p.buses_count} bus${p.buses_count !== 1 ? 'es' : ''}</span></td>
-      <td><div class="td-actions">
-        <button class="icon-btn" onclick="openModal('propietario', ${p.id})" title="Editar">
-          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-        </button>
-        <button class="icon-btn del" onclick="deleteItem('propietario', ${p.id})" title="Eliminar">
-          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-        </button>
-      </div></td>
-    </tr>`).join('');
-  }
-
   /* ─── RENDER: TARIFAS ─── */
   function renderTarifas() {
     const container = document.getElementById('tarifa-cards');
@@ -1441,7 +1381,6 @@
   function modalTitles(type, id) {
     const map = {
       bus:         id ? 'Editar Bus'               : 'Nuevo Bus',
-      propietario: id ? 'Editar Propietario'        : 'Nuevo Propietario',
       tarifa:      'Editar Tarifa',
       ruta:        id ? 'Editar Ruta'              : 'Nueva Ruta',
       usuario:     id ? 'Editar Cuenta Propietario' : 'Nueva Cuenta Propietario',
@@ -1456,7 +1395,6 @@
 
   function getData(type, id) {
     if (type === 'bus')         return buses.find(x => x.id === id);
-    if (type === 'propietario') return propietarios.find(x => x.id === id);
     if (type === 'tarifa')      return tarifas.find(x => x.id === id);
     if (type === 'ruta')        return rutas.find(x => x.id === id);
     if (type === 'conductor')   return conductores.find(x => x.id === id);
@@ -1515,29 +1453,6 @@
             <option value="">— Sin asignar —</option>
             ${propOpts}
           </select>
-        </div>
-      `;
-    }
-
-    if (type === 'propietario') {
-      return `
-        <div class="field full">
-          <label>Nombre completo *</label>
-          <input type="text" id="f-nombre" value="${d ? d.nombre : ''}" placeholder="Ej: Juan Pérez" required />
-        </div>
-        <div class="form-row">
-          <div class="field">
-            <label>Cédula</label>
-            <input type="text" id="f-cedula" value="${d ? (d.cedula||'') : ''}" placeholder="0000000000" />
-          </div>
-          <div class="field">
-            <label>Teléfono</label>
-            <input type="tel" id="f-telefono" value="${d ? (d.telefono||'') : ''}" placeholder="+593 999 999 999" />
-          </div>
-        </div>
-        <div class="field full">
-          <label>Correo electrónico</label>
-          <input type="email" id="f-email" value="${d ? (d.email||'') : ''}" placeholder="correo@ejemplo.com" />
         </div>
       `;
     }
@@ -1697,19 +1612,6 @@
         method = modalId ? 'PUT' : 'POST';
       }
 
-      else if (modalType === 'propietario') {
-        const nombre = document.getElementById('f-nombre').value.trim();
-        if (!nombre) { showToast('El nombre es requerido', 'error'); return; }
-        body   = {
-          nombre,
-          cedula:   document.getElementById('f-cedula').value.trim(),
-          telefono: document.getElementById('f-telefono').value.trim(),
-          email:    document.getElementById('f-email').value.trim(),
-        };
-        url    = modalId ? `/api/propietarios/${modalId}` : '/api/propietarios';
-        method = modalId ? 'PUT' : 'POST';
-      }
-
       else if (modalType === 'tarifa') {
         const label = document.getElementById('f-label').value.trim();
         const valor = parseFloat(document.getElementById('f-valor').value);
@@ -1809,13 +1711,12 @@
 
   /* ─── DELETE ─── */
   async function deleteItem(type, id) {
-    const labels = { bus: 'bus', propietario: 'propietario', ruta: 'ruta', usuario: 'cuenta de acceso', analista: 'cuenta de analista', mecanico: 'cuenta de mecánico', conductor: 'conductor', despachador: 'cuenta de despachador', condacceso: 'cuenta de conductor' };
+    const labels = { bus: 'bus', ruta: 'ruta', usuario: 'cuenta de acceso', analista: 'cuenta de analista', mecanico: 'cuenta de mecánico', conductor: 'conductor', despachador: 'cuenta de despachador', condacceso: 'cuenta de conductor' };
     if (!confirm(`¿Seguro que deseas eliminar este ${labels[type]}?`)) return;
 
     try {
       const urls = {
         bus:         `/api/buses/${id}`,
-        propietario: `/api/propietarios/${id}`,
         ruta:        `/api/rutas/${id}`,
         usuario:     `/api/admin/usuarios/${id}`,
         analista:    `/api/admin/usuarios/${id}`,
