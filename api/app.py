@@ -92,6 +92,16 @@ def serve_frontend(path):
     return send_from_directory(FRONTEND_DIR, "index.html")
 
 DATABASE_URL = os.environ.get("DATABASE_URL")   # None → SQLite local
+
+# Supabase: el pooler en modo sesión (puerto 5432) limita a 15 clientes y se
+# agota con las funciones concurrentes de Vercel (EMAXCONNSESSION). El modo
+# transacción (puerto 6543) multiplexa las conexiones y es el indicado para
+# serverless, así que se fuerza aquí sin importar cómo esté la variable.
+if DATABASE_URL and "pooler.supabase.com" in DATABASE_URL and ":6543" not in DATABASE_URL:
+    if ":5432" in DATABASE_URL:
+        DATABASE_URL = DATABASE_URL.replace(":5432", ":6543")
+    else:
+        DATABASE_URL = DATABASE_URL.replace("pooler.supabase.com", "pooler.supabase.com:6543")
 DB_PATH      = os.path.join(os.path.dirname(__file__), "flota.db")
 SCHEMA_PATH  = os.path.join(os.path.dirname(__file__), "schema.sql")
 PG_SCHEMA    = os.path.join(os.path.dirname(__file__), "supabase_schema.sql")
@@ -174,8 +184,26 @@ if DATABASE_URL:
             self._conn.close()
 
     def get_db():
-        conn = psycopg2.connect(DATABASE_URL, sslmode="require")
-        return _PGConn(conn)
+        conn = psycopg2.connect(DATABASE_URL, sslmode="require", connect_timeout=10)
+        wrapper = _PGConn(conn)
+        # Registrar la conexión en el contexto del request: si el handler lanza
+        # una excepción antes de su db.close(), el teardown la cierra igual y
+        # no queda huérfana ocupando un cupo del pooler.
+        try:
+            from flask import g
+            g.setdefault("_db_conns", []).append(wrapper)
+        except RuntimeError:
+            pass  # fuera de un request (init_db, scripts)
+        return wrapper
+
+    @app.teardown_appcontext
+    def _close_leaked_db(_exc):
+        from flask import g
+        for w in g.get("_db_conns", []):
+            try:
+                w.close()  # no-op si el handler ya la cerró
+            except Exception:
+                pass
 
 else:
     import sqlite3
