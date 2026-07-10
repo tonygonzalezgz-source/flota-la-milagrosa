@@ -183,3 +183,32 @@ CREATE INDEX IF NOT EXISTS idx_despacho_fecha ON despacho_diario(fecha);
 CREATE INDEX IF NOT EXISTS idx_despacho_bus ON despacho_diario(bus_id);
 CREATE INDEX IF NOT EXISTS idx_alist_fecha ON alistamiento_vehicular(fecha);
 CREATE INDEX IF NOT EXISTS idx_alist_bus  ON alistamiento_vehicular(bus_id);
+
+-- ── Chequeo de despachadores (llegada/salida con GPS) ──
+CREATE TABLE IF NOT EXISTS puestos_trabajo (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre      TEXT NOT NULL UNIQUE,
+    descripcion TEXT,
+    activo      INTEGER NOT NULL DEFAULT 1,
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS chequeos_despachador (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    usuario_id         INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    puesto_id          INTEGER REFERENCES puestos_trabajo(id),
+    fecha              DATE NOT NULL,
+    hora_llegada       TEXT NOT NULL,           -- 'HH:MM:SS' hora Bogotá (servidor)
+    lat_llegada        REAL NOT NULL,
+    lng_llegada        REAL NOT NULL,
+    precision_llegada  REAL,
+    hora_salida        TEXT,
+    lat_salida         REAL,
+    lng_salida         REAL,
+    precision_salida   REAL,
+    minutos_trabajados INTEGER,
+    created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(usuario_id, fecha)
+);
+CREATE INDEX IF NOT EXISTS idx_chequeos_fecha ON chequeos_despachador(fecha);
