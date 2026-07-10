@@ -1123,18 +1123,49 @@ def get_conductores():
     return jsonify([dict(r) for r in rows])
 
 
+def _norm_nombre_conductor(s):
+    """Normaliza un nombre para comparar: mayúsculas y espacios colapsados."""
+    return " ".join((s or "").split()).upper()
+
+
+def _buscar_conductor_duplicado(db, nombre, cedula, excluir_id=None):
+    """Devuelve el conductor activo que ya tiene la misma cédula o el mismo
+    nombre (normalizado), o None si no hay duplicado. La comparación se hace
+    en Python para que funcione igual en SQLite y Postgres (acentos, Ñ)."""
+    rows = db.execute(
+        "SELECT id, nombre, cedula FROM conductores WHERE activo = 1"
+    ).fetchall()
+    nombre_norm = _norm_nombre_conductor(nombre)
+    cedula_norm = (cedula or "").strip()
+    for r in rows:
+        if excluir_id is not None and r["id"] == excluir_id:
+            continue
+        if cedula_norm and (r["cedula"] or "").strip() == cedula_norm:
+            return dict(r)
+        if nombre_norm and _norm_nombre_conductor(r["nombre"]) == nombre_norm:
+            return dict(r)
+    return None
+
+
 @app.route("/api/conductores", methods=["POST"])
 @require_role("Administrador")
 def create_conductor():
     data   = request.get_json(force=True)
     nombre = (data.get("nombre") or "").strip()
+    cedula = (data.get("cedula") or "").strip()
     if not nombre:
         return jsonify({"error": "El nombre es requerido"}), 400
 
-    db     = get_db()
+    db  = get_db()
+    dup = _buscar_conductor_duplicado(db, nombre, cedula)
+    if dup:
+        db.close()
+        detalle = f"{dup['nombre']}" + (f" (cédula {dup['cedula']})" if (dup.get("cedula") or "").strip() else "")
+        return jsonify({"error": f"Este conductor ya está dado de alta: {detalle}"}), 409
+
     cursor = db.execute(
         "INSERT INTO conductores (nombre, cedula, telefono, activo) VALUES (?,?,?,?)",
-        (nombre, data.get("cedula", ""), data.get("telefono", ""), data.get("activo", 1)),
+        (nombre, cedula, data.get("telefono", ""), data.get("activo", 1)),
     )
     db.commit()
     new_id = cursor.lastrowid
@@ -1150,6 +1181,12 @@ def update_conductor(cid):
     if not db.execute("SELECT id FROM conductores WHERE id = ?", (cid,)).fetchone():
         db.close()
         return jsonify({"error": "Conductor no encontrado"}), 404
+
+    dup = _buscar_conductor_duplicado(db, data.get("nombre", ""), data.get("cedula", ""), excluir_id=cid)
+    if dup:
+        db.close()
+        detalle = f"{dup['nombre']}" + (f" (cédula {dup['cedula']})" if (dup.get("cedula") or "").strip() else "")
+        return jsonify({"error": f"Ya hay otro conductor dado de alta con esos datos: {detalle}"}), 409
 
     db.execute(
         "UPDATE conductores SET nombre=?, cedula=?, telefono=?, activo=? WHERE id=?",
