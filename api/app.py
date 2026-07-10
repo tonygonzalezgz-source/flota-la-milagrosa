@@ -107,12 +107,12 @@ SCHEMA_PATH  = os.path.join(os.path.dirname(__file__), "schema.sql")
 PG_SCHEMA    = os.path.join(os.path.dirname(__file__), "supabase_schema.sql")
 
 ROLE_VIEWS = {
-    "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho", "historial-despacho", "gastos"],
+    "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho", "historial-despacho", "gastos", "chequeo"],
     "Analista":       ["historial"],
     "Técnico Mant.":  ["mant"],
     "Propietario":    ["propietario", "gastos"],
     "Operador":       ["operador"],
-    "Despachador":    ["despacho", "historial-despacho"],
+    "Despachador":    ["despacho", "historial-despacho", "chequeo"],
     "Conductor":      ["alistamiento"],
 }
 
@@ -400,6 +400,34 @@ def migrate_db():
             )""",
             "CREATE INDEX IF NOT EXISTS idx_gastos_bus   ON gastos_mantenimiento(bus_id)",
             "CREATE INDEX IF NOT EXISTS idx_gastos_fecha ON gastos_mantenimiento(fecha)",
+            """CREATE TABLE IF NOT EXISTS puestos_trabajo (
+                id          SERIAL PRIMARY KEY,
+                nombre      TEXT NOT NULL UNIQUE,
+                descripcion TEXT,
+                activo      INTEGER NOT NULL DEFAULT 1,
+                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )""",
+            """CREATE TABLE IF NOT EXISTS chequeos_despachador (
+                id                 SERIAL PRIMARY KEY,
+                usuario_id         INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+                puesto_id          INTEGER REFERENCES puestos_trabajo(id),
+                fecha              DATE NOT NULL,
+                hora_llegada       TEXT NOT NULL,
+                lat_llegada        DOUBLE PRECISION NOT NULL,
+                lng_llegada        DOUBLE PRECISION NOT NULL,
+                precision_llegada  DOUBLE PRECISION,
+                hora_salida        TEXT,
+                lat_salida         DOUBLE PRECISION,
+                lng_salida         DOUBLE PRECISION,
+                precision_salida   DOUBLE PRECISION,
+                minutos_trabajados INTEGER,
+                created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(usuario_id, fecha)
+            )""",
+            "CREATE INDEX IF NOT EXISTS idx_chequeos_fecha ON chequeos_despachador(fecha)",
+            # Va después de crear puestos_trabajo (la referencia debe existir)
+            "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS puesto_id INTEGER REFERENCES puestos_trabajo(id)",
         ]:
             try:
                 db.execute(tbl_sql)
@@ -594,12 +622,43 @@ def migrate_db():
         """)
         db.execute("CREATE INDEX IF NOT EXISTS idx_gastos_bus   ON gastos_mantenimiento(bus_id)")
         db.execute("CREATE INDEX IF NOT EXISTS idx_gastos_fecha ON gastos_mantenimiento(fecha)")
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS puestos_trabajo (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                nombre      TEXT NOT NULL UNIQUE,
+                descripcion TEXT,
+                activo      INTEGER NOT NULL DEFAULT 1,
+                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS chequeos_despachador (
+                id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+                usuario_id         INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+                puesto_id          INTEGER REFERENCES puestos_trabajo(id),
+                fecha              DATE NOT NULL,
+                hora_llegada       TEXT NOT NULL,
+                lat_llegada        REAL NOT NULL,
+                lng_llegada        REAL NOT NULL,
+                precision_llegada  REAL,
+                hora_salida        TEXT,
+                lat_salida         REAL,
+                lng_salida         REAL,
+                precision_salida   REAL,
+                minutos_trabajados INTEGER,
+                created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(usuario_id, fecha)
+            )
+        """)
+        db.execute("CREATE INDEX IF NOT EXISTS idx_chequeos_fecha ON chequeos_despachador(fecha)")
         for col_sql in [
             "ALTER TABLE buses ADD COLUMN propietario_id INTEGER REFERENCES propietarios(id)",
             "ALTER TABLE registros_movilidad ADD COLUMN ruta_id INTEGER REFERENCES rutas(id)",
             "ALTER TABLE registros_movilidad ADD COLUMN conductor_id INTEGER REFERENCES conductores(id)",
             "ALTER TABLE buses ADD COLUMN km_inicial INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE alistamiento_vehicular ADD COLUMN novedades TEXT",
+            "ALTER TABLE usuarios ADD COLUMN puesto_id INTEGER REFERENCES puestos_trabajo(id)",
         ]:
             try:
                 db.execute(col_sql)
@@ -1209,6 +1268,265 @@ def delete_conductor(cid):
 
 
 # ──────────────────────────────────────────
+#  Puestos de trabajo (catálogo)
+# ──────────────────────────────────────────
+
+@app.route("/api/puestos", methods=["GET"])
+@require_auth
+def get_puestos():
+    db   = get_db()
+    rows = db.execute(
+        "SELECT id, nombre, descripcion, activo FROM puestos_trabajo ORDER BY nombre"
+    ).fetchall()
+    db.close()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/puestos", methods=["POST"])
+@require_role("Administrador")
+def create_puesto():
+    data   = request.get_json(force=True)
+    nombre = (data.get("nombre") or "").strip()
+    if not nombre:
+        return jsonify({"error": "El nombre del puesto es requerido"}), 400
+
+    db = get_db()
+    try:
+        cursor = db.execute(
+            "INSERT INTO puestos_trabajo (nombre, descripcion, activo) VALUES (?,?,?)",
+            (nombre, (data.get("descripcion") or "").strip(), data.get("activo", 1)),
+        )
+        db.commit()
+        new_id = cursor.lastrowid
+    except Exception:
+        db.close()
+        return jsonify({"error": "Ya existe un puesto con ese nombre"}), 400
+    db.close()
+    return jsonify({"ok": True, "id": new_id}), 201
+
+
+@app.route("/api/puestos/<int:pid>", methods=["PUT"])
+@require_role("Administrador")
+def update_puesto(pid):
+    data = request.get_json(force=True)
+    db   = get_db()
+    if not db.execute("SELECT id FROM puestos_trabajo WHERE id = ?", (pid,)).fetchone():
+        db.close()
+        return jsonify({"error": "Puesto no encontrado"}), 404
+
+    allowed = ["nombre", "descripcion", "activo"]
+    updates, values = [], []
+    for f in allowed:
+        if f in data:
+            updates.append(f"{f} = ?")
+            values.append(data[f])
+    if updates:
+        values.append(pid)
+        try:
+            db.execute(f"UPDATE puestos_trabajo SET {', '.join(updates)} WHERE id = ?", values)
+            db.commit()
+        except Exception:
+            db.close()
+            return jsonify({"error": "Ya existe un puesto con ese nombre"}), 400
+    db.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/puestos/<int:pid>", methods=["DELETE"])
+@require_role("Administrador")
+def delete_puesto(pid):
+    db = get_db()
+    db.execute("UPDATE puestos_trabajo SET activo = 0 WHERE id = ?", (pid,))
+    db.commit()
+    db.close()
+    return jsonify({"ok": True})
+
+
+# ──────────────────────────────────────────
+#  Chequeo de despachadores (llegada/salida con GPS)
+# ──────────────────────────────────────────
+
+def _validar_gps(data):
+    """Valida lat/lng del body. Devuelve (lat, lng, precision) o None si inválido."""
+    try:
+        lat = float(data.get("lat"))
+        lng = float(data.get("lng"))
+    except (TypeError, ValueError):
+        return None
+    if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+        return None
+    try:
+        prec = float(data.get("precision")) if data.get("precision") is not None else None
+    except (TypeError, ValueError):
+        prec = None
+    return (lat, lng, prec)
+
+
+def _chequeo_de(db, uid, fecha):
+    """Chequeo del usuario para una fecha, con nombre de puesto, o None."""
+    row = db.execute(
+        """SELECT c.*, p.nombre AS puesto_nombre
+           FROM chequeos_despachador c
+           LEFT JOIN puestos_trabajo p ON p.id = c.puesto_id
+           WHERE c.usuario_id = ? AND c.fecha = ?""",
+        (uid, fecha),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+@app.route("/api/chequeo/hoy", methods=["GET"])
+@require_role("Despachador", "Administrador")
+def get_chequeo_hoy():
+    uid   = request.jwt_user_id
+    fecha = hoy_bogota()
+    db    = get_db()
+    u = db.execute(
+        """SELECT u.puesto_id, p.nombre AS puesto_nombre
+           FROM usuarios u LEFT JOIN puestos_trabajo p ON p.id = u.puesto_id
+           WHERE u.id = ?""",
+        (uid,),
+    ).fetchone()
+    chequeo = _chequeo_de(db, uid, fecha)
+    db.close()
+    puesto = None
+    if u and u["puesto_id"]:
+        puesto = {"id": u["puesto_id"], "nombre": u["puesto_nombre"]}
+    return jsonify({"fecha": fecha, "puesto": puesto, "chequeo": chequeo})
+
+
+@app.route("/api/chequeo/llegada", methods=["POST"])
+@require_role("Despachador", "Administrador")
+def chequeo_llegada():
+    data = request.get_json(force=True)
+    gps  = _validar_gps(data)
+    if not gps:
+        return jsonify({"error": "Se requiere la ubicación GPS para marcar"}), 400
+    lat, lng, prec = gps
+
+    uid   = request.jwt_user_id
+    fecha = hoy_bogota()
+    db    = get_db()
+
+    previo = _chequeo_de(db, uid, fecha)
+    if previo:
+        db.close()
+        return jsonify({"error": f"Ya marcaste tu llegada hoy a las {previo['hora_llegada'][:5]}"}), 409
+
+    # Puesto elegido por el despachador al marcar; si no manda ninguno,
+    # se usa el asignado en el catálogo (o queda sin puesto).
+    puesto_id = data.get("puesto_id") or None
+    if puesto_id:
+        try:
+            puesto_id = int(puesto_id)
+        except (TypeError, ValueError):
+            puesto_id = None
+        valido = puesto_id and db.execute(
+            "SELECT id FROM puestos_trabajo WHERE id = ? AND activo = 1", (puesto_id,)
+        ).fetchone()
+        if not valido:
+            db.close()
+            return jsonify({"error": "Selecciona un puesto de trabajo válido"}), 400
+    else:
+        u = db.execute("SELECT puesto_id FROM usuarios WHERE id = ?", (uid,)).fetchone()
+        puesto_id = u["puesto_id"] if u else None
+    try:
+        db.execute(
+            """INSERT INTO chequeos_despachador
+               (usuario_id, puesto_id, fecha, hora_llegada, lat_llegada, lng_llegada, precision_llegada)
+               VALUES (?,?,?,?,?,?,?)""",
+            (uid, puesto_id, fecha, ahora_bogota(), lat, lng, prec),
+        )
+        db.commit()
+    except Exception:
+        # Carrera con el UNIQUE(usuario_id, fecha): otro request marcó primero
+        db.close()
+        return jsonify({"error": "Ya marcaste tu llegada hoy"}), 409
+
+    chequeo = _chequeo_de(db, uid, fecha)
+    db.close()
+    return jsonify({"ok": True, "chequeo": chequeo}), 201
+
+
+@app.route("/api/chequeo/salida", methods=["POST"])
+@require_role("Despachador", "Administrador")
+def chequeo_salida():
+    gps = _validar_gps(request.get_json(force=True))
+    if not gps:
+        return jsonify({"error": "Se requiere la ubicación GPS para marcar"}), 400
+    lat, lng, prec = gps
+
+    uid   = request.jwt_user_id
+    fecha = hoy_bogota()
+    db    = get_db()
+
+    chequeo = _chequeo_de(db, uid, fecha)
+    if not chequeo:
+        db.close()
+        return jsonify({"error": "Primero debes marcar tu llegada"}), 409
+    if chequeo["hora_salida"]:
+        db.close()
+        return jsonify({"error": f"Ya marcaste tu salida hoy a las {chequeo['hora_salida'][:5]}"}), 409
+
+    hora_salida = ahora_bogota()
+    h1, m1, s1 = [int(x) for x in chequeo["hora_llegada"].split(":")]
+    h2, m2, s2 = [int(x) for x in hora_salida.split(":")]
+    minutos = max(0, ((h2 * 3600 + m2 * 60 + s2) - (h1 * 3600 + m1 * 60 + s1)) // 60)
+
+    db.execute(
+        """UPDATE chequeos_despachador
+           SET hora_salida = ?, lat_salida = ?, lng_salida = ?, precision_salida = ?,
+               minutos_trabajados = ?, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?""",
+        (hora_salida, lat, lng, prec, minutos, chequeo["id"]),
+    )
+    db.commit()
+    chequeo = _chequeo_de(db, uid, fecha)
+    db.close()
+    return jsonify({"ok": True, "chequeo": chequeo})
+
+
+@app.route("/api/chequeo/historial", methods=["GET"])
+@require_role("Despachador", "Administrador")
+def chequeo_historial():
+    uid = request.jwt_user_id
+    rol = request.jwt_user_rol
+
+    if rol == "Administrador":
+        desde = request.args.get("desde") or hoy_bogota()
+        hasta = request.args.get("hasta") or hoy_bogota()
+        filtro_usuario, params_extra = "", []
+    else:
+        # El despachador solo ve su propio historial (últimos 7 días por defecto)
+        default_desde = ((datetime.utcnow() - timedelta(hours=5)) - timedelta(days=6)).date().isoformat()
+        desde = request.args.get("desde") or default_desde
+        hasta = request.args.get("hasta") or hoy_bogota()
+        filtro_usuario, params_extra = " AND c.usuario_id = ?", [uid]
+
+    db   = get_db()
+    rows = db.execute(
+        f"""SELECT c.id, c.fecha, c.hora_llegada, c.hora_salida, c.minutos_trabajados,
+                   c.lat_llegada, c.lng_llegada, c.precision_llegada,
+                   c.lat_salida, c.lng_salida, c.precision_salida,
+                   u.nombre AS despachador, p.nombre AS puesto
+            FROM chequeos_despachador c
+            JOIN usuarios u ON u.id = c.usuario_id
+            LEFT JOIN puestos_trabajo p ON p.id = c.puesto_id
+            WHERE c.fecha BETWEEN ? AND ?{filtro_usuario}
+            ORDER BY c.fecha DESC, c.hora_llegada""",
+        [desde, hasta] + params_extra,
+    ).fetchall()
+    db.close()
+    out = []
+    for r in rows:
+        d = dict(r)
+        # En Postgres DATE llega como objeto date → normalizar a ISO
+        if d.get("fecha") is not None and not isinstance(d["fecha"], str):
+            d["fecha"] = d["fecha"].isoformat()
+        out.append(d)
+    return jsonify(out)
+
+
+# ──────────────────────────────────────────
 #  Despacho diario
 # ──────────────────────────────────────────
 
@@ -1407,6 +1725,11 @@ def hoy_bogota():
     """Fecha actual en Colombia (UTC-5, sin horario de verano) como 'YYYY-MM-DD'.
     El día cambia a la medianoche local: 23:59 es el último momento editable."""
     return (datetime.utcnow() - timedelta(hours=5)).date().isoformat()
+
+
+def ahora_bogota():
+    """Hora actual en Colombia (UTC-5) como 'HH:MM:SS'."""
+    return (datetime.utcnow() - timedelta(hours=5)).strftime("%H:%M:%S")
 
 
 @app.route("/api/alistamiento", methods=["GET"])
@@ -2245,10 +2568,12 @@ def admin_get_usuarios():
     db = get_db()
     rows = db.execute(
         """SELECT u.id, u.username, u.nombre, u.rol, u.iniciales, u.color, u.activo, u.created_at,
+                  u.puesto_id, p.nombre AS puesto_nombre,
                   COUNT(ub.bus_id) AS buses_count
            FROM usuarios u
            LEFT JOIN usuario_buses ub ON ub.usuario_id = u.id
-           GROUP BY u.id
+           LEFT JOIN puestos_trabajo p ON p.id = u.puesto_id
+           GROUP BY u.id, u.puesto_id, p.nombre
            ORDER BY u.nombre"""
     ).fetchall()
     db.close()
@@ -2273,8 +2598,8 @@ def admin_create_usuario():
     db = get_db()
     try:
         cursor = db.execute(
-            "INSERT INTO usuarios (username, password, nombre, rol, iniciales, color) VALUES (?,?,?,?,?,?)",
-            (username, hashed_pw, nombre, rol, iniciales, color),
+            "INSERT INTO usuarios (username, password, nombre, rol, iniciales, color, puesto_id) VALUES (?,?,?,?,?,?,?)",
+            (username, hashed_pw, nombre, rol, iniciales, color, data.get("puesto_id") or None),
         )
         db.commit()
         new_id = cursor.lastrowid
@@ -2294,7 +2619,7 @@ def admin_update_usuario(uid):
         db.close()
         return jsonify({"error": "Usuario no encontrado"}), 404
 
-    allowed = ["nombre", "username", "iniciales", "color", "activo"]
+    allowed = ["nombre", "username", "iniciales", "color", "activo", "puesto_id"]
     updates, values = [], []
     for f in allowed:
         if f in data:

@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <script>
+    (function() {
+      if (window.location === window.parent.location) {
+        const token = localStorage.getItem('authToken');
+        if (!token) {
+          window.location.href = '/index.html';
+        }
+      }
+    })();
+  </script>
+
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>La Milagrosa — Chequeo de Despachadores</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg:       #f4f4f6;
+      --white:    #ffffff;
+      --border:   #e5e5eb;
+      --border2:  #d0d0d8;
+      --txt:      #111;
+      --txt2:     #555;
+      --txt3:     #888;
+      --primary:  #6366f1;
+      --primary2: rgba(99,102,241,.12);
+      --red:      #ef4444;
+      --green:    #22c55e;
+      --yellow:   #f59e0b;
+      --radius:   12px;
+      --radius-s: 8px;
+      --shadow:   0 1px 4px rgba(0,0,0,.07);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--txt);
+      padding: 24px;
+      font-size: 14px;
+    }
+
+    .page-header {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      flex-wrap: wrap; gap: 12px; margin-bottom: 18px;
+    }
+    .page-title { font-size: 22px; font-weight: 800; letter-spacing: -.4px; }
+    .page-sub   { font-size: 13px; color: var(--txt2); margin-top: 2px; }
+    .fecha-pill {
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: var(--radius-s); padding: 8px 14px; font-weight: 600;
+      box-shadow: var(--shadow); font-size: 13px;
+    }
+
+    /* ── Vista despachador ── */
+    .estado-card {
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: var(--radius); box-shadow: var(--shadow);
+      padding: 26px 22px; max-width: 520px; margin: 0 auto 18px;
+      text-align: center;
+    }
+    .estado-label {
+      font-size: 11px; color: var(--txt3); text-transform: uppercase;
+      letter-spacing: .6px; font-weight: 700; margin-bottom: 8px;
+    }
+    .estado-valor { font-size: 24px; font-weight: 800; letter-spacing: -.3px; }
+    .estado-valor.trabajando { color: var(--green); }
+    .estado-valor.cerrado    { color: var(--primary); }
+    .estado-detalle { font-size: 13px; color: var(--txt2); margin-top: 8px; line-height: 1.5; }
+    .puesto-linea {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: var(--primary2); color: var(--primary);
+      border-radius: 999px; padding: 5px 14px; font-size: 12.5px;
+      font-weight: 700; margin-top: 14px;
+    }
+    .puesto-linea.sin-puesto { background: #fef3c7; color: #a16207; }
+
+    .puesto-selector { margin-top: 16px; text-align: left; }
+    .puesto-selector label {
+      display: block; font-size: 11px; font-weight: 700; color: var(--txt3);
+      text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px;
+      text-align: center;
+    }
+    .puesto-selector select {
+      width: 100%; padding: 12px; border: 1.5px solid var(--border2);
+      border-radius: var(--radius-s); font-family: inherit; font-size: 15px;
+      font-weight: 600; background: var(--white); color: var(--txt); cursor: pointer;
+      text-align: center; text-align-last: center;
+    }
+    .puesto-selector select:focus { outline: none; border-color: var(--primary); }
+
+    .btn-marcar {
+      display: block; width: 100%; max-width: 520px; margin: 0 auto 12px;
+      padding: 20px; border: none; border-radius: var(--radius);
+      font-family: inherit; font-size: 17px; font-weight: 800; letter-spacing: .2px;
+      cursor: pointer; color: #fff; box-shadow: var(--shadow);
+      transition: transform .08s, opacity .15s;
+    }
+    .btn-marcar:active { transform: scale(.985); }
+    .btn-marcar.llegada { background: var(--green); }
+    .btn-marcar.salida  { background: var(--red); }
+    .btn-marcar:disabled { opacity: .55; cursor: default; }
+
+    .gps-status {
+      max-width: 520px; margin: 0 auto 22px; text-align: center;
+      font-size: 12.5px; color: var(--txt3); line-height: 1.5;
+    }
+    .gps-status.ok    { color: #16a34a; }
+    .gps-status.error { color: var(--red); font-weight: 600; }
+
+    /* ── Tablas (historial) ── */
+    .sec-title {
+      font-size: 13px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .6px; color: var(--txt2); margin: 0 0 10px;
+    }
+    .table-wrap {
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: var(--radius); box-shadow: var(--shadow); overflow-x: auto;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      text-align: left; font-size: 11px; font-weight: 700; color: var(--txt3);
+      text-transform: uppercase; letter-spacing: .4px;
+      padding: 11px 14px; border-bottom: 1px solid var(--border); background: #fafafb;
+      white-space: nowrap;
+    }
+    tbody td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    tbody tr:last-child td { border-bottom: none; }
+    .empty-state { padding: 28px; text-align: center; color: var(--txt3); font-size: 13px; }
+
+    .badge-tiempo {
+      background: var(--primary2); color: var(--primary);
+      border-radius: 6px; padding: 3px 9px; font-size: 12px; font-weight: 700;
+      white-space: nowrap;
+    }
+    .badge-pendiente {
+      background: #fef3c7; color: #a16207;
+      border-radius: 6px; padding: 3px 9px; font-size: 12px; font-weight: 700;
+      white-space: nowrap;
+    }
+    a.maps-link {
+      color: var(--primary); font-weight: 600; font-size: 12.5px;
+      text-decoration: none; white-space: nowrap;
+    }
+    a.maps-link:hover { text-decoration: underline; }
+
+    /* ── Filtros admin ── */
+    .filtros {
+      display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .filtro-field label {
+      display: block; font-size: 11px; font-weight: 700; color: var(--txt3);
+      text-transform: uppercase; letter-spacing: .4px; margin-bottom: 5px;
+    }
+    .filtro-field input[type="date"] {
+      padding: 8px 10px; border: 1px solid var(--border2); border-radius: var(--radius-s);
+      font-family: inherit; font-size: 13px; background: var(--white); color: var(--txt);
+    }
+    .filtro-field input:focus { outline: none; border-color: var(--primary); }
+    .btn-buscar {
+      padding: 9px 18px; border: none; border-radius: var(--radius-s);
+      background: var(--primary); color: #fff; cursor: pointer;
+      font-family: inherit; font-size: 13px; font-weight: 600;
+    }
+    .btn-buscar:disabled { opacity: .55; cursor: default; }
+
+    .hidden { display: none !important; }
+
+    /* Toast */
+    .toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+      background: #111; color: #fff; padding: 11px 20px; border-radius: 10px;
+      font-size: 13px; box-shadow: 0 6px 24px rgba(0,0,0,.2); z-index: 1000;
+      transition: opacity .2s, transform .2s;
+    }
+    .toast.error { background: var(--red); }
+    .toast.hidden { opacity: 0; transform: translateX(-50%) translateY(8px); pointer-events: none; }
+
+    /* ═══════════════════════════════════════════════
+       ░░  RESPONSIVE — MÓVIL / TABLET  ░░
+    ═══════════════════════════════════════════════ */
+    @media (max-width: 720px) {
+      /* padding-top deja libre el botón de menú flotante de la shell */
+      body { padding: 16px 14px; padding-top: 64px; }
+
+      .page-header { margin-bottom: 14px; }
+      .page-title  { font-size: 19px; }
+      .page-sub    { font-size: 12px; }
+      .fecha-pill  { font-size: 12px; padding: 7px 12px; }
+
+      .estado-card  { padding: 20px 16px; }
+      .estado-valor { font-size: 21px; }
+      .btn-marcar   { padding: 18px; font-size: 16px; }
+
+      /* Tabla → tarjetas apiladas */
+      .table-wrap { background: transparent; border: none; box-shadow: none; overflow: visible; }
+      table, tbody, tr, td { display: block; width: 100%; }
+      thead { display: none; }
+
+      tbody tr {
+        background: var(--white); border: 1px solid var(--border);
+        border-radius: var(--radius); box-shadow: var(--shadow);
+        margin-bottom: 10px; overflow: hidden;
+      }
+
+      tbody td {
+        display: flex; align-items: center; gap: 12px;
+        padding: 10px 14px; border-bottom: 1px solid var(--border);
+      }
+      tbody tr td:last-child { border-bottom: none; }
+
+      tbody td::before {
+        content: attr(data-label);
+        flex-shrink: 0; width: 92px;
+        font-size: 11px; font-weight: 700; color: var(--txt3);
+        text-transform: uppercase; letter-spacing: .4px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="page-header">
+    <div>
+      <div class="page-title">Chequeo de Despachadores</div>
+      <div class="page-sub" id="pageSub">Marca tu llegada y salida del puesto de trabajo. Se registra tu ubicación al momento de marcar.</div>
+    </div>
+    <div class="fecha-pill" id="fechaPill">—</div>
+  </div>
+
+  <!-- ── VISTA DESPACHADOR ── -->
+  <div id="vistaDespachador" class="hidden">
+    <div class="estado-card">
+      <div class="estado-label">Estado de hoy</div>
+      <div class="estado-valor" id="estadoValor">Cargando…</div>
+      <div class="estado-detalle" id="estadoDetalle"></div>
+      <div id="puestoLinea"></div>
+    </div>
+
+    <button class="btn-marcar llegada hidden" id="btnMarcar" onclick="marcar()">Marcar Llegada</button>
+    <div class="gps-status" id="gpsStatus">Comprobando ubicación…</div>
+
+    <div class="sec-title">Mis últimos chequeos</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Puesto</th>
+            <th>Llegada</th>
+            <th>Salida</th>
+            <th>Tiempo trabajado</th>
+          </tr>
+        </thead>
+        <tbody id="tbodyMios">
+          <tr><td colspan="5"><div class="empty-state">Cargando…</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── VISTA ADMINISTRADOR ── -->
+  <div id="vistaAdmin" class="hidden">
+    <div class="filtros">
+      <div class="filtro-field">
+        <label>Desde</label>
+        <input type="date" id="fDesde" />
+      </div>
+      <div class="filtro-field">
+        <label>Hasta</label>
+        <input type="date" id="fHasta" />
+      </div>
+      <button class="btn-buscar" id="btnBuscar" onclick="loadHistorialAdmin()">Buscar</button>
+    </div>
+
+    <div class="sec-title">Chequeos de despachadores</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Despachador</th>
+            <th>Puesto</th>
+            <th>Llegada</th>
+            <th>Salida</th>
+            <th>Tiempo trabajado</th>
+            <th>Ubicación llegada</th>
+            <th>Ubicación salida</th>
+          </tr>
+        </thead>
+        <tbody id="tbodyAdmin">
+          <tr><td colspan="8"><div class="empty-state">Cargando…</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="toast hidden" id="toast"></div>
+
+<script>
+  const API = (window.location.port === '3030') ? 'http://localhost:8001' : window.location.origin;
+  // Fecha de hoy en Colombia (el día cambia a la medianoche local, no por UTC).
+  const HOY = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date());
+  const CU  = JSON.parse(localStorage.getItem('currentUser') || 'null');
+  const ES_ADMIN = CU && CU.rol === 'Administrador';
+
+  let chequeoHoy = null;      // chequeo del día del despachador (o null)
+  let puestosActivos = [];    // puestos disponibles para elegir al marcar llegada
+  let cronoTimer = null;
+
+  document.addEventListener('DOMContentLoaded', init);
+
+  async function apiFetch(path, opts = {}) {
+    const token = localStorage.getItem('authToken');
+    const res = await fetch(API + path, {
+      ...opts,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        ...(opts.headers || {}),
+      },
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Error del servidor');
+    return json;
+  }
+
+  function init() {
+    document.getElementById('fechaPill').textContent = formatoFecha(HOY);
+    if (ES_ADMIN) {
+      document.getElementById('pageSub').textContent =
+        'Historial de llegadas y salidas de los despachadores, con la ubicación registrada en cada marca.';
+      document.getElementById('vistaAdmin').classList.remove('hidden');
+      document.getElementById('fDesde').value = HOY;
+      document.getElementById('fHasta').value = HOY;
+      loadHistorialAdmin();
+    } else {
+      document.getElementById('vistaDespachador').classList.remove('hidden');
+      loadHoy();
+      loadHistorialMio();
+      warmupPermiso();
+    }
+  }
+
+  /* ─── GEOLOCALIZACIÓN ─── */
+  function getUbicacion() {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error('Tu navegador no soporta geolocalización. Usa un navegador actualizado.'));
+        return;
+      }
+      if (!window.isSecureContext) {
+        reject(new Error('La ubicación solo funciona en conexión segura (https).'));
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        pos => resolve(pos.coords),
+        err => {
+          if (err.code === err.PERMISSION_DENIED) {
+            reject(new Error('Debes permitir el acceso a la ubicación para poder marcar. En tu navegador entra a los ajustes del sitio → Ubicación → Permitir, y recarga la página.'));
+          } else {
+            reject(new Error('No se pudo obtener tu ubicación. Activa el GPS del celular y vuelve a intentar.'));
+          }
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    });
+  }
+
+  // Al entrar por primera vez el navegador muestra el aviso de permiso.
+  async function warmupPermiso() {
+    const el = document.getElementById('gpsStatus');
+    el.textContent = 'Comprobando ubicación… (si el navegador pide permiso, elige "Permitir")';
+    el.className = 'gps-status';
+    try {
+      const coords = await getUbicacion();
+      el.textContent = `✓ Ubicación lista (precisión ±${Math.round(coords.accuracy)} m)`;
+      el.className = 'gps-status ok';
+    } catch (e) {
+      el.textContent = e.message;
+      el.className = 'gps-status error';
+    }
+  }
+
+  /* ─── ESTADO DEL DÍA (despachador) ─── */
+  async function loadHoy() {
+    try {
+      const [data, puestos] = await Promise.all([
+        apiFetch('/api/chequeo/hoy'),
+        apiFetch('/api/puestos'),
+      ]);
+      chequeoHoy = data.chequeo;
+      puestosActivos = puestos.filter(p => p.activo);
+      renderEstado(data);
+    } catch (e) {
+      document.getElementById('estadoValor').textContent = 'Error al cargar';
+      showToast(e.message, 'error');
+    }
+  }
+
+  function renderEstado(data) {
+    const valor   = document.getElementById('estadoValor');
+    const detalle = document.getElementById('estadoDetalle');
+    const btn     = document.getElementById('btnMarcar');
+    const puestoEl = document.getElementById('puestoLinea');
+    const c = data.chequeo;
+
+    clearInterval(cronoTimer);
+    btn.classList.remove('hidden');
+
+    if (!c) {
+      valor.textContent = 'Sin marcar';
+      valor.className = 'estado-valor';
+      detalle.textContent = 'Aún no has marcado tu llegada de hoy.';
+      // Selector de puesto: el asignado en el catálogo queda preseleccionado,
+      // pero el despachador puede elegir otro punto para hoy.
+      if (puestosActivos.length) {
+        const asignadoId = data.puesto ? data.puesto.id : null;
+        puestoEl.innerHTML = `
+          <div class="puesto-selector">
+            <label>📍 ¿Dónde vas a trabajar hoy?</label>
+            <select id="selPuesto">
+              ${asignadoId ? '' : '<option value="">— Elige tu puesto —</option>'}
+              ${puestosActivos.map(p =>
+                `<option value="${p.id}" ${p.id === asignadoId ? 'selected' : ''}>${escapeHtml(p.nombre)}</option>`
+              ).join('')}
+            </select>
+          </div>`;
+      } else {
+        puestoEl.innerHTML = `<span class="puesto-linea sin-puesto">⚠ Sin puestos creados — informa al administrador</span>`;
+      }
+      btn.textContent = 'Marcar Llegada';
+      btn.className = 'btn-marcar llegada';
+      btn.disabled = false;
+    } else if (!c.hora_salida) {
+      puestoEl.innerHTML = c.puesto_nombre
+        ? `<span class="puesto-linea">📍 Puesto: ${escapeHtml(c.puesto_nombre)}</span>`
+        : `<span class="puesto-linea sin-puesto">⚠ Sin puesto registrado</span>`;
+      valor.className = 'estado-valor trabajando';
+      detalle.textContent = `Llegada marcada a las ${horaCorta(c.hora_llegada)}.`;
+      btn.textContent = 'Marcar Salida';
+      btn.className = 'btn-marcar salida';
+      btn.disabled = false;
+      const actualizarCrono = () => {
+        valor.textContent = `Trabajando — ${fmtMin(minutosDesde(c.hora_llegada))}`;
+      };
+      actualizarCrono();
+      cronoTimer = setInterval(actualizarCrono, 30000);
+    } else {
+      puestoEl.innerHTML = c.puesto_nombre
+        ? `<span class="puesto-linea">📍 Puesto: ${escapeHtml(c.puesto_nombre)}</span>`
+        : `<span class="puesto-linea sin-puesto">⚠ Sin puesto registrado</span>`;
+      valor.textContent = `Jornada cerrada — ${fmtMin(c.minutos_trabajados)}`;
+      valor.className = 'estado-valor cerrado';
+      detalle.textContent = `Llegada ${horaCorta(c.hora_llegada)} · Salida ${horaCorta(c.hora_salida)}. ¡Buen trabajo!`;
+      btn.textContent = 'Jornada completa';
+      btn.className = 'btn-marcar llegada';
+      btn.disabled = true;
+    }
+  }
+
+  /* ─── MARCAR LLEGADA / SALIDA ─── */
+  async function marcar() {
+    const btn  = document.getElementById('btnMarcar');
+    const tipo = (!chequeoHoy) ? 'llegada' : 'salida';
+
+    // En la llegada el despachador elige el puesto donde trabajará hoy
+    let puestoId = null;
+    if (tipo === 'llegada' && puestosActivos.length) {
+      const sel = document.getElementById('selPuesto');
+      puestoId = sel && sel.value ? parseInt(sel.value) : null;
+      if (!puestoId) {
+        showToast('Elige el puesto donde vas a trabajar', 'error');
+        return;
+      }
+    }
+
+    btn.disabled = true;
+    const txtOriginal = btn.textContent;
+    btn.textContent = 'Obteniendo ubicación…';
+
+    let coords;
+    try {
+      coords = await getUbicacion();
+    } catch (e) {
+      // Sin ubicación no se marca: no se llama al servidor.
+      const el = document.getElementById('gpsStatus');
+      el.textContent = e.message;
+      el.className = 'gps-status error';
+      showToast('No se pudo marcar: falta la ubicación', 'error');
+      btn.textContent = txtOriginal;
+      btn.disabled = false;
+      return;
+    }
+
+    btn.textContent = 'Guardando…';
+    try {
+      const resp = await apiFetch(`/api/chequeo/${tipo}`, {
+        method: 'POST',
+        body: JSON.stringify({
+          lat: coords.latitude,
+          lng: coords.longitude,
+          precision: coords.accuracy,
+          ...(puestoId ? { puesto_id: puestoId } : {}),
+        }),
+      });
+      chequeoHoy = resp.chequeo;
+      renderEstado({ chequeo: resp.chequeo, puesto: null });
+      loadHistorialMio();
+      showToast(tipo === 'llegada'
+        ? `✓ Llegada registrada a las ${horaCorta(resp.chequeo.hora_llegada)}`
+        : `✓ Salida registrada — trabajaste ${fmtMin(resp.chequeo.minutos_trabajados)}`);
+      const el = document.getElementById('gpsStatus');
+      el.textContent = `✓ Ubicación registrada (precisión ±${Math.round(coords.accuracy)} m)`;
+      el.className = 'gps-status ok';
+    } catch (e) {
+      showToast(e.message, 'error');
+      btn.textContent = txtOriginal;
+      btn.disabled = false;
+      // Si el servidor dice que ya estaba marcado, refrescar el estado real
+      loadHoy();
+    }
+  }
+
+  /* ─── HISTORIAL PROPIO (despachador) ─── */
+  async function loadHistorialMio() {
+    const tbody = document.getElementById('tbodyMios');
+    try {
+      const rows = await apiFetch('/api/chequeo/historial');
+      if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state">Sin chequeos en los últimos 7 días</div></td></tr>`;
+        return;
+      }
+      tbody.innerHTML = rows.map(r => `<tr>
+        <td data-label="Fecha">${formatoFechaCorta(r.fecha)}</td>
+        <td data-label="Puesto">${escapeHtml(r.puesto || 'Sin puesto')}</td>
+        <td data-label="Llegada">${horaCorta(r.hora_llegada)}</td>
+        <td data-label="Salida">${r.hora_salida ? horaCorta(r.hora_salida) : '—'}</td>
+        <td data-label="Tiempo">${r.hora_salida
+          ? `<span class="badge-tiempo">${fmtMin(r.minutos_trabajados)}</span>`
+          : `<span class="badge-pendiente">En turno</span>`}</td>
+      </tr>`).join('');
+    } catch {
+      tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state">Error al cargar el historial</div></td></tr>`;
+    }
+  }
+
+  /* ─── HISTORIAL ADMIN ─── */
+  async function loadHistorialAdmin() {
+    const tbody = document.getElementById('tbodyAdmin');
+    const btn   = document.getElementById('btnBuscar');
+    const desde = document.getElementById('fDesde').value || HOY;
+    const hasta = document.getElementById('fHasta').value || HOY;
+    btn.disabled = true;
+    try {
+      const rows = await apiFetch(`/api/chequeo/historial?desde=${desde}&hasta=${hasta}`);
+      if (!rows.length) {
+        tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state">No hay chequeos en el rango seleccionado</div></td></tr>`;
+        return;
+      }
+      tbody.innerHTML = rows.map(r => `<tr>
+        <td data-label="Fecha">${formatoFechaCorta(r.fecha)}</td>
+        <td data-label="Despachador" style="font-weight:600">${escapeHtml(r.despachador)}</td>
+        <td data-label="Puesto">${escapeHtml(r.puesto || 'Sin puesto')}</td>
+        <td data-label="Llegada">${horaCorta(r.hora_llegada)}</td>
+        <td data-label="Salida">${r.hora_salida ? horaCorta(r.hora_salida) : '—'}</td>
+        <td data-label="Tiempo">${r.hora_salida
+          ? `<span class="badge-tiempo">${fmtMin(r.minutos_trabajados)}</span>`
+          : `<span class="badge-pendiente">En turno</span>`}</td>
+        <td data-label="Llegada GPS">${mapsLink(r.lat_llegada, r.lng_llegada)}</td>
+        <td data-label="Salida GPS">${r.hora_salida ? mapsLink(r.lat_salida, r.lng_salida) : '—'}</td>
+      </tr>`).join('');
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state">Error al cargar: ${escapeHtml(e.message)}</div></td></tr>`;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  /* ─── HELPERS ─── */
+  function mapsLink(lat, lng) {
+    if (lat == null || lng == null) return '—';
+    return `<a class="maps-link" target="_blank" rel="noopener" href="https://www.google.com/maps?q=${lat},${lng}">Ver mapa</a>`;
+  }
+  function horaCorta(hms) {
+    return hms ? String(hms).slice(0, 5) : '—';
+  }
+  function fmtMin(min) {
+    if (min == null) return '—';
+    const h = Math.floor(min / 60), m = min % 60;
+    return h > 0 ? `${h}h ${m}m` : `${m}m`;
+  }
+  function minutosDesde(horaLlegada) {
+    // Minutos transcurridos desde la hora de llegada (hora Bogotá) hasta ahora.
+    const ahora = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+    }).format(new Date());
+    const [h1, m1, s1] = horaLlegada.split(':').map(Number);
+    const [h2, m2, s2] = ahora.split(':').map(Number);
+    return Math.max(0, Math.floor(((h2 * 3600 + m2 * 60 + s2) - (h1 * 3600 + m1 * 60 + s1)) / 60));
+  }
+  function formatoFecha(iso) {
+    const d = new Date(iso + 'T00:00:00');
+    return d.toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  }
+  function formatoFechaCorta(fecha) {
+    // La API puede devolver 'YYYY-MM-DD' o una fecha RFC — normalizar siempre
+    const iso = /^\d{4}-\d{2}-\d{2}$/.test(String(fecha))
+      ? String(fecha)
+      : new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date(fecha));
+    const d = new Date(iso + 'T00:00:00');
+    return d.toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' });
+  }
+  function escapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  let toastTimer;
+  function showToast(msg, type = '') {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = 'toast' + (type ? ' ' + type : '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.add('hidden'), 2600);
+  }
+</script>
+</body>
+</html>

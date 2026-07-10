@@ -931,6 +931,19 @@
               <span class="sb-access" style="background:rgba(34,197,94,.1);color:#16a34a;" data-roles="admin,despachador">Desp.</span>
             </button>
           </li>
+          <!-- Chequeo Despachadores -->
+          <li>
+            <button class="sb-link" id="nav-chequeo" data-view="chequeo" data-src="chequeo.html" onclick="switchView(this)">
+              <span class="sb-icon">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="10"/>
+                  <polyline points="12 6 12 12 16 14"/>
+                </svg>
+              </span>
+              Chequeo
+              <span class="sb-access" style="background:rgba(34,197,94,.1);color:#16a34a;" data-roles="admin,despachador">Desp.</span>
+            </button>
+          </li>
           <!-- Alistamiento -->
           <li>
             <button class="sb-link" id="nav-alistamiento" data-view="alistamiento" data-src="alistamiento.html" onclick="switchView(this)">
@@ -1191,6 +1204,16 @@
               onload="iframeLoaded('historial-despacho')"></iframe>
     </div>
 
+    <!-- CHEQUEO DESPACHADORES VIEW -->
+    <div class="view-panel" id="view-chequeo">
+      <div class="iframe-loader" id="loader-chequeo">
+        <div class="loader-ring"></div>
+        <div class="loader-text">Cargando Chequeo…</div>
+      </div>
+      <iframe id="iframe-chequeo" src="" title="Chequeo de Despachadores"
+              onload="iframeLoaded('chequeo')"></iframe>
+    </div>
+
     <!-- ALISTAMIENTO VIEW -->
     <div class="view-panel" id="view-alistamiento">
       <div class="iframe-loader" id="loader-alistamiento">
@@ -1244,6 +1267,7 @@
     despacho:             { label: 'Despacho',            icon: 'check',    src: 'despacho.html' },
     'historial-despacho': { label: 'Historial Despacho',  icon: 'calendar', src: 'historial-despacho.html' },
     alistamiento:         { label: 'Alistamiento',        icon: 'check',    src: 'alistamiento.html' },
+    chequeo:              { label: 'Chequeo Despachadores', icon: 'check',  src: 'chequeo.html' },
   };
 
   let currentUser = null;
@@ -1470,6 +1494,7 @@
     despacho:             { bg: '#0a2a1a', svg: `<svg width="18" height="18" fill="none" stroke="#22c55e" stroke-width="2" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>` },
     'historial-despacho': { bg: '#0a2a1a', svg: `<svg width="18" height="18" fill="none" stroke="#22c55e" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h.01M12 14h.01M8 18h.01"/></svg>` },
     alistamiento:         { bg: '#0a2a1a', svg: `<svg width="18" height="18" fill="none" stroke="#22c55e" stroke-width="2" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>` },
+    chequeo:              { bg: '#0a2a1a', svg: `<svg width="18" height="18" fill="none" stroke="#22c55e" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>` },
   };
 
   function buildWelcomeCards() {
