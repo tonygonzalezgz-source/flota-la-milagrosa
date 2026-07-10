@@ -1076,6 +1076,23 @@
     </tr>`).join('');
   }
 
+  /* ─── DETECCIÓN DE CONDUCTORES DUPLICADOS ─── */
+  // Mismo criterio que el servidor: cédula igual (si hay) o nombre igual
+  // ignorando mayúsculas y espacios repetidos.
+  function normNombreConductor(s) {
+    return (s || '').trim().replace(/\s+/g, ' ').toUpperCase();
+  }
+
+  function buscarConductorDuplicado(nombre, cedula, excluirId = null) {
+    const nom = normNombreConductor(nombre);
+    const ced = (cedula || '').trim();
+    return conductores.find(c =>
+      c.id !== excluirId &&
+      ((ced && (c.cedula || '').trim() === ced) ||
+       (nom && normNombreConductor(c.nombre) === nom))
+    ) || null;
+  }
+
   /* ─── ELIMINAR TODOS LOS CONDUCTORES ─── */
   async function eliminarTodosConductores() {
     if (!conductores.length) { showToast('No hay conductores para eliminar', ''); return; }
@@ -1131,13 +1148,20 @@
     if (!filas.length) { showToast('No se encontraron filas válidas', 'error'); return; }
 
     showToast(`Importando ${filas.length} conductores…`, '');
-    let ok = 0, errores = 0;
+    let ok = 0, errores = 0, duplicados = 0;
+    const vistos = []; // los ya insertados en esta misma importación
     for (const f of filas) {
+      const dupCatalogo = buscarConductorDuplicado(f.nombre, f.cedula);
+      const dupArchivo  = vistos.some(v =>
+        (f.cedula && v.cedula === f.cedula) ||
+        normNombreConductor(v.nombre) === normNombreConductor(f.nombre));
+      if (dupCatalogo || dupArchivo) { duplicados++; continue; }
       try {
         await apiFetch('/api/conductores', {
           method: 'POST',
           body: JSON.stringify({ nombre: f.nombre, cedula: f.cedula })
         });
+        vistos.push(f);
         ok++;
       } catch { errores++; }
     }
@@ -1145,8 +1169,10 @@
     try { conductores = await apiFetch('/api/conductores'); } catch {}
     renderConductores();
 
-    if (errores === 0) showToast(`✓ ${ok} conductores importados correctamente`);
-    else showToast(`${ok} importados, ${errores} con error (duplicados o vacíos)`, 'warn');
+    const partes = [`${ok} importados`];
+    if (duplicados) partes.push(`${duplicados} omitidos por estar ya dados de alta`);
+    if (errores)    partes.push(`${errores} con error`);
+    showToast((errores === 0 ? '✓ ' : '') + partes.join(', '), errores === 0 ? (duplicados ? 'warn' : '') : 'warn');
   }
 
   /* ─── RENDER: DESPACHADORES ─── */
@@ -1644,6 +1670,11 @@
           telefono: document.getElementById('f-telefono').value.trim(),
           activo:   parseInt(document.getElementById('f-activo').value),
         };
+        const dup = buscarConductorDuplicado(nombre, body.cedula, modalId);
+        if (dup) {
+          showToast(`Este conductor ya está dado de alta: ${dup.nombre}${dup.cedula ? ' (cédula ' + dup.cedula + ')' : ''}`, 'error');
+          return;
+        }
         url    = modalId ? `/api/conductores/${modalId}` : '/api/conductores';
         method = modalId ? 'PUT' : 'POST';
       }
