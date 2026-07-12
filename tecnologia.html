@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>La Milagrosa — Dispositivos Tecnológicos</title>
+  <script>
+    (function(){
+      document.addEventListener('contextmenu',function(e){e.preventDefault();});
+      document.addEventListener('keydown',function(e){
+        if(e.key==='F12'){e.preventDefault();return false;}
+        if(e.ctrlKey&&e.shiftKey&&['I','J','C','U'].includes(e.key.toUpperCase())){e.preventDefault();return false;}
+        if(e.ctrlKey&&e.key.toUpperCase()==='U'){e.preventDefault();return false;}
+      });
+    })();
+  </script>
+  <script>
+    (function() {
+      if (window.location === window.parent.location) {
+        const token = localStorage.getItem('authToken');
+        if (!token) { window.location.href = '/index.html'; }
+      }
+    })();
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+  <style>
+    :root{
+      --bg:#f1f2f6; --surface:#fff; --border:#e5e5eb;
+      --blue:#6366f1; --green:#22c55e; --yellow:#f59e0b; --red:#ef4444; --cyan:#06b6d4;
+      --text:#111; --muted:#6b7280;
+      --radius:14px; --radius-sm:10px;
+      --shadow:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
+    }
+    *{margin:0;padding:0;box-sizing:border-box;}
+    html{-webkit-text-size-adjust:100%;}
+    img,svg,video{max-width:100%;}
+    body{
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+      background:var(--bg); color:var(--text);
+      padding:20px; padding-top:24px;
+    }
+    .wrap{max-width:1040px;margin:0 auto;}
+    .page-head{margin-bottom:20px;}
+    .page-head h1{font-size:1.4rem;font-weight:700;display:flex;align-items:center;gap:10px;}
+    .page-head p{color:var(--muted);font-size:.9rem;margin-top:4px;}
+    .page-head .ico{color:var(--cyan);display:inline-flex;}
+
+    /* ── TABS ÁREA ── */
+    .area-tabs{display:flex;gap:10px;margin-bottom:20px;}
+    .area-tab{
+      flex:1;display:flex;align-items:center;justify-content:center;gap:8px;
+      padding:13px 16px;border:1px solid var(--border);border-radius:var(--radius);
+      background:var(--surface);cursor:pointer;font-size:.95rem;font-weight:650;color:var(--muted);
+      transition:all .15s;box-shadow:var(--shadow);
+    }
+    .area-tab svg{flex-shrink:0;}
+    .area-tab.active{border-color:var(--cyan);color:var(--cyan);background:#f0fdff;box-shadow:0 0 0 3px rgba(6,182,212,.12);}
+
+    .card{
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:var(--radius); box-shadow:var(--shadow);
+      padding:20px; margin-bottom:20px;
+    }
+    .card h2{font-size:1.05rem;font-weight:650;margin-bottom:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+    .card h2 .badge{font-size:.68rem;font-weight:600;background:rgba(6,182,212,.1);color:var(--cyan);padding:2px 8px;border-radius:20px;}
+
+    /* ── FORM ── */
+    .form-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;}
+    .field{display:flex;flex-direction:column;gap:6px;}
+    .field.full{grid-column:1/-1;}
+    label{font-size:.82rem;font-weight:600;color:#374151;}
+    input,select,textarea{
+      font-family:inherit;font-size:.95rem;color:var(--text);
+      background:#fafafb;border:1px solid var(--border);border-radius:var(--radius-sm);
+      padding:11px 12px;width:100%;outline:none;transition:border-color .15s,box-shadow .15s;
+    }
+    input:focus,select:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(99,102,241,.12);}
+    textarea{resize:vertical;min-height:70px;}
+
+    /* ── FOTOS ── */
+    .comp-btns{display:flex;gap:12px;flex-wrap:wrap;}
+    .comp-btn{
+      position:relative;overflow:hidden;
+      flex:1;min-width:140px;display:flex;flex-direction:column;align-items:center;gap:8px;
+      padding:18px 12px;border:2px dashed var(--border);border-radius:var(--radius);
+      background:#fafafb;cursor:pointer;transition:all .15s;text-align:center;
+    }
+    /* El input cubre todo el botón con opacity 0: al tocarlo directamente,
+       los navegadores móviles respetan `capture` y abren la cámara.
+       (Un input display:none/hidden hace que varios ignoren `capture`.) */
+    .comp-btn input[type=file]{
+      position:absolute;top:0;left:0;right:0;bottom:0;
+      opacity:0;cursor:pointer;font-size:0;
+    }
+    .comp-btn:hover{border-color:var(--cyan);background:#f0fdff;}
+    .comp-btn svg{color:var(--cyan);}
+    .comp-btn span{font-size:.85rem;font-weight:600;color:#374151;}
+    .comp-btn small{font-size:.72rem;color:var(--muted);font-weight:500;}
+    .fotos-grid{display:none;margin-top:14px;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px;}
+    .fotos-grid.show{display:grid;}
+    .foto-thumb{position:relative;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;background:#fafafb;}
+    .foto-thumb img{display:block;width:100%;height:96px;object-fit:cover;}
+    .foto-thumb .rm{
+      position:absolute;top:4px;right:4px;width:24px;height:24px;
+      background:rgba(0,0,0,.6);color:#fff;border:none;border-radius:50%;
+      font-size:.9rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;
+    }
+    .fotos-count{font-size:.76rem;color:var(--muted);font-weight:500;margin-top:8px;}
+
+    /* ── FIRMA ── */
+    .firma-box{border:2px dashed var(--border);border-radius:var(--radius);background:#fafafb;padding:10px;}
+    .firma-box canvas{
+      display:block;width:100%;height:160px;background:#fff;
+      border:1px solid var(--border);border-radius:var(--radius-sm);
+      touch-action:none; /* evita que el scroll se coma los trazos en móvil */
+      cursor:crosshair;
+    }
+    .firma-tools{display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap;}
+    .firma-tools .hint{font-size:.76rem;color:var(--muted);flex:1;min-width:150px;}
+    .btn-clear-firma{
+      font-size:.8rem;font-weight:600;padding:6px 12px;border-radius:8px;
+      border:1px solid rgba(239,68,68,.3);background:#fff;color:var(--red);cursor:pointer;
+    }
+    .firma-view{background:#fff;border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px;display:inline-block;}
+    .firma-view img{max-height:110px;}
+
+    .btn-primary{
+      background:var(--blue);color:#fff;border:none;border-radius:var(--radius-sm);
+      padding:13px 22px;font-size:.95rem;font-weight:650;cursor:pointer;
+      transition:background .15s,transform .1s;width:100%;margin-top:4px;
+    }
+    .btn-primary:hover{background:#4f52d6;}
+    .btn-primary:active{transform:scale(.99);}
+    .btn-primary:disabled{opacity:.6;cursor:not-allowed;}
+    .btn-primary.ok{background:var(--green);}
+
+    /* ── LISTADO ── */
+    .list-tools{display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap;}
+    .search{flex:1;min-width:180px;position:relative;}
+    .search svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);}
+    .search input{padding-left:38px;}
+    .filter-sel{max-width:190px;}
+    .date-range{display:flex;align-items:center;gap:6px;}
+    .date-range input{max-width:150px;}
+    .date-range span{color:var(--muted);font-size:.82rem;}
+
+    .btn-pdf{
+      display:inline-flex;align-items:center;gap:8px;margin-left:auto;
+      background:var(--red);color:#fff;border:none;border-radius:var(--radius-sm);
+      padding:10px 16px;font-size:.86rem;font-weight:650;cursor:pointer;transition:background .15s;
+    }
+    .btn-pdf:hover{background:#dc2626;}
+    .btn-pdf:disabled{opacity:.6;cursor:not-allowed;}
+
+    table{width:100%;border-collapse:collapse;font-size:.9rem;}
+    thead th{
+      text-align:left;font-size:.74rem;font-weight:600;text-transform:uppercase;
+      letter-spacing:.03em;color:var(--muted);padding:10px 12px;border-bottom:2px solid var(--border);
+    }
+    tbody td{padding:12px;border-bottom:1px solid var(--border);vertical-align:middle;}
+    tbody tr:last-child td{border-bottom:none;}
+    .area-pill{display:inline-block;font-size:.78rem;font-weight:600;padding:3px 10px;border-radius:20px;}
+    .area-pill.camaras{background:rgba(6,182,212,.1);color:var(--cyan);}
+    .area-pill.sensores{background:rgba(99,102,241,.1);color:var(--blue);}
+    .btn-sm{font-size:.8rem;font-weight:600;padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:#fff;cursor:pointer;transition:all .15s;}
+    .btn-sm.ver{color:var(--blue);border-color:rgba(99,102,241,.3);}
+    .btn-sm.ver:hover{background:rgba(99,102,241,.08);}
+    .btn-sm.del{color:var(--red);border-color:rgba(239,68,68,.3);}
+    .btn-sm.del:hover{background:rgba(239,68,68,.08);}
+    .no-comp{color:var(--muted);font-size:.8rem;}
+    .empty{text-align:center;padding:40px 20px;color:var(--muted);}
+    .empty svg{color:#d1d5db;margin-bottom:12px;}
+
+    /* ── MODAL ── */
+    .modal-bg{
+      display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);
+      z-index:1000;align-items:center;justify-content:center;padding:20px;
+    }
+    .modal-bg.show{display:flex;}
+    .modal{
+      background:var(--surface);border-radius:var(--radius);max-width:640px;width:100%;
+      max-height:90vh;display:flex;flex-direction:column;overflow:hidden;
+    }
+    .modal-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);}
+    .modal-head h3{font-size:1rem;font-weight:650;}
+    .modal-head .x{background:none;border:none;font-size:1.4rem;color:var(--muted);cursor:pointer;line-height:1;}
+    .modal-body{padding:20px;overflow:auto;text-align:center;}
+    .modal-body img{border-radius:8px;margin-bottom:14px;}
+    .modal-body img:last-child{margin-bottom:0;}
+    .modal-body .m-info{text-align:left;background:#fafafb;border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:14px;font-size:.88rem;}
+    .modal-body .m-info div{margin-bottom:4px;}
+    .modal-body .m-info div:last-child{margin-bottom:0;}
+    .modal-body .m-info b{color:#374151;}
+
+    /* ── TOAST ── */
+    .toast{
+      position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(120%);
+      background:var(--text);color:#fff;padding:13px 22px;border-radius:var(--radius-sm);
+      font-size:.9rem;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,.2);z-index:1100;
+      transition:transform .3s cubic-bezier(.2,.8,.3,1);
+    }
+    .toast.show{transform:translateX(-50%) translateY(0);}
+    .toast.err{background:var(--red);}
+
+    /* ── RESPONSIVE (tarjetas apiladas) ── */
+    @media (max-width:720px){
+      body{padding:14px;padding-top:64px;} /* deja libre el botón de menú flotante de la shell */
+      .form-grid{grid-template-columns:1fr;}
+      .date-range{width:100%;}
+      .date-range input{max-width:none;flex:1;}
+      .btn-pdf{margin-left:0;width:100%;justify-content:center;}
+      thead{display:none;}
+      table,tbody,tr,td{display:block;width:100%;}
+      tbody tr{border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:12px;padding:6px 4px;background:#fafafb;}
+      tbody td{border:none;padding:8px 14px;display:flex;justify-content:space-between;align-items:center;gap:12px;}
+      tbody td::before{content:attr(data-label);font-size:.74rem;font-weight:600;text-transform:uppercase;color:var(--muted);}
+      tbody td.acciones{justify-content:flex-end;gap:8px;}
+      tbody td.acciones::before{display:none;}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="page-head">
+      <h1>
+        <span class="ico">
+          <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        </span>
+        Dispositivos Tecnológicos
+      </h1>
+      <p>Intervenciones y mantenimiento de las cámaras y sensores de los vehículos, con fotos de evidencia.</p>
+    </div>
+
+    <!-- ── TABS ÁREA ── -->
+    <div class="area-tabs">
+      <button class="area-tab active" id="tab-camaras" onclick="setArea('camaras')">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        Cámaras
+      </button>
+      <button class="area-tab" id="tab-sensores" onclick="setArea('sensores')">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5M19.1 4.9c3.9 3.9 3.9 10.3 0 14.2"/><circle cx="12" cy="12" r="2"/></svg>
+        Sensores
+      </button>
+    </div>
+
+    <!-- ── REGISTRAR ── -->
+    <div class="card" id="formCard">
+      <h2>Registrar intervención <span class="badge" id="formBadge">Cámaras</span></h2>
+      <form id="tecForm">
+        <div class="form-grid">
+          <div class="field">
+            <label for="f-bus">Vehículo</label>
+            <select id="f-bus" required></select>
+          </div>
+          <div class="field">
+            <label for="f-fecha">Fecha</label>
+            <input type="date" id="f-fecha" required>
+          </div>
+          <div class="field">
+            <label for="f-tipo">Tipo de intervención</label>
+            <input type="text" id="f-tipo" placeholder="Ej: Cambio de cámara frontal" required>
+          </div>
+          <div class="field">
+            <label for="f-tecnico">Realizada por</label>
+            <input type="text" id="f-tecnico" placeholder="Nombre del técnico" required>
+          </div>
+          <div class="field full">
+            <label for="f-desc">Novedad / descripción del trabajo <small style="color:var(--muted);font-weight:500;">(opcional)</small></label>
+            <textarea id="f-desc" placeholder="Describe la novedad reportada y lo que se hizo…"></textarea>
+          </div>
+          <div class="field full">
+            <label>Fotos de evidencia <small style="color:var(--muted);font-weight:500;">(hasta 5 fotos)</small></label>
+            <div class="comp-btns">
+              <label class="comp-btn">
+                <svg width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                <span>Tomar foto</span>
+                <small>Usa la cámara</small>
+                <input type="file" accept="image/*" capture="environment" id="f-camera">
+              </label>
+              <label class="comp-btn">
+                <svg width="26" height="26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                <span>Adjuntar fotos</span>
+                <small>Desde la galería</small>
+                <input type="file" accept="image/*" multiple id="f-file">
+              </label>
+            </div>
+            <div class="fotos-grid" id="fotosGrid"></div>
+            <div class="fotos-count" id="fotosCount" style="display:none;"></div>
+          </div>
+          <div class="field full">
+            <label>Firma de constancia <small style="color:var(--muted);font-weight:500;">(normalmente el conductor — opcional)</small></label>
+            <div class="firma-box">
+              <canvas id="firmaCanvas"></canvas>
+              <div class="firma-tools">
+                <span class="hint">Firma con el dedo o el lápiz sobre el recuadro</span>
+                <button type="button" class="btn-clear-firma" id="firmaClear">Borrar firma</button>
+              </div>
+            </div>
+          </div>
+          <div class="field full">
+            <label for="f-firmante">Nombre de quien firma <small style="color:var(--muted);font-weight:500;">(opcional)</small></label>
+            <input type="text" id="f-firmante" placeholder="Ej: Pedro Gómez (conductor)">
+          </div>
+        </div>
+        <button type="submit" class="btn-primary" id="submitBtn">Guardar intervención</button>
+      </form>
+    </div>
+
+    <!-- ── LISTADO ── -->
+    <div class="card">
+      <h2>Historial de intervenciones <span class="badge" id="listBadge">Cámaras</span></h2>
+      <div class="list-tools">
+        <div class="search">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="searchInput" placeholder="Buscar por tipo, técnico, vehículo…">
+        </div>
+        <select id="filterBus" class="filter-sel"><option value="">Todos los vehículos</option></select>
+        <div class="date-range">
+          <input type="date" id="filterDesde" title="Desde">
+          <span>a</span>
+          <input type="date" id="filterHasta" title="Hasta">
+        </div>
+        <button class="btn-pdf" id="pdfBtn" onclick="exportarPDF()">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 18 15 15"/></svg>
+          Exportar PDF
+        </button>
+      </div>
+      <div id="listContainer"></div>
+    </div>
+  </div>
+
+  <!-- ── MODAL EVIDENCIAS ── -->
+  <div class="modal-bg" id="modalBg">
+    <div class="modal">
+      <div class="modal-head">
+        <h3 id="modalTitle">Evidencias</h3>
+        <button class="x" onclick="closeModal()">&times;</button>
+      </div>
+      <div class="modal-body" id="modalBody"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const API = (window.location.port === '3030') ? 'http://localhost:8001/api' : (window.location.origin + '/api');
+    function apiFetch(url, options = {}) {
+      const token = localStorage.getItem('authToken');
+      return fetch(url, { ...options, headers: { 'Content-Type':'application/json', ...(token ? {'Authorization':`Bearer ${token}`} : {}), ...(options.headers || {}) } });
+    }
+
+    const MAX_FOTOS  = 5;
+    const AREA_LABEL = { camaras: 'Cámaras', sensores: 'Sensores' };
+    // Fecha de HOY en la zona horaria local (toISOString daría el día UTC)
+    function hoyLocal() { return new Date().toLocaleDateString('en-CA'); }
+
+    let currentUser = null;
+    let areaActual  = 'camaras';
+    let tecData     = [];   // intervenciones del área actual
+    let fotos       = [];   // dataURLs pendientes del form
+    let esPropietario = false;
+
+    // ── INIT ──
+    document.addEventListener('DOMContentLoaded', async () => {
+      currentUser   = JSON.parse(localStorage.getItem('currentUser') || 'null');
+      esPropietario = !!currentUser && currentUser.rol === 'Propietario';
+      if (esPropietario) document.getElementById('formCard').style.display = 'none';
+
+      document.getElementById('f-fecha').value = hoyLocal();
+      if (currentUser && currentUser.nombre) document.getElementById('f-tecnico').value = currentUser.nombre;
+
+      await cargarBuses();
+      await cargarIntervenciones();
+
+      initFirma();
+      document.getElementById('firmaClear').addEventListener('click', clearFirma);
+      document.getElementById('f-camera').addEventListener('change', onFilesPicked);
+      document.getElementById('f-file').addEventListener('change', onFilesPicked);
+      document.getElementById('tecForm').addEventListener('submit', onSubmit);
+      document.getElementById('searchInput').addEventListener('input', renderList);
+      document.getElementById('filterBus').addEventListener('change', renderList);
+      document.getElementById('filterDesde').addEventListener('change', cargarIntervenciones);
+      document.getElementById('filterHasta').addEventListener('change', cargarIntervenciones);
+    });
+
+    // ── TABS ──
+    function setArea(area) {
+      if (area === areaActual) return;
+      areaActual = area;
+      document.getElementById('tab-camaras').classList.toggle('active', area === 'camaras');
+      document.getElementById('tab-sensores').classList.toggle('active', area === 'sensores');
+      document.getElementById('formBadge').textContent = AREA_LABEL[area];
+      document.getElementById('listBadge').textContent = AREA_LABEL[area];
+      cargarIntervenciones();
+    }
+
+    // ── CARGAR BUSES ──
+    async function cargarBuses() {
+      const uid = currentUser ? currentUser.id : null;
+      const qs  = uid ? `?user_id=${uid}` : '';
+      try {
+        const res = await apiFetch(`${API}/buses${qs}`);
+        const buses = await res.json();
+        const busSel    = document.getElementById('f-bus');
+        const filterSel = document.getElementById('filterBus');
+        if (!Array.isArray(buses) || buses.length === 0) {
+          busSel.innerHTML = '<option value="" disabled selected>No hay vehículos disponibles</option>';
+          return;
+        }
+        const opts = buses.map(b =>
+          `<option value="${b.id}">${b.numero ? 'Bus '+b.numero : ''}${b.placa ? ' — '+b.placa : ''}</option>`
+        ).join('');
+        busSel.innerHTML = '<option value="" disabled selected>Selecciona…</option>' + opts;
+        filterSel.innerHTML = '<option value="">Todos los vehículos</option>' + opts;
+      } catch (e) {
+        showToast('No se pudieron cargar los vehículos', true);
+      }
+    }
+
+    // ── FOTOS ──
+    function onFilesPicked(ev) {
+      const files = Array.from(ev.target.files || []);
+      for (const file of files) {
+        if (!file.type.startsWith('image/')) { showToast('Solo se aceptan imágenes.', true); continue; }
+        if (fotos.length >= MAX_FOTOS) { showToast(`Máximo ${MAX_FOTOS} fotos por intervención.`, true); break; }
+        fotos.push(null);                     // reserva el cupo (la compresión es async)
+        compressImage(file, fotos.length - 1);
+      }
+      ev.target.value = ''; // permite re-seleccionar el mismo archivo
+    }
+
+    function compressImage(file, idx) {
+      const reader = new FileReader();
+      reader.onload = e => {
+        const img = new Image();
+        img.onload = () => {
+          const MAX = 1600;
+          let { width, height } = img;
+          if (width > height && width > MAX) { height = Math.round(height * MAX / width); width = MAX; }
+          else if (height > MAX) { width = Math.round(width * MAX / height); height = MAX; }
+          const canvas = document.createElement('canvas');
+          canvas.width = width; canvas.height = height;
+          canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+          fotos[idx] = canvas.toDataURL('image/jpeg', 0.7);
+          renderFotos();
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function renderFotos() {
+      const grid  = document.getElementById('fotosGrid');
+      const count = document.getElementById('fotosCount');
+      const listas = fotos.filter(Boolean);
+      grid.classList.toggle('show', listas.length > 0);
+      count.style.display = listas.length > 0 ? '' : 'none';
+      count.textContent = `${listas.length} de ${MAX_FOTOS} fotos`;
+      grid.innerHTML = listas.map((f, i) => `
+        <div class="foto-thumb">
+          <img src="${f}" alt="Evidencia ${i+1}">
+          <button type="button" class="rm" onclick="quitarFoto(${i})" title="Quitar">&times;</button>
+        </div>`).join('');
+    }
+
+    function quitarFoto(i) {
+      fotos = fotos.filter(Boolean);
+      fotos.splice(i, 1);
+      renderFotos();
+    }
+
+    // ── FIRMA DIGITAL ──
+    const firmaCanvas = document.getElementById('firmaCanvas');
+    let firmaCtx = null, firmaDirty = false, firmaDrawing = false;
+
+    function initFirma() {
+      const ratio = window.devicePixelRatio || 1;
+      const w = firmaCanvas.clientWidth, h = firmaCanvas.clientHeight;
+      if (!w || !h) return;
+      firmaCanvas.width = Math.round(w * ratio);
+      firmaCanvas.height = Math.round(h * ratio);
+      firmaCtx = firmaCanvas.getContext('2d');
+      firmaCtx.scale(ratio, ratio);
+      firmaCtx.lineWidth = 2.2;
+      firmaCtx.lineCap = 'round';
+      firmaCtx.lineJoin = 'round';
+      firmaCtx.strokeStyle = '#111';
+      firmaDirty = false;
+    }
+
+    function firmaPos(e) {
+      const r = firmaCanvas.getBoundingClientRect();
+      return { x: e.clientX - r.left, y: e.clientY - r.top };
+    }
+    firmaCanvas.addEventListener('pointerdown', e => {
+      if (!firmaCtx) initFirma();
+      if (!firmaCtx) return;
+      e.preventDefault();
+      firmaCanvas.setPointerCapture(e.pointerId);
+      firmaDrawing = true;
+      const p = firmaPos(e);
+      firmaCtx.beginPath();
+      firmaCtx.moveTo(p.x, p.y);
+      firmaCtx.lineTo(p.x + 0.1, p.y + 0.1); // marca hasta un toque simple
+      firmaCtx.stroke();
+      firmaDirty = true;
+    });
+    firmaCanvas.addEventListener('pointermove', e => {
+      if (!firmaDrawing) return;
+      e.preventDefault();
+      const p = firmaPos(e);
+      firmaCtx.lineTo(p.x, p.y);
+      firmaCtx.stroke();
+    });
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev =>
+      firmaCanvas.addEventListener(ev, () => { firmaDrawing = false; }));
+
+    function clearFirma() {
+      if (firmaCtx) firmaCtx.clearRect(0, 0, firmaCanvas.width, firmaCanvas.height);
+      firmaDirty = false;
+    }
+
+    function firmaDataUrl() {
+      if (!firmaDirty) return null;
+      // fondo blanco para que la firma se vea bien en el PDF y el modal
+      const out = document.createElement('canvas');
+      out.width = firmaCanvas.width; out.height = firmaCanvas.height;
+      const ctx = out.getContext('2d');
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, out.width, out.height);
+      ctx.drawImage(firmaCanvas, 0, 0);
+      // JPEG: jsPDF lo embebe directo (el PNG lo infla ~50x en el PDF)
+      return out.toDataURL('image/jpeg', 0.85);
+    }
+
+    // ── GUARDAR ──
+    async function onSubmit(ev) {
+      ev.preventDefault();
+      const btn     = document.getElementById('submitBtn');
+      const busId   = document.getElementById('f-bus').value;
+      const fecha   = document.getElementById('f-fecha').value;
+      const tipo    = document.getElementById('f-tipo').value.trim();
+      const tecnico = document.getElementById('f-tecnico').value.trim();
+      if (!busId || !fecha || !tipo || !tecnico) { showToast('Completa los campos obligatorios', true); return; }
+      if (fotos.some(f => !f)) { showToast('Espera a que terminen de cargar las fotos…', true); return; }
+
+      const payload = {
+        bus_id: parseInt(busId), area: areaActual, fecha, tipo, tecnico,
+        descripcion: document.getElementById('f-desc').value.trim(),
+        fotos: fotos.filter(Boolean),
+        firma_base64: firmaDataUrl(),
+        firma_nombre: document.getElementById('f-firmante').value.trim(),
+      };
+
+      btn.disabled = true; btn.textContent = 'Guardando…';
+      try {
+        const res = await apiFetch(`${API}/tecnologia`, { method:'POST', body: JSON.stringify(payload) });
+        if (!res.ok) {
+          const err = await res.json().catch(()=>({}));
+          throw new Error(err.error || 'Error al guardar');
+        }
+        btn.classList.add('ok'); btn.textContent = '✓ Registrada';
+        showToast('Intervención registrada correctamente');
+        resetForm();
+        await cargarIntervenciones();
+        setTimeout(() => { btn.classList.remove('ok'); btn.textContent = 'Guardar intervención'; btn.disabled = false; }, 1700);
+      } catch (e) {
+        showToast(e.message || 'Error al guardar', true);
+        btn.disabled = false; btn.textContent = 'Guardar intervención';
+      }
+    }
+
+    function resetForm() {
+      document.getElementById('f-bus').selectedIndex = 0;
+      document.getElementById('f-tipo').value = '';
+      document.getElementById('f-desc').value = '';
+      document.getElementById('f-fecha').value = hoyLocal();
+      document.getElementById('f-firmante').value = '';
+      fotos = [];
+      renderFotos();
+      clearFirma();
+    }
+
+    // ── LISTAR ──
+    async function cargarIntervenciones() {
+      const params = new URLSearchParams({ area: areaActual });
+      const desde = document.getElementById('filterDesde').value;
+      const hasta = document.getElementById('filterHasta').value;
+      if (desde) params.set('desde', desde);
+      if (hasta) params.set('hasta', hasta);
+      try {
+        const res = await apiFetch(`${API}/tecnologia?${params}`);
+        tecData = await res.json();
+        if (!Array.isArray(tecData)) tecData = [];
+      } catch (e) {
+        tecData = [];
+      }
+      renderList();
+    }
+
+    function fmtFecha(f) {
+      if (!f) return '—';
+      const d = new Date(String(f).length > 10 ? f : f + 'T00:00:00');
+      if (isNaN(d)) return f;
+      return d.toLocaleDateString('es-CO', { day:'2-digit', month:'short', year:'numeric' });
+    }
+
+    function filasFiltradas() {
+      const q = document.getElementById('searchInput').value.trim().toLowerCase();
+      const busFilter = document.getElementById('filterBus').value;
+      let rows = tecData;
+      if (busFilter) rows = rows.filter(t => String(t.bus_id) === busFilter);
+      if (q) rows = rows.filter(t => {
+        const hay = [t.fecha, t.tipo, t.tecnico, t.descripcion, t.numero, t.placa]
+          .filter(Boolean).join(' ').toLowerCase();
+        return hay.includes(q);
+      });
+      return rows;
+    }
+
+    function renderList() {
+      const cont = document.getElementById('listContainer');
+      const rows = filasFiltradas();
+
+      if (rows.length === 0) {
+        cont.innerHTML = `<div class="empty">
+          <svg width="46" height="46" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          <div>${tecData.length === 0 ? 'Aún no hay intervenciones en ' + AREA_LABEL[areaActual].toLowerCase() + '.' : 'No hay resultados para tu búsqueda.'}</div>
+        </div>`;
+        return;
+      }
+
+      const body = rows.map(t => `
+        <tr>
+          <td data-label="Fecha">${fmtFecha(t.fecha)}</td>
+          <td data-label="Vehículo">${t.numero ? 'Bus '+t.numero : ''}${t.placa ? ' · '+t.placa : ''}</td>
+          <td data-label="Intervención"><span class="area-pill ${t.area}">${t.tipo||''}</span></td>
+          <td data-label="Realizada por">${t.tecnico || '—'}</td>
+          <td data-label="Evidencias">${(t.num_fotos > 0 || t.tiene_firma)
+            ? `<button class="btn-sm ver" onclick="verEvidencias(${t.id})">Ver${t.num_fotos > 0 ? ` (${t.num_fotos})` : ''}</button>`
+            : '<span class="no-comp">Sin fotos</span>'}</td>
+          <td data-label="Firma">${t.tiene_firma
+            ? `✓ ${t.firma_nombre || 'Firmada'}`
+            : '<span class="no-comp">Sin firma</span>'}</td>
+          <td class="acciones">${esPropietario ? '' : `<button class="btn-sm del" onclick="eliminarIntervencion(${t.id})">Eliminar</button>`}</td>
+        </tr>`).join('');
+
+      cont.innerHTML = `<table>
+        <thead><tr>
+          <th>Fecha</th><th>Vehículo</th><th>Intervención</th><th>Realizada por</th><th>Evidencias</th><th>Firma</th><th></th>
+        </tr></thead>
+        <tbody>${body}</tbody>
+      </table>`;
+    }
+
+    // ── VER EVIDENCIAS ──
+    async function verEvidencias(id) {
+      const t = tecData.find(x => x.id === id);
+      try {
+        const res = await apiFetch(`${API}/tecnologia/${id}/fotos`);
+        if (!res.ok) throw new Error('No se pudo cargar');
+        const data = await res.json();
+        const body = document.getElementById('modalBody');
+        const info = t ? `<div class="m-info">
+            <div><b>Vehículo:</b> ${t.numero ? 'Bus '+t.numero : ''}${t.placa ? ' · '+t.placa : ''}</div>
+            <div><b>Fecha:</b> ${fmtFecha(t.fecha)} &nbsp; <b>Área:</b> ${AREA_LABEL[t.area] || t.area}</div>
+            <div><b>Intervención:</b> ${t.tipo || '—'}</div>
+            <div><b>Realizada por:</b> ${t.tecnico || '—'}</div>
+            ${t.descripcion ? `<div><b>Descripción:</b> ${t.descripcion}</div>` : ''}
+          </div>` : '';
+        const imgs = (data.fotos || []).map((f,i) => `<img src="${f}" alt="Evidencia ${i+1}" style="max-width:100%;">`).join('');
+        const firma = data.firma_base64 ? `
+          <div style="text-align:left;margin-top:6px;">
+            <div style="font-size:.82rem;font-weight:600;color:#374151;margin-bottom:6px;">Firma de constancia${data.firma_nombre ? ` — ${data.firma_nombre}` : ''}</div>
+            <div class="firma-view"><img src="${data.firma_base64}" alt="Firma"></div>
+          </div>` : '';
+        body.innerHTML = info + (imgs || (firma ? '' : '<span class="no-comp">Sin fotos</span>')) + firma;
+        document.getElementById('modalTitle').textContent = t ? `Evidencias — ${t.tipo}` : 'Evidencias';
+        document.getElementById('modalBg').classList.add('show');
+      } catch (e) {
+        showToast('No se pudieron abrir las evidencias', true);
+      }
+    }
+    function closeModal() {
+      document.getElementById('modalBg').classList.remove('show');
+      document.getElementById('modalBody').innerHTML = '';
+    }
+    document.getElementById('modalBg').addEventListener('click', e => { if (e.target.id === 'modalBg') closeModal(); });
+
+    // ── ELIMINAR ──
+    async function eliminarIntervencion(id) {
+      if (!confirm('¿Eliminar esta intervención y sus fotos? Esta acción no se puede deshacer.')) return;
+      try {
+        const res = await apiFetch(`${API}/tecnologia/${id}`, { method:'DELETE' });
+        if (!res.ok) throw new Error('Error');
+        showToast('Intervención eliminada');
+        await cargarIntervenciones();
+      } catch (e) {
+        showToast('No se pudo eliminar', true);
+      }
+    }
+
+    // ── EXPORTAR PDF ──
+    function cargarImg(dataUrl) {
+      return new Promise(resolve => {
+        const img = new Image();
+        img.onload  = () => resolve(img);
+        img.onerror = () => resolve(null);
+        img.src = dataUrl;
+      });
+    }
+
+    async function exportarPDF() {
+      const rows = filasFiltradas();
+      if (rows.length === 0) { showToast('No hay intervenciones para exportar', true); return; }
+
+      const btn = document.getElementById('pdfBtn');
+      btn.disabled = true;
+      const btnHtml = btn.innerHTML;
+      btn.textContent = 'Generando…';
+
+      try {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        const pageW = doc.internal.pageSize.getWidth();   // ~210
+        const pageH = doc.internal.pageSize.getHeight();  // ~297
+        const margin = 14;
+        const maxY = pageH - 16;
+        let y = 18;
+
+        const busFilter = document.getElementById('filterBus');
+        const busLabel  = busFilter.value ? busFilter.options[busFilter.selectedIndex].text : 'Todos los vehículos';
+        const desde = document.getElementById('filterDesde').value;
+        const hasta = document.getElementById('filterHasta').value;
+        const rango = (desde || hasta) ? `${desde ? fmtFecha(desde) : '…'} a ${hasta ? fmtFecha(hasta) : 'hoy'}` : 'Todo el historial';
+
+        doc.setFontSize(15); doc.setFont(undefined, 'bold');
+        doc.text('Informe de Dispositivos Tecnológicos — La Milagrosa', margin, y); y += 7;
+        doc.setFontSize(10); doc.setFont(undefined, 'normal'); doc.setTextColor(100);
+        doc.text(`Área: ${AREA_LABEL[areaActual]}   ·   Vehículo: ${busLabel}   ·   Periodo: ${rango}`, margin, y); y += 5;
+        doc.text(`Generado: ${new Date().toLocaleString('es-CO')}   ·   Intervenciones: ${rows.length}`, margin, y); y += 8;
+        doc.setTextColor(0);
+
+        for (const t of rows) {
+          if (y + 30 > maxY) { doc.addPage(); y = 18; }
+
+          doc.autoTable({
+            startY: y,
+            margin: { left: margin, right: margin },
+            head: [['Fecha', 'Vehículo', 'Intervención', 'Realizada por', 'Firma']],
+            body: [[
+              fmtFecha(t.fecha),
+              `${t.numero ? 'Bus '+t.numero : ''}${t.placa ? ' · '+t.placa : ''}`,
+              t.tipo || '—',
+              t.tecnico || '—',
+              t.tiene_firma ? (t.firma_nombre || 'Firmada') : 'Sin firma',
+            ]],
+            styles: { fontSize: 9, cellPadding: 2.5 },
+            headStyles: { fillColor: [6, 182, 212] },
+            theme: 'grid',
+          });
+          y = doc.lastAutoTable.finalY + 4;
+
+          if (t.descripcion) {
+            const lines = doc.splitTextToSize(`Novedad / descripción: ${t.descripcion}`, pageW - margin * 2);
+            if (y + lines.length * 4.5 > maxY) { doc.addPage(); y = 18; }
+            doc.setFontSize(9); doc.setTextColor(60);
+            doc.text(lines, margin, y);
+            y += lines.length * 4.5 + 3;
+            doc.setTextColor(0);
+          }
+
+          if (t.num_fotos > 0 || t.tiene_firma) {
+            let fotosInt = [], firmaB64 = null, firmaNom = null;
+            try {
+              const res = await apiFetch(`${API}/tecnologia/${t.id}/fotos`);
+              if (res.ok) {
+                const d = await res.json();
+                fotosInt = d.fotos || [];
+                firmaB64 = d.firma_base64;
+                firmaNom = d.firma_nombre;
+              }
+            } catch (e) { /* sin fotos si falla */ }
+
+            const fotoW = (pageW - margin * 2 - 6) / 2;  // 2 por fila
+            let col = 0, rowH = 0;
+            for (const f of fotosInt) {
+              const img = await cargarImg(f);
+              if (!img) continue;
+              let w = fotoW;
+              let h = w * img.height / img.width;
+              if (h > 70) { h = 70; w = h * img.width / img.height; }
+              if (col === 0 && y + h > maxY) { doc.addPage(); y = 18; rowH = 0; }
+              if (col === 1 && y + h > maxY) { doc.addPage(); y = 18; col = 0; rowH = 0; }
+              const x = margin + col * (fotoW + 6);
+              try { doc.addImage(f, 'JPEG', x, y, w, h); } catch (e) { continue; }
+              rowH = Math.max(rowH, h);
+              col++;
+              if (col === 2) { y += rowH + 5; col = 0; rowH = 0; }
+            }
+            if (col > 0) y += rowH + 5;
+
+            if (firmaB64) {
+              const img = await cargarImg(firmaB64);
+              if (img) {
+                let w = 60;
+                let h = w * img.height / img.width;
+                if (h > 28) { h = 28; w = h * img.width / img.height; }
+                if (y + h + 9 > maxY) { doc.addPage(); y = 18; }
+                doc.setFontSize(9); doc.setTextColor(60);
+                doc.text(`Firma de constancia: ${firmaNom || '—'}`, margin, y);
+                y += 2;
+                try {
+                  // la firma se guarda como JPEG; registros PNG antiguos también funcionan
+                  doc.addImage(firmaB64, firmaB64.startsWith('data:image/png') ? 'PNG' : 'JPEG', margin, y, w, h);
+                  doc.setDrawColor(180);
+                  doc.rect(margin, y, w, h);
+                  y += h + 5;
+                } catch (e) { y += 5; }
+                doc.setTextColor(0);
+              }
+            }
+          }
+          y += 5;
+        }
+
+        const hoy = new Date().toISOString().slice(0,10);
+        doc.save(`tecnologia_${areaActual}_${hoy}.pdf`);
+        showToast('PDF generado');
+      } catch (e) {
+        showToast('No se pudo generar el PDF', true);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = btnHtml;
+      }
+    }
+
+    // ── TOAST ──
+    let toastT;
+    function showToast(msg, isErr) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.toggle('err', !!isErr);
+      t.classList.add('show');
+      clearTimeout(toastT);
+      toastT = setTimeout(() => t.classList.remove('show'), 2600);
+    }
+  </script>
+</body>
+</html>

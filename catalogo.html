@@ -793,8 +793,8 @@
   <div id="panel-mecanicos" class="panel hidden">
     <div class="sec-header">
       <div>
-        <div class="sec-title">Acceso Mecánicos</div>
-        <div class="sec-sub">Crea cuentas de acceso para mecánicos y gestiona sus credenciales</div>
+        <div class="sec-title">Acceso Mecánicos y Técnicos</div>
+        <div class="sec-sub">Crea cuentas de acceso para mecánicos y técnicos de dispositivos tecnológicos (cámaras y sensores)</div>
       </div>
       <button class="btn btn-primary" onclick="openModal('mecanico')">
         <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -1323,9 +1323,9 @@
   function renderMecanicos() {
     const tbody = document.getElementById('tbody-mecanicos');
     if (!tbody) return;
-    const lista = usuarios.filter(u => u.rol === 'Técnico Mant.');
+    const lista = usuarios.filter(u => ['Técnico Mant.', 'Técnico Cámaras', 'Jefe Op. Tecnológicas'].includes(u.rol));
     if (!lista.length) {
-      tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><p>No hay cuentas de mecánico registradas</p></div></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><p>No hay cuentas de mecánico o técnico registradas</p></div></td></tr>`;
       return;
     }
     tbody.innerHTML = lista.map(u => renderUserRow(u, 'mecanico', '#fef3c7', '#b45309')).join('');
@@ -1472,7 +1472,7 @@
       ruta:        id ? 'Editar Ruta'              : 'Nueva Ruta',
       usuario:     id ? 'Editar Cuenta Propietario' : 'Nueva Cuenta Propietario',
       analista:    id ? 'Editar Cuenta Analista'    : 'Nueva Cuenta Analista',
-      mecanico:    id ? 'Editar Cuenta Mecánico'    : 'Nueva Cuenta Mecánico',
+      mecanico:    id ? 'Editar Cuenta Mecánico / Técnico' : 'Nueva Cuenta Mecánico / Técnico',
       despachador: id ? 'Editar Cuenta Despachador' : 'Nueva Cuenta Despachador',
       condacceso:  id ? 'Editar Cuenta Conductor'   : 'Nueva Cuenta Conductor',
       conductor:   id ? 'Editar Conductor'          : 'Nuevo Conductor',
@@ -1651,6 +1651,15 @@
             <input type="text" id="f-iniciales" value="${d ? d.iniciales : ''}" placeholder="CN" maxlength="3" style="text-transform:uppercase" />
           </div>
         </div>
+        ${type === 'mecanico' ? `
+        <div class="field full">
+          <label>Cargo</label>
+          <select id="f-cargo">
+            <option value="Técnico Mant." ${!d || d.rol === 'Técnico Mant.' ? 'selected' : ''}>Mecánico (Técnico Mant.)</option>
+            <option value="Técnico Cámaras" ${d && d.rol === 'Técnico Cámaras' ? 'selected' : ''}>Técnico Cámaras</option>
+            <option value="Jefe Op. Tecnológicas" ${d && d.rol === 'Jefe Op. Tecnológicas' ? 'selected' : ''}>Jefe de Operaciones Tecnológicas</option>
+          </select>
+        </div>` : ''}
         ${type === 'despachador' ? `
         <div class="field full">
           <label>Puesto de trabajo (para el chequeo de llegada/salida)</label>
@@ -1781,7 +1790,11 @@
         if (!nombre || !username) { showToast('Nombre y usuario son requeridos', 'error'); return; }
         if (!modalId && !password) { showToast('La contraseña es requerida', 'error'); return; }
         const rolMap = { usuario: 'Propietario', analista: 'Analista', mecanico: 'Técnico Mant.', despachador: 'Despachador', condacceso: 'Conductor' };
-        body   = { nombre, username, iniciales, color, rol: rolMap[modalType] };
+        let rol = rolMap[modalType];
+        if (modalType === 'mecanico') {
+          rol = document.getElementById('f-cargo').value || 'Técnico Mant.';
+        }
+        body   = { nombre, username, iniciales, color, rol };
         if (password) body.password = password;
         if (modalType === 'despachador') {
           const puestoVal = document.getElementById('f-puesto').value;
