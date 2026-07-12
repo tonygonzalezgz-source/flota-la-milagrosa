@@ -107,10 +107,12 @@ SCHEMA_PATH  = os.path.join(os.path.dirname(__file__), "schema.sql")
 PG_SCHEMA    = os.path.join(os.path.dirname(__file__), "supabase_schema.sql")
 
 ROLE_VIEWS = {
-    "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho", "historial-despacho", "gastos", "chequeo"],
+    "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho", "historial-despacho", "gastos", "tecnologia", "chequeo"],
     "Analista":       ["historial"],
     "Técnico Mant.":  ["mant"],
-    "Propietario":    ["propietario", "gastos"],
+    "Técnico Cámaras":       ["tecnologia"],
+    "Jefe Op. Tecnológicas": ["tecnologia"],
+    "Propietario":    ["propietario", "gastos", "tecnologia"],
     "Operador":       ["operador"],
     "Despachador":    ["despacho", "historial-despacho", "chequeo"],
     "Conductor":      ["alistamiento"],
@@ -260,6 +262,8 @@ def migrate_db():
             "ALTER TABLE registros_movilidad ADD COLUMN IF NOT EXISTS conductor_id INTEGER REFERENCES conductores(id)",
             "ALTER TABLE buses ADD COLUMN IF NOT EXISTS km_inicial INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE alistamiento_vehicular ADD COLUMN IF NOT EXISTS novedades TEXT",
+            "ALTER TABLE intervenciones_tecnologia ADD COLUMN IF NOT EXISTS firma_base64 TEXT",
+            "ALTER TABLE intervenciones_tecnologia ADD COLUMN IF NOT EXISTS firma_nombre TEXT",
         ]:
             try:
                 db.execute(col_sql)
@@ -400,6 +404,29 @@ def migrate_db():
             )""",
             "CREATE INDEX IF NOT EXISTS idx_gastos_bus   ON gastos_mantenimiento(bus_id)",
             "CREATE INDEX IF NOT EXISTS idx_gastos_fecha ON gastos_mantenimiento(fecha)",
+            """CREATE TABLE IF NOT EXISTS intervenciones_tecnologia (
+                id           SERIAL PRIMARY KEY,
+                bus_id       INTEGER NOT NULL REFERENCES buses(id) ON DELETE CASCADE,
+                area         TEXT NOT NULL CHECK(area IN ('camaras','sensores')),
+                fecha        DATE NOT NULL,
+                tipo         TEXT NOT NULL,
+                descripcion  TEXT,
+                tecnico      TEXT NOT NULL,
+                firma_base64 TEXT,
+                firma_nombre TEXT,
+                usuario_id   INTEGER REFERENCES usuarios(id),
+                created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )""",
+            "CREATE INDEX IF NOT EXISTS idx_tec_bus   ON intervenciones_tecnologia(bus_id)",
+            "CREATE INDEX IF NOT EXISTS idx_tec_fecha ON intervenciones_tecnologia(fecha)",
+            "CREATE INDEX IF NOT EXISTS idx_tec_area  ON intervenciones_tecnologia(area)",
+            """CREATE TABLE IF NOT EXISTS intervencion_tecnologia_fotos (
+                id              SERIAL PRIMARY KEY,
+                intervencion_id INTEGER NOT NULL REFERENCES intervenciones_tecnologia(id) ON DELETE CASCADE,
+                foto_base64     TEXT NOT NULL,
+                orden           INTEGER NOT NULL DEFAULT 0
+            )""",
+            "CREATE INDEX IF NOT EXISTS idx_tec_fotos ON intervencion_tecnologia_fotos(intervencion_id)",
             """CREATE TABLE IF NOT EXISTS puestos_trabajo (
                 id          SERIAL PRIMARY KEY,
                 nombre      TEXT NOT NULL UNIQUE,
@@ -623,6 +650,33 @@ def migrate_db():
         db.execute("CREATE INDEX IF NOT EXISTS idx_gastos_bus   ON gastos_mantenimiento(bus_id)")
         db.execute("CREATE INDEX IF NOT EXISTS idx_gastos_fecha ON gastos_mantenimiento(fecha)")
         db.execute("""
+            CREATE TABLE IF NOT EXISTS intervenciones_tecnologia (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                bus_id       INTEGER NOT NULL REFERENCES buses(id) ON DELETE CASCADE,
+                area         TEXT NOT NULL CHECK(area IN ('camaras','sensores')),
+                fecha        DATE NOT NULL,
+                tipo         TEXT NOT NULL,
+                descripcion  TEXT,
+                tecnico      TEXT NOT NULL,
+                firma_base64 TEXT,
+                firma_nombre TEXT,
+                usuario_id   INTEGER REFERENCES usuarios(id),
+                created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        db.execute("CREATE INDEX IF NOT EXISTS idx_tec_bus   ON intervenciones_tecnologia(bus_id)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_tec_fecha ON intervenciones_tecnologia(fecha)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_tec_area  ON intervenciones_tecnologia(area)")
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS intervencion_tecnologia_fotos (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                intervencion_id INTEGER NOT NULL REFERENCES intervenciones_tecnologia(id) ON DELETE CASCADE,
+                foto_base64     TEXT NOT NULL,
+                orden           INTEGER NOT NULL DEFAULT 0
+            )
+        """)
+        db.execute("CREATE INDEX IF NOT EXISTS idx_tec_fotos ON intervencion_tecnologia_fotos(intervencion_id)")
+        db.execute("""
             CREATE TABLE IF NOT EXISTS puestos_trabajo (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 nombre      TEXT NOT NULL UNIQUE,
@@ -659,6 +713,8 @@ def migrate_db():
             "ALTER TABLE buses ADD COLUMN km_inicial INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE alistamiento_vehicular ADD COLUMN novedades TEXT",
             "ALTER TABLE usuarios ADD COLUMN puesto_id INTEGER REFERENCES puestos_trabajo(id)",
+            "ALTER TABLE intervenciones_tecnologia ADD COLUMN firma_base64 TEXT",
+            "ALTER TABLE intervenciones_tecnologia ADD COLUMN firma_nombre TEXT",
         ]:
             try:
                 db.execute(col_sql)
@@ -2559,6 +2615,154 @@ def delete_gasto(gasto_id):
 
 
 # ──────────────────────────────────────────
+#  Dispositivos Tecnológicos (cámaras / sensores)
+# ──────────────────────────────────────────
+
+ROLES_TECNOLOGIA = ("Administrador", "Técnico Cámaras", "Jefe Op. Tecnológicas")
+TECNOLOGIA_AREAS = ("camaras", "sensores")
+TECNOLOGIA_MAX_FOTOS = 5
+
+
+@app.route("/api/tecnologia", methods=["POST"])
+@require_role(*ROLES_TECNOLOGIA)
+def create_intervencion_tecnologia():
+    data        = request.get_json(force=True)
+    bus_id      = data.get("bus_id")
+    area        = (data.get("area") or "").strip().lower()
+    fecha       = data.get("fecha")
+    tipo        = (data.get("tipo") or "").strip()
+    descripcion = (data.get("descripcion") or "").strip()
+    tecnico     = (data.get("tecnico") or "").strip()
+    firma_b64   = data.get("firma_base64")
+    firma_nom   = (data.get("firma_nombre") or "").strip()
+    fotos       = data.get("fotos") or []
+
+    if not bus_id or not fecha or not tipo or not tecnico:
+        return jsonify({"error": "Faltan campos requeridos (vehículo, fecha, tipo de intervención, técnico)."}), 400
+    if area not in TECNOLOGIA_AREAS:
+        return jsonify({"error": "Área inválida (debe ser 'camaras' o 'sensores')."}), 400
+    if not isinstance(fotos, list) or len(fotos) > TECNOLOGIA_MAX_FOTOS:
+        return jsonify({"error": f"Máximo {TECNOLOGIA_MAX_FOTOS} fotos por intervención."}), 400
+
+    db = get_db()
+    bus = db.execute("SELECT id FROM buses WHERE id = ?", (bus_id,)).fetchone()
+    if not bus:
+        db.close()
+        return jsonify({"error": "Vehículo no encontrado."}), 404
+
+    cursor = db.execute(
+        """INSERT INTO intervenciones_tecnologia
+               (bus_id, area, fecha, tipo, descripcion, tecnico,
+                firma_base64, firma_nombre, usuario_id)
+           VALUES (?,?,?,?,?,?,?,?,?)""",
+        (bus_id, area, fecha, tipo, descripcion or None, tecnico,
+         firma_b64 or None, firma_nom or None,
+         getattr(request, "jwt_user_id", None)),
+    )
+    new_id = cursor.lastrowid
+    for i, foto in enumerate(fotos):
+        if not foto:
+            continue
+        db.execute(
+            "INSERT INTO intervencion_tecnologia_fotos (intervencion_id, foto_base64, orden) VALUES (?,?,?)",
+            (new_id, foto, i),
+        )
+    db.commit()
+    db.close()
+    return jsonify({"ok": True, "id": new_id}), 201
+
+
+@app.route("/api/tecnologia", methods=["GET"])
+@require_auth
+def get_intervenciones_tecnologia():
+    """Lista metadata (SIN base64 de fotos) filtrada por dueño si es Propietario."""
+    bus_id = request.args.get("bus_id", type=int)
+    area   = request.args.get("area")
+    desde  = request.args.get("desde")
+    hasta  = request.args.get("hasta")
+
+    db = get_db()
+    is_prop, bus_ids = _bus_ids_for_user(db, getattr(request, "jwt_user_id", None))
+
+    where  = []
+    params = []
+    if is_prop:
+        if not bus_ids:
+            db.close(); return jsonify([])
+        where.append("t.bus_id IN (%s)" % ",".join("?" * len(bus_ids)))
+        params.extend(bus_ids)
+    if bus_id:
+        where.append("t.bus_id = ?"); params.append(bus_id)
+    if area in TECNOLOGIA_AREAS:
+        where.append("t.area = ?"); params.append(area)
+    if desde:
+        where.append("t.fecha >= ?"); params.append(desde)
+    if hasta:
+        where.append("t.fecha <= ?"); params.append(hasta)
+
+    where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+    rows = db.execute(
+        f"""SELECT t.id, t.bus_id, t.area, t.fecha, t.tipo, t.descripcion,
+                   t.tecnico, t.firma_nombre, t.created_at, b.numero, b.placa,
+                   CASE WHEN t.firma_base64 IS NOT NULL THEN 1 ELSE 0 END AS tiene_firma,
+                   (SELECT COUNT(*) FROM intervencion_tecnologia_fotos f
+                     WHERE f.intervencion_id = t.id) AS num_fotos
+            FROM intervenciones_tecnologia t
+            JOIN buses b ON b.id = t.bus_id
+            {where_sql}
+            ORDER BY t.fecha DESC, t.id DESC""",
+        params,
+    ).fetchall()
+    db.close()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/tecnologia/<int:int_id>/fotos", methods=["GET"])
+@require_auth
+def get_intervencion_tecnologia_fotos(int_id):
+    db = get_db()
+    row = db.execute(
+        "SELECT bus_id, firma_base64, firma_nombre "
+        "FROM intervenciones_tecnologia WHERE id = ?", (int_id,)
+    ).fetchone()
+    if not row:
+        db.close(); return jsonify({"error": "No encontrado"}), 404
+
+    is_prop, bus_ids = _bus_ids_for_user(db, getattr(request, "jwt_user_id", None))
+    if is_prop and row["bus_id"] not in bus_ids:
+        db.close(); return jsonify({"error": "No autorizado"}), 403
+
+    fotos = db.execute(
+        "SELECT foto_base64 FROM intervencion_tecnologia_fotos "
+        "WHERE intervencion_id = ? ORDER BY orden, id",
+        (int_id,),
+    ).fetchall()
+    db.close()
+    return jsonify({
+        "fotos": [f["foto_base64"] for f in fotos],
+        "firma_base64": row["firma_base64"],
+        "firma_nombre": row["firma_nombre"],
+    })
+
+
+@app.route("/api/tecnologia/<int:int_id>", methods=["DELETE"])
+@require_role(*ROLES_TECNOLOGIA)
+def delete_intervencion_tecnologia(int_id):
+    db = get_db()
+    row = db.execute(
+        "SELECT id FROM intervenciones_tecnologia WHERE id = ?", (int_id,)
+    ).fetchone()
+    if not row:
+        db.close(); return jsonify({"error": "No encontrado"}), 404
+
+    # SQLite con FK ON + Postgres: el CASCADE borra las fotos
+    db.execute("DELETE FROM intervenciones_tecnologia WHERE id = ?", (int_id,))
+    db.commit()
+    db.close()
+    return jsonify({"ok": True})
+
+
+# ──────────────────────────────────────────
 #  Admin — Gestión de usuarios
 # ──────────────────────────────────────────
 
@@ -2619,7 +2823,7 @@ def admin_update_usuario(uid):
         db.close()
         return jsonify({"error": "Usuario no encontrado"}), 404
 
-    allowed = ["nombre", "username", "iniciales", "color", "activo", "puesto_id"]
+    allowed = ["nombre", "username", "iniciales", "color", "activo", "puesto_id", "rol"]
     updates, values = [], []
     for f in allowed:
         if f in data:

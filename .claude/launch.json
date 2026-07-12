@@ -10,7 +10,7 @@
     {
       "name": "flota-api",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["api/app.py"],
+      "runtimeArgs": ["api/dev_server.py"],
       "port": 8001
     }
   ]
