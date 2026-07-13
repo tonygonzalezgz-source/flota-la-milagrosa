@@ -182,6 +182,9 @@ if DATABASE_URL:
         def commit(self):
             self._conn.commit()
 
+        def rollback(self):
+            self._conn.rollback()
+
         def close(self):
             self._conn.close()
 
@@ -265,10 +268,14 @@ def migrate_db():
             "ALTER TABLE intervenciones_tecnologia ADD COLUMN IF NOT EXISTS firma_base64 TEXT",
             "ALTER TABLE intervenciones_tecnologia ADD COLUMN IF NOT EXISTS firma_nombre TEXT",
         ]:
+            # Commit/rollback por sentencia: en Postgres un fallo (p.ej. ALTER
+            # sobre una tabla que aún no existe) aborta la transacción y haría
+            # fallar en silencio TODO lo que sigue, incluidos los CREATE TABLE.
             try:
                 db.execute(col_sql)
+                db.commit()
             except Exception:
-                pass
+                db.rollback()
         # La tabla de alistamiento cambió de columnas (versión vieja inventada
         # → preguntas exactas del formulario). Si existe el esquema viejo, se
         # recrea desde cero para alinearlo con la nueva definición.
@@ -279,8 +286,9 @@ def migrate_db():
             ).fetchone()
             if row:
                 db.execute("DROP TABLE IF EXISTS alistamiento_vehicular")
+            db.commit()
         except Exception:
-            pass
+            db.rollback()
         # Tablas del módulo de mantenimiento preventivo
         for tbl_sql in [
             """CREATE TABLE IF NOT EXISTS catalogo_mantenimiento (
@@ -458,8 +466,9 @@ def migrate_db():
         ]:
             try:
                 db.execute(tbl_sql)
+                db.commit()
             except Exception:
-                pass
+                db.rollback()
     else:
         # SQLite: CREATE TABLE + ALTER TABLE con try/except
         db.execute("""
