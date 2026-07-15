@@ -2853,8 +2853,34 @@ def admin_update_usuario(uid):
 @app.route("/api/admin/usuarios/<int:uid>", methods=["DELETE"])
 @require_role("Administrador")
 def admin_delete_usuario(uid):
+    """Por defecto desactiva la cuenta (soft delete). Con ?hard=1 la elimina
+    definitivamente, liberando el username (cédula) para poder crearla de nuevo
+    con otro rol/puesto. El historial se conserva desvinculado (queda sin nombre)."""
+    hard = request.args.get("hard") == "1"
     db = get_db()
-    db.execute("UPDATE usuarios SET activo = 0 WHERE id = ?", (uid,))
+    if not hard:
+        db.execute("UPDATE usuarios SET activo = 0 WHERE id = ?", (uid,))
+        db.commit()
+        db.close()
+        return jsonify({"ok": True})
+
+    if uid == request.jwt_user_id:
+        db.close()
+        return jsonify({"error": "No puedes eliminar tu propia cuenta."}), 400
+
+    # Desvincular historial (LEFT JOIN en las consultas → el registro se conserva)
+    db.execute("UPDATE registros_mantenimiento SET usuario_id = NULL WHERE usuario_id = ?", (uid,))
+    db.execute("UPDATE registros_pasajeros SET usuario_id = NULL WHERE usuario_id = ?", (uid,))
+    db.execute("UPDATE registros_movilidad SET usuario_id = NULL WHERE usuario_id = ?", (uid,))
+    db.execute("UPDATE gastos_mantenimiento SET usuario_id = NULL WHERE usuario_id = ?", (uid,))
+    db.execute("UPDATE intervenciones_tecnologia SET usuario_id = NULL WHERE usuario_id = ?", (uid,))
+    db.execute("UPDATE despacho_diario SET despachador_id = NULL WHERE despachador_id = ?", (uid,))
+    db.execute("UPDATE alistamiento_vehicular SET despachador_id = NULL WHERE despachador_id = ?", (uid,))
+    # Asignaciones y chequeos propios de la cuenta sí se eliminan
+    db.execute("DELETE FROM usuario_buses WHERE usuario_id = ?", (uid,))
+    db.execute("DELETE FROM despachador_rutas WHERE usuario_id = ?", (uid,))
+    db.execute("DELETE FROM chequeos_despachador WHERE usuario_id = ?", (uid,))
+    db.execute("DELETE FROM usuarios WHERE id = ?", (uid,))
     db.commit()
     db.close()
     return jsonify({"ok": True})
