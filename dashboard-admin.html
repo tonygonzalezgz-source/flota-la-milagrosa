@@ -629,7 +629,7 @@
         <div class="user-avatar" id="navAvatar">AD</div>
         <div class="user-info">
           <div class="uname" id="navName">Administrador</div>
-          <div class="urole">Administrador</div>
+          <div class="urole" id="navRole">Administrador</div>
         </div>
         <svg width="12" height="12" fill="none" stroke="#777" stroke-width="2" viewBox="0 0 24 24" style="margin-left:2px">
           <path d="m6 9 6 6 6-6"/>
@@ -933,6 +933,13 @@
         av.style.background =
           `linear-gradient(135deg,${currentUser.color||'#6366f1'},${currentUser.color||'#8b5cf6'})`;
         document.getElementById('navName').textContent = currentUser.nombre || 'Administrador';
+        document.getElementById('navRole').textContent = currentUser.rol || 'Administrador';
+        if (currentUser.rol !== 'Administrador') {
+          ['navHistorial', 'navMant', 'navCatalogo', 'navUsuarios'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = 'none';
+          });
+        }
         const nombre = (currentUser.nombre || '').split(' ')[0];
         document.getElementById('greetingSmall').textContent = `Hola ${nombre},`;
       }
