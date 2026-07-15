@@ -886,6 +886,14 @@
         </button>
       </div>
     </div>
+    <div style="margin:0 0 12px 0;position:relative;max-width:420px">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--txt3);pointer-events:none"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input id="buscarConductor" type="search" placeholder="Buscar por nombre o cédula…" autocomplete="off"
+             oninput="renderConductores()"
+             style="width:100%;padding:9px 12px 9px 36px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--white);color:var(--txt1);outline:none"
+             onfocus="this.style.borderColor='var(--primary)'" onblur="this.style.borderColor='var(--border)'">
+      <span id="buscarConductorCount" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--txt3);pointer-events:none"></span>
+    </div>
     <div class="table-wrap">
       <table>
         <thead>
@@ -1178,11 +1186,25 @@
   function renderConductores() {
     const tbody = document.getElementById('tbody-conductores');
     if (!tbody) return;
+    const input = document.getElementById('buscarConductor');
+    const q = (input ? input.value : '').trim().toLowerCase();
+    const lista = q
+      ? conductores.filter(c =>
+          (c.nombre   || '').toLowerCase().includes(q) ||
+          (c.cedula   || '').toLowerCase().includes(q) ||
+          (c.telefono || '').toLowerCase().includes(q))
+      : conductores;
+    const contador = document.getElementById('buscarConductorCount');
+    if (contador) contador.textContent = q ? `${lista.length} de ${conductores.length}` : '';
     if (!conductores.length) {
       tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><p>No hay conductores registrados</p></div></td></tr>`;
       return;
     }
-    tbody.innerHTML = conductores.map(c => `<tr>
+    if (!lista.length) {
+      tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><p>Sin resultados para "${q}"</p></div></td></tr>`;
+      return;
+    }
+    tbody.innerHTML = lista.map(c => `<tr>
       <td><strong>${c.nombre}</strong></td>
       <td>${c.cedula || '<span style="color:var(--txt3)">—</span>'}</td>
       <td>${c.telefono || '<span style="color:var(--txt3)">—</span>'}</td>
