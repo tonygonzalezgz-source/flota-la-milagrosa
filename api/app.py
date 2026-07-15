@@ -2499,7 +2499,7 @@ GASTO_CATEGORIAS = [
 
 
 @app.route("/api/gastos", methods=["POST"])
-@require_auth
+@require_role("Administrador", "Propietario")
 def create_gasto():
     data       = request.get_json(force=True)
     bus_id     = data.get("bus_id")
@@ -2508,7 +2508,7 @@ def create_gasto():
     descripcion = (data.get("descripcion") or "").strip()
     taller     = (data.get("taller") or "").strip()
     monto      = data.get("monto")
-    usuario_id = data.get("usuario_id")
+    usuario_id = request.jwt_user_id
     comp_b64   = data.get("comprobante_base64")
     comp_mime  = data.get("comprobante_mime")
     comp_nombre = data.get("comprobante_nombre")
@@ -2540,7 +2540,7 @@ def create_gasto():
 @require_auth
 def get_gastos():
     """Lista metadata (SIN el base64) filtrada por dueño."""
-    user_id   = request.args.get("user_id", type=int)
+    user_id   = request.jwt_user_id
     bus_id    = request.args.get("bus_id", type=int)
     categoria = request.args.get("categoria")
     desde     = request.args.get("desde")
@@ -2584,7 +2584,7 @@ def get_gastos():
 @app.route("/api/gastos/<int:gasto_id>/comprobante", methods=["GET"])
 @require_auth
 def get_gasto_comprobante(gasto_id):
-    user_id = request.args.get("user_id", type=int)
+    user_id = request.jwt_user_id
     db = get_db()
     row = db.execute(
         "SELECT bus_id, comprobante_base64, comprobante_mime, comprobante_nombre "
@@ -2607,9 +2607,9 @@ def get_gasto_comprobante(gasto_id):
 
 
 @app.route("/api/gastos/<int:gasto_id>", methods=["DELETE"])
-@require_auth
+@require_role("Administrador", "Propietario")
 def delete_gasto(gasto_id):
-    user_id = request.args.get("user_id", type=int)
+    user_id = request.jwt_user_id
     db = get_db()
     row = db.execute(
         "SELECT bus_id FROM gastos_mantenimiento WHERE id = ?", (gasto_id,)
