@@ -115,8 +115,12 @@ ROLE_VIEWS = {
     "Propietario":    ["propietario", "gastos", "tecnologia"],
     "Operador":       ["operador"],
     "Despachador":    ["despacho", "historial-despacho", "chequeo"],
+    "Jefe de Ruta":   ["dashboard", "despacho", "historial-despacho", "chequeo", "alistamiento"],
     "Conductor":      ["alistamiento"],
 }
+
+# Roles que pueden operar el módulo de chequeo (llegada/salida en puestos)
+ROLES_CHEQUEO = ("Despachador", "Administrador", "Jefe de Ruta")
 
 
 # ══════════════════════════════════════════
@@ -1440,7 +1444,7 @@ def _chequeo_de(db, uid, fecha):
 
 
 @app.route("/api/chequeo/hoy", methods=["GET"])
-@require_role("Despachador", "Administrador")
+@require_role(*ROLES_CHEQUEO)
 def get_chequeo_hoy():
     uid   = request.jwt_user_id
     fecha = hoy_bogota()
@@ -1460,7 +1464,7 @@ def get_chequeo_hoy():
 
 
 @app.route("/api/chequeo/llegada", methods=["POST"])
-@require_role("Despachador", "Administrador")
+@require_role(*ROLES_CHEQUEO)
 def chequeo_llegada():
     data = request.get_json(force=True)
     gps  = _validar_gps(data)
@@ -1513,7 +1517,7 @@ def chequeo_llegada():
 
 
 @app.route("/api/chequeo/salida", methods=["POST"])
-@require_role("Despachador", "Administrador")
+@require_role(*ROLES_CHEQUEO)
 def chequeo_salida():
     gps = _validar_gps(request.get_json(force=True))
     if not gps:
@@ -1551,7 +1555,7 @@ def chequeo_salida():
 
 
 @app.route("/api/chequeo/historial", methods=["GET"])
-@require_role("Despachador", "Administrador")
+@require_role(*ROLES_CHEQUEO)
 def chequeo_historial():
     uid = request.jwt_user_id
     rol = request.jwt_user_rol
