@@ -1560,7 +1560,7 @@ def chequeo_historial():
     uid = request.jwt_user_id
     rol = request.jwt_user_rol
 
-    if rol == "Administrador":
+    if rol in ("Administrador", "Jefe de Ruta"):
         desde = request.args.get("desde") or hoy_bogota()
         hasta = request.args.get("hasta") or hoy_bogota()
         filtro_usuario, params_extra = "", []

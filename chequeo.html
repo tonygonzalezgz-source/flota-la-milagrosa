@@ -307,7 +307,8 @@
   // Fecha de hoy en Colombia (el día cambia a la medianoche local, no por UTC).
   const HOY = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date());
   const CU  = JSON.parse(localStorage.getItem('currentUser') || 'null');
-  const ES_ADMIN = CU && CU.rol === 'Administrador';
+  // Administrador y Jefe de Ruta ven la vista de supervisión (todos los despachadores)
+  const ES_ADMIN = CU && (CU.rol === 'Administrador' || CU.rol === 'Jefe de Ruta');
 
   let chequeoHoy = null;      // chequeo del día del despachador (o null)
   let puestosActivos = [];    // puestos disponibles para elegir al marcar llegada
