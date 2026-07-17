@@ -14,9 +14,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>La Milagrosa — Reporte de Alistamientos</title>
 
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+  <!-- xlsx y jsPDF se cargan bajo demanda al exportar; ver cargarLibreria() -->
 
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -592,8 +590,28 @@
     return rows;
   }
 
-  function exportarExcel() {
+  /* Librerías pesadas (xlsx/jsPDF) bajo demanda: no bloquean la carga de la vista */
+  const _libsCargadas = {};
+  function cargarLibreria(src) {
+    if (!_libsCargadas[src]) {
+      _libsCargadas[src] = new Promise((ok, fail) => {
+        const s = document.createElement('script');
+        s.src = src;
+        s.onload  = ok;
+        s.onerror = () => { delete _libsCargadas[src]; fail(new Error('No se pudo descargar la librería. Revisa tu conexión.')); };
+        document.head.appendChild(s);
+      });
+    }
+    return _libsCargadas[src];
+  }
+  const LIB_XLSX      = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+  const LIB_JSPDF     = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+  const LIB_AUTOTABLE = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js';
+
+  async function exportarExcel() {
     if (!buses.length) { showToast('No hay datos para exportar', 'error'); return; }
+    try { await cargarLibreria(LIB_XLSX); }
+    catch (e) { showToast(e.message, 'error'); return; }
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filasResumen()), 'Resumen');
     const det = filasDetalle();
@@ -601,8 +619,12 @@
     XLSX.writeFile(wb, `alistamiento_${fechaSel()}.xlsx`);
   }
 
-  function exportarPDF() {
+  async function exportarPDF() {
     if (!buses.length) { showToast('No hay datos para exportar', 'error'); return; }
+    try {
+      await cargarLibreria(LIB_JSPDF);
+      await cargarLibreria(LIB_AUTOTABLE);  // plugin: requiere jsPDF ya cargado
+    } catch (e) { showToast(e.message, 'error'); return; }
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
     doc.setFontSize(15); doc.text('Reporte de Alistamientos — La Milagrosa', 14, 16);

@@ -614,7 +614,7 @@
       .btn { font-size: 13px; }
     }
   </style>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- xlsx se carga bajo demanda al importar conductores; ver cargarLibreria() -->
 </head>
 <body>
 
@@ -1064,6 +1064,10 @@
 
   /* ─── INIT ─── */
   document.addEventListener('DOMContentLoaded', loadAll);
+  // El shell mantiene el iframe vivo entre navegaciones y avisa al volver
+  window.addEventListener('message', e => {
+    if (e.data?.type === 'VIEW_SHOWN') loadAll();
+  });
 
   async function loadAll() {
     try {
@@ -1253,6 +1257,22 @@
     showToast(errores === 0 ? `${ok} conductores eliminados` : `${ok} eliminados, ${errores} con error`);
   }
 
+  /* Librerías pesadas (xlsx) bajo demanda: no bloquean la carga de la vista */
+  const _libsCargadas = {};
+  function cargarLibreria(src) {
+    if (!_libsCargadas[src]) {
+      _libsCargadas[src] = new Promise((ok, fail) => {
+        const s = document.createElement('script');
+        s.src = src;
+        s.onload  = ok;
+        s.onerror = () => { delete _libsCargadas[src]; fail(new Error('No se pudo descargar la librería. Revisa tu conexión.')); };
+        document.head.appendChild(s);
+      });
+    }
+    return _libsCargadas[src];
+  }
+  const LIB_XLSX = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+
   /* ─── IMPORTAR CONDUCTORES DESDE CSV ─── */
   async function importarConductoresCSV(input) {
     const file = input.files[0];
@@ -1263,7 +1283,9 @@
     const esExcel = /\.xlsx?$/i.test(file.name);
 
     if (esExcel) {
-      // Leer con SheetJS
+      // Leer con SheetJS (se descarga bajo demanda la primera vez)
+      try { await cargarLibreria(LIB_XLSX); }
+      catch (err) { showToast(err.message, 'error'); return; }
       const buf = await file.arrayBuffer();
       const wb  = XLSX.read(buf, { type: 'array' });
       const ws  = wb.Sheets[wb.SheetNames[0]];

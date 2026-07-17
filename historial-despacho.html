@@ -554,6 +554,11 @@
   }
 
   // ── Cargar datos ──
+  // El shell mantiene el iframe vivo entre navegaciones y avisa al volver
+  window.addEventListener('message', e => {
+    if (e.data?.type === 'VIEW_SHOWN') cargar();
+  });
+
   async function cargar() {
     const area  = document.getElementById('tableArea');
     const desde = inputDesde.value;

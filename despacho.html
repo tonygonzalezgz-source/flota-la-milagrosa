@@ -383,6 +383,10 @@
   let buses    = [];        // {id, numero, placa, modelo, grupo, estado, conductor_id, ruta_id, cerrado}
 
   document.addEventListener('DOMContentLoaded', loadAll);
+  // El shell mantiene el iframe vivo entre navegaciones y avisa al volver
+  window.addEventListener('message', e => {
+    if (e.data?.type === 'VIEW_SHOWN' || e.data?.type === 'CATALOG_UPDATED') loadAll();
+  });
 
   async function apiFetch(path, opts = {}) {
     const token = localStorage.getItem('authToken');

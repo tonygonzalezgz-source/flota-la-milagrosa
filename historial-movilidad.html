@@ -25,8 +25,7 @@
     })();
   </script>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+  <!-- xlsx y exceljs (~1.7 MB) se cargan bajo demanda al importar/exportar; ver cargarLibreria() -->
   <style>
     *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
     html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
@@ -827,6 +826,23 @@
   });
 
   /* ── HELPERS ── */
+  /* Librerías pesadas (xlsx/exceljs) bajo demanda: no bloquean la carga de la vista */
+  const _libsCargadas = {};
+  function cargarLibreria(src) {
+    if (!_libsCargadas[src]) {
+      _libsCargadas[src] = new Promise((ok, fail) => {
+        const s = document.createElement('script');
+        s.src = src;
+        s.onload  = ok;
+        s.onerror = () => { delete _libsCargadas[src]; fail(new Error('No se pudo descargar la librería. Revisa tu conexión.')); };
+        document.head.appendChild(s);
+      });
+    }
+    return _libsCargadas[src];
+  }
+  const LIB_XLSX    = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+  const LIB_EXCELJS = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
+
   /* Fecha calendario en Colombia (no UTC: toISOString corre el día después de las 7pm) */
   function isoDate(d) { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(d); }
   function hoyBogota() { return isoDate(new Date()); }
@@ -1143,6 +1159,8 @@
 
   window.addEventListener('message', e => {
     if (e.data?.type === 'REFRESH_ROUTES') { loadRutas().then(() => renderTable()); }
+    // El shell mantiene el iframe vivo entre navegaciones y avisa al volver
+    if (e.data?.type === 'VIEW_SHOWN') loadFecha();
   });
 
   /* ── LIMPIAR DATOS DE LA FECHA ── */
@@ -1201,6 +1219,7 @@
     const reader = new FileReader();
     reader.onload = async function(evt) {
       try {
+        await cargarLibreria(LIB_XLSX);
         const wb   = XLSX.read(evt.target.result, { type: 'array', cellDates: true });
         const ws   = wb.Sheets[wb.SheetNames[0]];
         const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
@@ -1622,6 +1641,7 @@
 
   async function exportReporte() {
     if (!_reportRows.length) return;
+    await cargarLibreria(LIB_EXCELJS);
     const desde = document.getElementById('repDesde').value;
     const hasta = document.getElementById('repHasta').value;
     const selBus  = document.getElementById('repBus');
