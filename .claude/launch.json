@@ -4,7 +4,7 @@
     {
       "name": "flota-milagrosa",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["server.py"],
+      "runtimeArgs": ["-m", "http.server", "3030"],
       "port": 3030
     },
     {

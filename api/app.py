@@ -106,6 +106,11 @@ DB_PATH      = os.path.join(os.path.dirname(__file__), "flota.db")
 SCHEMA_PATH  = os.path.join(os.path.dirname(__file__), "schema.sql")
 PG_SCHEMA    = os.path.join(os.path.dirname(__file__), "supabase_schema.sql")
 
+# Versión del esquema. IMPORTANTE: incrementar en 1 cada vez que se agregue
+# una migración (ALTER/CREATE) a migrate_db(); si no se incrementa, la
+# migración nueva NO corre en las BD ya versionadas.
+SCHEMA_VERSION = 1
+
 ROLE_VIEWS = {
     "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho", "historial-despacho", "gastos", "tecnologia", "chequeo"],
     "Analista":       ["historial"],
@@ -113,7 +118,6 @@ ROLE_VIEWS = {
     "Técnico Cámaras":       ["tecnologia"],
     "Jefe Op. Tecnológicas": ["tecnologia"],
     "Propietario":    ["propietario", "gastos", "tecnologia"],
-    "Operador":       ["operador"],
     "Despachador":    ["despacho", "historial-despacho", "chequeo"],
     "Jefe de Ruta":   ["dashboard", "despacho", "historial-despacho", "chequeo", "alistamiento"],
     "Conductor":      ["alistamiento"],
@@ -224,8 +228,44 @@ else:
         return conn
 
 
+def _schema_version_guardada(db):
+    """Versión de esquema registrada en la BD; 0 si la tabla no existe aún."""
+    try:
+        row = db.execute("SELECT version FROM schema_version WHERE id = 1").fetchone()
+        return row["version"] if row else 0
+    except Exception:
+        try:
+            db.rollback()  # en Postgres el SELECT fallido aborta la transacción
+        except Exception:
+            pass
+        return 0
+
+
 def init_db():
-    """Crea las tablas si no existen y ejecuta migraciones."""
+    """Crea las tablas si no existen y ejecuta migraciones.
+
+    En Vercel esto corre en cada cold start del serverless: si la BD ya está
+    en SCHEMA_VERSION retorna tras UNA sola consulta, en lugar de repetir las
+    ~70 sentencias de esquema/migración contra Supabase cada vez."""
+    if not DATABASE_URL and not os.path.exists(DB_PATH):
+        # ── Modo SQLite local: crear la BD por primera vez ──
+        with open(SCHEMA_PATH, "r", encoding="utf-8") as f:
+            sql = f.read()
+        import sqlite3 as _sq3
+        conn = _sq3.connect(DB_PATH)
+        conn.executescript(sql)
+        conn.commit()
+        conn.close()
+        print("[DB] Base de datos SQLite creada:", DB_PATH)
+        migrate_db()
+        return
+
+    db = get_db()
+    al_dia = _schema_version_guardada(db) == SCHEMA_VERSION
+    db.close()
+    if al_dia:
+        return
+
     if DATABASE_URL:
         # ── Modo PostgreSQL: ejecuta el esquema en Supabase con autocommit ──
         print("[DB] Conectando a Supabase PostgreSQL…")
@@ -243,17 +283,6 @@ def init_db():
                     pass   # IF NOT EXISTS cubre la mayoría; ignorar duplicados
         raw.close()
         print("[DB] Esquema Supabase listo.")
-    else:
-        # ── Modo SQLite local ──
-        if not os.path.exists(DB_PATH):
-            with open(SCHEMA_PATH, "r", encoding="utf-8") as f:
-                sql = f.read()
-            import sqlite3 as _sq3
-            conn = _sq3.connect(DB_PATH)
-            conn.executescript(sql)
-            conn.commit()
-            conn.close()
-            print("[DB] Base de datos SQLite creada:", DB_PATH)
     migrate_db()
 
 
@@ -465,6 +494,7 @@ def migrate_db():
                 UNIQUE(usuario_id, fecha)
             )""",
             "CREATE INDEX IF NOT EXISTS idx_chequeos_fecha ON chequeos_despachador(fecha)",
+            "CREATE INDEX IF NOT EXISTS idx_mant_hist_bus_item ON bus_mantenimiento_historial(bus_id, item_id, fecha_realizado DESC)",
             # Va después de crear puestos_trabajo (la referencia debe existir)
             "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS puesto_id INTEGER REFERENCES puestos_trabajo(id)",
         ]:
@@ -719,6 +749,7 @@ def migrate_db():
             )
         """)
         db.execute("CREATE INDEX IF NOT EXISTS idx_chequeos_fecha ON chequeos_despachador(fecha)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_mant_hist_bus_item ON bus_mantenimiento_historial(bus_id, item_id, fecha_realizado DESC)")
         for col_sql in [
             "ALTER TABLE buses ADD COLUMN propietario_id INTEGER REFERENCES propietarios(id)",
             "ALTER TABLE registros_movilidad ADD COLUMN ruta_id INTEGER REFERENCES rutas(id)",
@@ -800,6 +831,17 @@ def migrate_db():
                 db.execute("UPDATE buses SET placa = ? WHERE numero = ?", (placa_real, numero))
     except Exception as e:
         print(f"[migrate_db] sync placas: {e}")
+
+    # Registrar la versión migrada: mientras coincida con SCHEMA_VERSION,
+    # los próximos init_db() retornan con una sola consulta.
+    db.execute(
+        "CREATE TABLE IF NOT EXISTS schema_version (id INTEGER PRIMARY KEY, version INTEGER NOT NULL)"
+    )
+    db.execute(
+        "INSERT INTO schema_version (id, version) VALUES (1, ?) "
+        "ON CONFLICT(id) DO UPDATE SET version = excluded.version",
+        (SCHEMA_VERSION,),
+    )
 
     db.commit()
     db.close()
@@ -1054,66 +1096,6 @@ def get_propietarios():
     ).fetchall()
     db.close()
     return jsonify([dict(r) for r in rows])
-
-
-@app.route("/api/propietarios", methods=["POST"])
-@require_role("Administrador")
-def create_propietario():
-    data = request.get_json(force=True)
-    nombre = (data.get("nombre") or "").strip()
-    if not nombre:
-        return jsonify({"error": "El nombre es requerido"}), 400
-
-    db = get_db()
-    cursor = db.execute(
-        "INSERT INTO propietarios (nombre, cedula, telefono, email) VALUES (?,?,?,?)",
-        (nombre, data.get("cedula", ""), data.get("telefono", ""), data.get("email", "")),
-    )
-    db.commit()
-    new_id = cursor.lastrowid
-    db.close()
-    return jsonify({"ok": True, "id": new_id}), 201
-
-
-@app.route("/api/propietarios/<int:prop_id>", methods=["PUT"])
-@require_role("Administrador")
-def update_propietario(prop_id):
-    data = request.get_json(force=True)
-    db   = get_db()
-    row  = db.execute("SELECT id FROM propietarios WHERE id = ?", (prop_id,)).fetchone()
-    if not row:
-        db.close()
-        return jsonify({"error": "Propietario no encontrado"}), 404
-
-    db.execute(
-        "UPDATE propietarios SET nombre=?, cedula=?, telefono=?, email=? WHERE id=?",
-        (data.get("nombre", ""), data.get("cedula", ""), data.get("telefono", ""), data.get("email", ""), prop_id),
-    )
-    db.commit()
-    db.close()
-    return jsonify({"ok": True})
-
-
-@app.route("/api/propietarios/<int:prop_id>", methods=["DELETE"])
-@require_role("Administrador")
-def delete_propietario(prop_id):
-    db  = get_db()
-    row = db.execute("SELECT id FROM propietarios WHERE id = ?", (prop_id,)).fetchone()
-    if not row:
-        db.close()
-        return jsonify({"error": "Propietario no encontrado"}), 404
-
-    assigned = db.execute(
-        "SELECT 1 FROM buses WHERE propietario_id = ? LIMIT 1", (prop_id,)
-    ).fetchone()
-    if assigned:
-        db.close()
-        return jsonify({"error": "No se puede eliminar: tiene buses asignados"}), 409
-
-    db.execute("DELETE FROM propietarios WHERE id = ?", (prop_id,))
-    db.commit()
-    db.close()
-    return jsonify({"ok": True})
 
 
 # ──────────────────────────────────────────
@@ -1994,27 +1976,6 @@ def get_pasajeros():
     return jsonify([dict(r) for r in rows])
 
 
-@app.route("/api/pasajeros/stats", methods=["GET"])
-@require_auth
-def pasajeros_stats():
-    """Totales por ruta para la fecha dada (default: hoy)."""
-    fecha = request.args.get("fecha", date.today().isoformat())
-    db = get_db()
-    rows = db.execute(
-        """
-        SELECT r.nombre AS ruta, r.color, SUM(rp.pasajeros) AS total
-        FROM   registros_pasajeros rp
-        JOIN   rutas r ON r.id = rp.ruta_id
-        WHERE  DATE(rp.timestamp) = ?
-        GROUP  BY rp.ruta_id
-        ORDER  BY total DESC
-        """,
-        (fecha,),
-    ).fetchall()
-    db.close()
-    return jsonify([dict(r) for r in rows])
-
-
 # ──────────────────────────────────────────
 #  Mantenimiento
 # ──────────────────────────────────────────
@@ -2122,31 +2083,6 @@ def create_maint_registro():
     new_id = cursor.lastrowid
     db.close()
     return jsonify({"ok": True, "id": new_id}), 201
-
-
-@app.route("/api/mantenimiento/registros", methods=["GET"])
-@require_auth
-def get_maint_registros():
-    """Últimos N registros de mantenimiento (log histórico)."""
-    limite = int(request.args.get("limite", 50))
-    db = get_db()
-    rows = db.execute(
-        """
-        SELECT rm.id, rm.observacion, rm.timestamp,
-               b.numero AS bus_numero,
-               tn.clave, tn.label, tn.color,
-               u.nombre AS usuario_nombre
-        FROM   registros_mantenimiento rm
-        JOIN   buses        b  ON b.id  = rm.bus_id
-        JOIN   tipos_novedad tn ON tn.id = rm.tipo_novedad_id
-        LEFT JOIN usuarios  u  ON u.id  = rm.usuario_id
-        ORDER  BY rm.timestamp DESC
-        LIMIT  ?
-        """,
-        (limite,),
-    ).fetchall()
-    db.close()
-    return jsonify([dict(r) for r in rows])
 
 
 # ──────────────────────────────────────────
@@ -2960,20 +2896,6 @@ def admin_set_usuario_rutas(uid):
 #  Mantenimiento preventivo
 # ══════════════════════════════════════════
 
-@app.route("/api/mantenimiento/catalogo", methods=["GET"])
-@require_auth
-def get_catalogo_mant():
-    db = get_db()
-    rows = db.execute(
-        """SELECT id, sistema, nombre, tipo_intervalo, orden, activo
-             FROM catalogo_mantenimiento
-            WHERE activo = 1
-         ORDER BY sistema, orden, nombre"""
-    ).fetchall()
-    db.close()
-    return jsonify([dict(r) for r in rows])
-
-
 @app.route("/api/mantenimiento/config/<int:bus_id>", methods=["GET"])
 @require_auth
 def get_bus_mant_config(bus_id):
@@ -3179,6 +3101,19 @@ def get_mant_alertas():
             WHERE cfg.activo = 1 AND c.activo = 1"""
     ).fetchall()
 
+    # Último registro del historial por (bus, ítem) en UNA sola consulta
+    # (antes se hacía una consulta por cada fila de config: N+1 sobre Supabase,
+    # y este endpoint se refresca cada 60 s desde el dashboard).
+    last_rows = db.execute(
+        """SELECT bus_id, item_id, fecha_realizado, km_realizado
+             FROM (SELECT h.bus_id, h.item_id, h.fecha_realizado, h.km_realizado,
+                          ROW_NUMBER() OVER (PARTITION BY h.bus_id, h.item_id
+                                             ORDER BY h.fecha_realizado DESC, h.id DESC) AS rn
+                     FROM bus_mantenimiento_historial h) ult
+            WHERE rn = 1"""
+    ).fetchall()
+    ultimo_por_item = {(r["bus_id"], r["item_id"]): r for r in last_rows}
+
     alertas = []
     for r in rows:
         d = dict(r)
@@ -3186,13 +3121,7 @@ def get_mant_alertas():
         item_id = d["item_id"]
         tipo    = d["tipo_intervalo"]
 
-        last = db.execute(
-            """SELECT fecha_realizado, km_realizado
-                 FROM bus_mantenimiento_historial
-                WHERE bus_id = ? AND item_id = ?
-             ORDER BY fecha_realizado DESC, id DESC LIMIT 1""",
-            (bus_id, item_id),
-        ).fetchone()
+        last = ultimo_por_item.get((bus_id, item_id))
 
         nivel = None
         info  = {}
