@@ -309,6 +309,11 @@
       document.getElementById('filterBus').addEventListener('change', renderList);
     });
 
+    // El shell mantiene el iframe vivo entre navegaciones y avisa al volver
+    window.addEventListener('message', e => {
+      if (e.data?.type === 'VIEW_SHOWN') cargarGastos();
+    });
+
     // ── CARGAR BUSES ──
     async function cargarBuses() {
       const uid = currentUser ? currentUser.id : null;

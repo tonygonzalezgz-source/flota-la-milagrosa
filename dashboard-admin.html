@@ -25,7 +25,7 @@
     })();
   </script>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
@@ -947,9 +947,17 @@
       fechaAyer = isoAyer();
       document.getElementById('fechaLabel').textContent = `Ayer · ${fmtFecha(fechaAyer)}`;
 
-      await cargarDashboard();
-      await cargarAlertas();
+      // Independientes entre sí: en paralelo en vez de en serie
+      await Promise.all([cargarDashboard(), cargarAlertas()]);
       setInterval(cargarAlertas, 60_000);
+    });
+
+    // El shell mantiene el iframe vivo entre navegaciones y avisa al volver
+    window.addEventListener('message', e => {
+      if (e.data?.type === 'VIEW_SHOWN' || e.data?.type === 'CATALOG_UPDATED') {
+        cargarDashboard();
+        cargarAlertas();
+      }
     });
 
     /* ─────── ALERTAS CRÍTICAS ─────── */
@@ -1100,25 +1108,25 @@
           return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
         })();
 
-        const [movRes, busesRes, rutasRes, rangoRes, despRes] = await Promise.all([
-          apiFetch(`${API}/movilidad?fecha=${fechaAyer}`),
+        const [busesRes, rutasRes, rangoRes, despRes] = await Promise.all([
           apiFetch(`${API}/buses`),
           apiFetch(`${API}/rutas/all`).catch(() => apiFetch(`${API}/rutas`)),
           apiFetch(`${API}/movilidad/rango?desde=${hace14}&hasta=${fechaAyer}`),
           apiFetch(`${API}/despacho?fecha=${hoy}`).catch(() => null),
         ]);
 
-        const movJson   = await movRes.json();
         const busesJson = await busesRes.json();
         const rutasJson = await rutasRes.json();
         const rangoJson = await rangoRes.json();
         const despJson  = despRes ? await despRes.json().catch(() => null) : null;
 
-        allMovData = Array.isArray(movJson)   ? movJson   : [];
         allBuses   = Array.isArray(busesJson) ? busesJson : [];
         allRutas   = Array.isArray(rutasJson) ? rutasJson : [];
         despachoBuses = (despJson && Array.isArray(despJson.buses)) ? despJson.buses : [];
         const rangoData = Array.isArray(rangoJson) ? rangoJson : [];
+        // Los datos de ayer salen del mismo rango de 14 días (antes era una
+        // petición aparte a /movilidad?fecha=ayer con la misma información)
+        allMovData = rangoData.filter(r => toISODate(r.fecha) === fechaAyer);
 
         renderKpis();
         renderRutas();

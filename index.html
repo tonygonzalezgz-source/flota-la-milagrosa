@@ -1308,7 +1308,11 @@
 
   let currentUser = null;
   let currentView = 'welcome';
-  const loadedViews = new Set();  // lazy-load tracking
+  const loadedViews  = new Set();  // lazy-load tracking
+  const viewLoadDate = new Map();  // fecha (Bogotá) en que se cargó cada vista
+  function hoyBogota() {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date());
+  }
 
   /* ═══════════════════════════════════════
      1.5. VERIFICAR SESIÓN AL CARGAR
@@ -1622,16 +1626,22 @@
     const parentGroup = btn.closest('.sb-group');
     if (parentGroup) parentGroup.classList.add('open');
 
-    // Cargar iframe siempre con cache-busting para reflejar cambios al instante
+    // Cargar el iframe UNA sola vez por vista; al volver, solo se muestra y
+    // se le avisa para que refresque sus datos. Antes se recargaba la página
+    // completa (HTML + librerías + todas las llamadas API) en cada cambio de
+    // vista por el cache-buster ?v=Date.now().
+    // Excepción: si cambió la fecha en Bogotá desde que se cargó la vista, se
+    // recarga completa — varias páginas fijan HOY al iniciar (despacho,
+    // chequeo…) y no deben quedarse operando sobre el día anterior.
     const iframe = document.getElementById(`iframe-${viewId}`);
-    iframe.src = btn.dataset.src + '?v=' + Date.now();
-    if (viewId === 'analista' && loadedViews.has(viewId)) {
-      // Notificar al iframe que recargue las rutas (pueden haber cambiado en Catálogo)
-      if (iframe.contentWindow) {
-        iframe.contentWindow.postMessage({ type: 'REFRESH_ROUTES' }, '*');
-      }
+    const hoy = hoyBogota();
+    if (!loadedViews.has(viewId) || viewLoadDate.get(viewId) !== hoy) {
+      iframe.src = btn.dataset.src;
+      loadedViews.add(viewId);
+      viewLoadDate.set(viewId, hoy);
+    } else if (iframe.contentWindow) {
+      iframe.contentWindow.postMessage({ type: 'VIEW_SHOWN' }, '*');
     }
-    loadedViews.add(viewId);
   }
 
   /* ═══════════════════════════════════════
@@ -1653,11 +1663,13 @@
     currentUser = null;
     currentView = 'welcome';
     loadedViews.clear();
+    viewLoadDate.clear();
 
-    // Reset iframes
-    ['dashboard', 'analista', 'historial', 'mant', 'propietario', 'historial-despacho'].forEach(id => {
+    // Reset de TODOS los iframes de vistas (quedan vivos entre navegaciones,
+    // así que hay que vaciarlos para no dejar datos del usuario anterior)
+    Object.keys(VIEW_META).forEach(id => {
       const iframe = document.getElementById(`iframe-${id}`);
-      iframe.src = '';
+      if (iframe) iframe.src = '';
       const loader = document.getElementById(`loader-${id}`);
       if (loader) { loader.classList.remove('hidden'); loader.style.display = ''; }
     });

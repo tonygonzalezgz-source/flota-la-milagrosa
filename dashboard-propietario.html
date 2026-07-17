@@ -25,7 +25,7 @@
     })();
   </script>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html { -webkit-text-size-adjust: 100%; }
@@ -1270,6 +1270,7 @@
     }
     let currentUser = null;
     let busesData   = [];
+    let movMesData  = [];  // movilidad del mes actual, reutilizada por cargarVueltasParaTodos
     let modalBusId  = null;
     let chartInst   = null;
 
@@ -1292,24 +1293,31 @@
       initHistorial();
     });
 
+    // El shell mantiene el iframe vivo entre navegaciones y avisa al volver
+    window.addEventListener('message', e => {
+      if (e.data?.type === 'VIEW_SHOWN' || e.data?.type === 'CATALOG_UPDATED') cargarDatos();
+    });
+
     // ── CARGAR DATOS PRINCIPALES ──
     async function cargarDatos() {
       const uid = currentUser ? currentUser.id : null;
       const qs  = uid ? `?user_id=${uid}` : '';
       try {
-        const [busesRes, dashRes] = await Promise.all([
-          apiFetch(`${API}/buses${qs}`),
-          apiFetch(`${API}/dashboard/propietario${qs}`),
-        ]);
-        busesData = await busesRes.json();
-        const dash = await dashRes.json();
-
-        // Pasajeros del mes actual por bus
+        // Pasajeros del mes actual por bus (independiente de las otras dos:
+        // va en el mismo Promise.all, antes se esperaba en serie)
         const now      = new Date();
         const primerDia = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
         const hoy      = now.toISOString().slice(0,10);
-        const movRes   = await apiFetch(`${API}/movilidad/rango?desde=${primerDia}&hasta=${hoy}${uid ? '&user_id='+uid : ''}`);
-        const movMes   = await movRes.json();
+
+        const [busesRes, dashRes, movRes] = await Promise.all([
+          apiFetch(`${API}/buses${qs}`),
+          apiFetch(`${API}/dashboard/propietario${qs}`),
+          apiFetch(`${API}/movilidad/rango?desde=${primerDia}&hasta=${hoy}${uid ? '&user_id='+uid : ''}`),
+        ]);
+        busesData = await busesRes.json();
+        const dash = await dashRes.json();
+        const movMes = await movRes.json();
+        movMesData = Array.isArray(movMes) ? movMes : [];
 
         const paxMes = {};
         movMes.forEach(r => { paxMes[r.bus_id] = (paxMes[r.bus_id]||0) + (r.pasajeros||0); });
@@ -1409,23 +1417,35 @@
       cargarVueltasParaTodos(lista);
     }
 
+    /* Normaliza la fecha de la API a ISO (llega como '2026-07-15' en SQLite
+       o 'Wed, 15 Jul 2026 00:00:00 GMT' en Postgres) */
+    function fechaISO(f) {
+      const d = new Date(f);
+      return isNaN(d.getTime()) ? String(f).slice(0, 10) : d.toISOString().slice(0, 10);
+    }
+
     async function cargarVueltasParaTodos(buses) {
       try {
-        // Cargar ÚLTIMAS FECHAS disponibles
-        const res = await apiFetch(`${API}/movilidad/fechas`);
-        const fechas = await res.json();
-
-        if (!fechas.length) {
-          document.querySelectorAll('[id^="vueltas-"]').forEach(el => el.textContent = '—');
-          return;
+        let registros;
+        if (movMesData.length) {
+          // Reutilizar la movilidad del mes ya cargada en cargarDatos:
+          // los registros de la fecha más reciente (antes eran 2 peticiones más)
+          const ultima = movMesData.reduce((mx, r) => {
+            const f = fechaISO(r.fecha);
+            return f > mx ? f : mx;
+          }, '');
+          registros = movMesData.filter(r => fechaISO(r.fecha) === ultima);
+        } else {
+          // Sin datos este mes: buscar la última fecha con registros
+          const res = await apiFetch(`${API}/movilidad/fechas`);
+          const fechas = await res.json();
+          if (!fechas.length) {
+            document.querySelectorAll('[id^="vueltas-"]').forEach(el => el.textContent = '—');
+            return;
+          }
+          const movRes = await apiFetch(`${API}/movilidad?fecha=${fechaISO(fechas[0])}`);
+          registros = await movRes.json();
         }
-
-        // Usar la fecha más reciente disponible
-        const fechaMasReciente = fechas[0];
-
-        // Cargar registros de esa fecha
-        const movRes = await apiFetch(`${API}/movilidad?fecha=${fechaMasReciente}`);
-        const registros = await movRes.json();
 
         // SUMAR vueltas por bus_id
         const vueltasPorBus = {};

@@ -315,6 +315,13 @@
   let cronoTimer = null;
 
   document.addEventListener('DOMContentLoaded', init);
+  // El shell mantiene el iframe vivo entre navegaciones y avisa al volver:
+  // recargar solo los datos (no re-ejecutar init, que alterna DOM y permisos)
+  window.addEventListener('message', e => {
+    if (e.data?.type !== 'VIEW_SHOWN') return;
+    if (ES_ADMIN) { loadHistorialAdmin(); }
+    else { loadHoy(); loadHistorialMio(); }
+  });
 
   async function apiFetch(path, opts = {}) {
     const token = localStorage.getItem('authToken');

@@ -22,8 +22,7 @@
       }
     })();
   </script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+  <!-- jsPDF se carga bajo demanda al generar el PDF; ver cargarLibreria() -->
   <style>
     :root{
       --bg:#f1f2f6; --surface:#fff; --border:#e5e5eb;
@@ -384,6 +383,11 @@
       document.getElementById('filterHasta').addEventListener('change', cargarIntervenciones);
     });
 
+    // El shell mantiene el iframe vivo entre navegaciones y avisa al volver
+    window.addEventListener('message', e => {
+      if (e.data?.type === 'VIEW_SHOWN') cargarIntervenciones();
+    });
+
     // ── TABS ──
     function setArea(area) {
       if (area === areaActual) return;
@@ -711,6 +715,23 @@
       });
     }
 
+    /* Librerías pesadas (jsPDF) bajo demanda: no bloquean la carga de la vista */
+    const _libsCargadas = {};
+    function cargarLibreria(src) {
+      if (!_libsCargadas[src]) {
+        _libsCargadas[src] = new Promise((ok, fail) => {
+          const s = document.createElement('script');
+          s.src = src;
+          s.onload  = ok;
+          s.onerror = () => { delete _libsCargadas[src]; fail(new Error('No se pudo descargar la librería. Revisa tu conexión.')); };
+          document.head.appendChild(s);
+        });
+      }
+      return _libsCargadas[src];
+    }
+    const LIB_JSPDF     = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+    const LIB_AUTOTABLE = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js';
+
     async function exportarPDF() {
       const rows = filasFiltradas();
       if (rows.length === 0) { showToast('No hay intervenciones para exportar', true); return; }
@@ -721,6 +742,8 @@
       btn.textContent = 'Generando…';
 
       try {
+        await cargarLibreria(LIB_JSPDF);
+        await cargarLibreria(LIB_AUTOTABLE);  // plugin: requiere jsPDF ya cargado
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF();
         const pageW = doc.internal.pageSize.getWidth();   // ~210
