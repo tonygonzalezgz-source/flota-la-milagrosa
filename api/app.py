@@ -109,14 +109,15 @@ PG_SCHEMA    = os.path.join(os.path.dirname(__file__), "supabase_schema.sql")
 # Versión del esquema. IMPORTANTE: incrementar en 1 cada vez que se agregue
 # una migración (ALTER/CREATE) a migrate_db(); si no se incrementa, la
 # migración nueva NO corre en las BD ya versionadas.
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 ROLE_VIEWS = {
-    "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho", "historial-despacho", "gastos", "tecnologia", "chequeo"],
+    "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho", "historial-despacho", "gastos", "tecnologia", "chequeo", "eds"],
     "Analista":       ["historial"],
     "Técnico Mant.":  ["mant"],
     "Técnico Cámaras":       ["tecnologia"],
     "Jefe Op. Tecnológicas": ["tecnologia"],
+    "Operador EDS":   ["eds"],
     "Propietario":    ["propietario", "gastos", "tecnologia"],
     "Despachador":    ["despacho", "historial-despacho", "chequeo"],
     "Jefe de Ruta":   ["dashboard", "despacho", "historial-despacho", "chequeo", "alistamiento"],
@@ -468,6 +469,24 @@ def migrate_db():
                 orden           INTEGER NOT NULL DEFAULT 0
             )""",
             "CREATE INDEX IF NOT EXISTS idx_tec_fotos ON intervencion_tecnologia_fotos(intervencion_id)",
+            """CREATE TABLE IF NOT EXISTS actividades_eds (
+                id            SERIAL PRIMARY KEY,
+                tipo          TEXT NOT NULL CHECK(tipo IN ('aseo_patio','canaletas','aseo_estacion','trampa_grasa','novedad')),
+                fecha         DATE NOT NULL,
+                descripcion   TEXT,
+                realizado_por TEXT NOT NULL,
+                usuario_id    INTEGER REFERENCES usuarios(id),
+                created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )""",
+            "CREATE INDEX IF NOT EXISTS idx_eds_fecha ON actividades_eds(fecha)",
+            "CREATE INDEX IF NOT EXISTS idx_eds_tipo  ON actividades_eds(tipo)",
+            """CREATE TABLE IF NOT EXISTS actividad_eds_fotos (
+                id           SERIAL PRIMARY KEY,
+                actividad_id INTEGER NOT NULL REFERENCES actividades_eds(id) ON DELETE CASCADE,
+                foto_base64  TEXT NOT NULL,
+                orden        INTEGER NOT NULL DEFAULT 0
+            )""",
+            "CREATE INDEX IF NOT EXISTS idx_eds_fotos ON actividad_eds_fotos(actividad_id)",
             """CREATE TABLE IF NOT EXISTS puestos_trabajo (
                 id          SERIAL PRIMARY KEY,
                 nombre      TEXT NOT NULL UNIQUE,
@@ -719,6 +738,28 @@ def migrate_db():
             )
         """)
         db.execute("CREATE INDEX IF NOT EXISTS idx_tec_fotos ON intervencion_tecnologia_fotos(intervencion_id)")
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS actividades_eds (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                tipo          TEXT NOT NULL CHECK(tipo IN ('aseo_patio','canaletas','aseo_estacion','trampa_grasa','novedad')),
+                fecha         DATE NOT NULL,
+                descripcion   TEXT,
+                realizado_por TEXT NOT NULL,
+                usuario_id    INTEGER REFERENCES usuarios(id),
+                created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        db.execute("CREATE INDEX IF NOT EXISTS idx_eds_fecha ON actividades_eds(fecha)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_eds_tipo  ON actividades_eds(tipo)")
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS actividad_eds_fotos (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                actividad_id INTEGER NOT NULL REFERENCES actividades_eds(id) ON DELETE CASCADE,
+                foto_base64  TEXT NOT NULL,
+                orden        INTEGER NOT NULL DEFAULT 0
+            )
+        """)
+        db.execute("CREATE INDEX IF NOT EXISTS idx_eds_fotos ON actividad_eds_fotos(actividad_id)")
         db.execute("""
             CREATE TABLE IF NOT EXISTS puestos_trabajo (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2706,6 +2747,120 @@ def delete_intervencion_tecnologia(int_id):
 
     # SQLite con FK ON + Postgres: el CASCADE borra las fotos
     db.execute("DELETE FROM intervenciones_tecnologia WHERE id = ?", (int_id,))
+    db.commit()
+    db.close()
+    return jsonify({"ok": True})
+
+
+# ──────────────────────────────────────────
+#  Operador EDS (aseo de estación y novedades)
+#  Solo Admin y Operador EDS — no toca buses ni propietarios
+# ──────────────────────────────────────────
+
+ROLES_EDS     = ("Administrador", "Operador EDS")
+EDS_TIPOS     = ("aseo_patio", "canaletas", "aseo_estacion", "trampa_grasa", "novedad")
+EDS_MAX_FOTOS = 5
+
+
+@app.route("/api/eds", methods=["POST"])
+@require_role(*ROLES_EDS)
+def create_actividad_eds():
+    data          = request.get_json(force=True)
+    tipo          = (data.get("tipo") or "").strip().lower()
+    fecha         = data.get("fecha")
+    descripcion   = (data.get("descripcion") or "").strip()
+    realizado_por = (data.get("realizado_por") or "").strip()
+    fotos         = data.get("fotos") or []
+
+    if not tipo or not fecha or not realizado_por:
+        return jsonify({"error": "Faltan campos requeridos (tipo, fecha, responsable)."}), 400
+    if tipo not in EDS_TIPOS:
+        return jsonify({"error": "Tipo de actividad inválido."}), 400
+    if tipo == "novedad" and not descripcion:
+        return jsonify({"error": "Describe la novedad observada."}), 400
+    if not isinstance(fotos, list) or len(fotos) > EDS_MAX_FOTOS:
+        return jsonify({"error": f"Máximo {EDS_MAX_FOTOS} fotos por registro."}), 400
+
+    db = get_db()
+    cursor = db.execute(
+        """INSERT INTO actividades_eds (tipo, fecha, descripcion, realizado_por, usuario_id)
+           VALUES (?,?,?,?,?)""",
+        (tipo, fecha, descripcion or None, realizado_por,
+         getattr(request, "jwt_user_id", None)),
+    )
+    new_id = cursor.lastrowid
+    for i, foto in enumerate(fotos):
+        if not foto:
+            continue
+        db.execute(
+            "INSERT INTO actividad_eds_fotos (actividad_id, foto_base64, orden) VALUES (?,?,?)",
+            (new_id, foto, i),
+        )
+    db.commit()
+    db.close()
+    return jsonify({"ok": True, "id": new_id}), 201
+
+
+@app.route("/api/eds", methods=["GET"])
+@require_role(*ROLES_EDS)
+def get_actividades_eds():
+    """Lista metadata (SIN base64 de fotos). tipo=aseo agrupa los 3 aseos."""
+    tipo  = request.args.get("tipo")
+    desde = request.args.get("desde")
+    hasta = request.args.get("hasta")
+
+    where, params = [], []
+    if tipo == "aseo":
+        where.append("a.tipo != ?"); params.append("novedad")
+    elif tipo in EDS_TIPOS:
+        where.append("a.tipo = ?"); params.append(tipo)
+    if desde:
+        where.append("a.fecha >= ?"); params.append(desde)
+    if hasta:
+        where.append("a.fecha <= ?"); params.append(hasta)
+
+    where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+    db = get_db()
+    rows = db.execute(
+        f"""SELECT a.id, a.tipo, a.fecha, a.descripcion, a.realizado_por, a.created_at,
+                   (SELECT COUNT(*) FROM actividad_eds_fotos f
+                     WHERE f.actividad_id = a.id) AS num_fotos
+            FROM actividades_eds a
+            {where_sql}
+            ORDER BY a.fecha DESC, a.id DESC""",
+        params,
+    ).fetchall()
+    db.close()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/eds/<int:act_id>/fotos", methods=["GET"])
+@require_role(*ROLES_EDS)
+def get_actividad_eds_fotos(act_id):
+    db = get_db()
+    row = db.execute("SELECT id FROM actividades_eds WHERE id = ?", (act_id,)).fetchone()
+    if not row:
+        db.close(); return jsonify({"error": "No encontrado"}), 404
+
+    fotos = db.execute(
+        "SELECT foto_base64 FROM actividad_eds_fotos "
+        "WHERE actividad_id = ? ORDER BY orden, id",
+        (act_id,),
+    ).fetchall()
+    db.close()
+    return jsonify({"fotos": [f["foto_base64"] for f in fotos]})
+
+
+@app.route("/api/eds/<int:act_id>", methods=["DELETE"])
+@require_role(*ROLES_EDS)
+def delete_actividad_eds(act_id):
+    db = get_db()
+    row = db.execute("SELECT id FROM actividades_eds WHERE id = ?", (act_id,)).fetchone()
+    if not row:
+        db.close(); return jsonify({"error": "No encontrado"}), 404
+
+    # SQLite con FK ON + Postgres: el CASCADE borra las fotos
+    db.execute("DELETE FROM actividades_eds WHERE id = ?", (act_id,))
     db.commit()
     db.close()
     return jsonify({"ok": True})
