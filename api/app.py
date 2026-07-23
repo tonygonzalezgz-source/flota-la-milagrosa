@@ -2852,7 +2852,7 @@ def get_actividad_eds_fotos(act_id):
 
 
 @app.route("/api/eds/<int:act_id>", methods=["DELETE"])
-@require_role(*ROLES_EDS)
+@require_role("Administrador")   # solo el admin puede borrar historial; el operador no
 def delete_actividad_eds(act_id):
     db = get_db()
     row = db.execute("SELECT id FROM actividades_eds WHERE id = ?", (act_id,)).fetchone()
