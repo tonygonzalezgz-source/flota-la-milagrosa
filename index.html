@@ -1398,9 +1398,13 @@
         // apiFetch NO lanza error con un 401, así que hay que revisar res.ok:
         // si el token está vencido, limpiar y volver al login en vez de dejar
         // al usuario atrapado con una sesión muerta.
+        // Además se refrescan los permisos del rol desde el servidor: si un
+        // despliegue agregó vistas nuevas (o cambió nombre/rol del usuario),
+        // el menú se actualiza sin obligar a cerrar sesión y volver a entrar.
         setTimeout(() => {
           apiFetch(`${API_URL}/me`)
-            .then(res => { if (!res.ok) throw new Error('sesion-vencida'); })
+            .then(res => { if (!res.ok) throw new Error('sesion-vencida'); return res.json(); })
+            .then(me => refreshSessionData(me))
             .catch(() => {
               localStorage.removeItem('authToken');
               localStorage.removeItem('currentUser');
@@ -1413,6 +1417,43 @@
         localStorage.removeItem('currentUser');
       }
     }
+  }
+
+  // Sincroniza la sesión guardada con lo que responde /api/me (permisos del
+  // rol, nombre, avatar). Un error aquí NO debe cerrar la sesión: se envuelve
+  // en try/catch para que el .catch() del token vencido no lo confunda.
+  function refreshSessionData(me) {
+    try {
+      if (!currentUser || !me || !Array.isArray(me.allowedViews)) return;
+      const sinCambios =
+        JSON.stringify(me.allowedViews) === JSON.stringify(currentUser.allowedViews) &&
+        me.rol === currentUser.rol && me.nombre === currentUser.nombre &&
+        me.iniciales === currentUser.iniciales && me.color === currentUser.color;
+      if (sinCambios) return;
+
+      currentUser = {
+        ...currentUser,
+        id:           me.id,
+        username:     me.username,
+        name:         me.nombre,
+        role:         me.rol,
+        initials:     me.iniciales,
+        color:        me.color,
+        allowedViews: me.allowedViews,
+        nombre:       me.nombre,
+        rol:          me.rol,
+        iniciales:    me.iniciales,
+      };
+      localStorage.setItem('currentUser', JSON.stringify(currentUser));
+
+      const avatarEl = document.getElementById('sbAvatar');
+      avatarEl.textContent      = currentUser.iniciales;
+      avatarEl.style.background = currentUser.color;
+      document.getElementById('sbName').textContent = currentUser.nombre;
+      document.getElementById('sbRole').textContent = currentUser.rol;
+      applyRoleAccess();
+      buildWelcomeCards();
+    } catch (e) { /* la sesión sigue válida aunque el refresco falle */ }
   }
 
   /* ═══════════════════════════════════════
