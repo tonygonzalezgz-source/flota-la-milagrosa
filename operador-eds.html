@@ -399,8 +399,12 @@
     ];
     const DIAS_CORTO = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
     const CLASE_ACT  = { aseo_patio:'patio', canaletas:'canaletas', aseo_estacion:'estacion', trampa_grasa:'grasa' };
-    // Fecha de HOY en la zona horaria local (toISOString daría el día UTC)
-    function hoyLocal() { return new Date().toLocaleDateString('en-CA'); }
+    // Fecha de HOY en Colombia (UTC-5), sin depender de la zona horaria del
+    // dispositivo: aunque el celular/tablet tenga la hora mal configurada, la
+    // fecha del reporte siempre corresponde al día real en Colombia.
+    function hoyBogota() { return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }); }
+    // Día de la semana (0=Dom … 6=Sáb) según el día actual en Colombia.
+    function diaSemanaBogota() { return new Date(hoyBogota() + 'T00:00:00').getDay(); }
 
     let currentUser = null;
     let esAdmin     = false;    // solo el admin exporta a Excel y elimina registros
@@ -416,7 +420,7 @@
 
       renderCronograma();
       poblarTipos();
-      document.getElementById('f-fecha').value = hoyLocal();
+      document.getElementById('f-fecha').value = hoyBogota();
       if (currentUser && currentUser.nombre) document.getElementById('f-resp').value = currentUser.nombre;
 
       await cargarActividades();
@@ -438,7 +442,7 @@
 
     // ── CRONOGRAMA ──
     function renderCronograma() {
-      const hoyIdx = new Date().getDay();
+      const hoyIdx = diaSemanaBogota();
       const grid = document.getElementById('cronoGrid');
       // Orden visual Lun→Dom
       const orden = [1,2,3,4,5,6,0];
@@ -466,7 +470,7 @@
       sel.innerHTML = ['aseo_patio','canaletas','aseo_estacion','trampa_grasa'].map(t =>
         `<option value="${t}">${TIPO_META[t].label}</option>`
       ).join('');
-      sel.value = CRONOGRAMA[new Date().getDay()][0]; // preseleccionar la de hoy (el aseo de patio es diario)
+      sel.value = CRONOGRAMA[diaSemanaBogota()][0]; // preseleccionar la de hoy (el aseo de patio es diario)
       actualizarHintTipo();
     }
 
@@ -600,7 +604,7 @@
 
     function resetForm() {
       document.getElementById('f-desc').value = '';
-      document.getElementById('f-fecha').value = hoyLocal();
+      document.getElementById('f-fecha').value = hoyBogota();
       fotos = [];
       renderFotos();
     }
