@@ -29,6 +29,10 @@
   </script>
 
   <script defer src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
@@ -585,6 +589,109 @@
       .trend-big { font-size: 24px; }
       .alertas-title { font-size: 14px; }
     }
+
+    /* ── Localiza tu bus (GPS en vivo vía Traccar) ── */
+    .loc-card {
+      background: #fff; border: 1px solid #ececf1; border-radius: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.05); padding: 18px 20px; margin-bottom: 16px;
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 14px;
+    }
+    .loc-head { display: flex; align-items: center; gap: 12px; }
+    .loc-ic {
+      width: 40px; height: 40px; border-radius: 12px; flex-shrink: 0;
+      background: linear-gradient(135deg,#10b981,#34d399);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .loc-title { font-size: 15px; font-weight: 700; color: #111; }
+    .loc-soon {
+      display: inline-block; margin-left: 8px; vertical-align: middle;
+      background: #fef3c7; color: #b45309; border-radius: 999px; padding: 2px 9px;
+      font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px;
+    }
+    .loc-sub   { font-size: 12px; color: #9ca3af; margin-top: 2px; }
+    .loc-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .loc-select {
+      padding: 10px 14px; border: 1.5px solid #d7d7df; border-radius: 10px;
+      font-family: inherit; font-size: 14px; font-weight: 600; background: #fff;
+      color: #111; cursor: pointer; min-width: 220px;
+    }
+    .loc-select:focus { outline: none; border-color: #10b981; }
+    .loc-btn {
+      display: inline-flex; align-items: center; gap: 7px; border: none;
+      background: #10b981; color: #fff; border-radius: 10px; padding: 11px 18px;
+      font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
+    }
+    .loc-btn:hover:not(:disabled) { background: #0ea371; }
+    .loc-btn:disabled { opacity: .5; cursor: default; }
+
+    /* Modal del mapa */
+    .loc-modal {
+      position: fixed; inset: 0; z-index: 4000; background: rgba(15,15,20,.55);
+      display: flex; align-items: center; justify-content: center; padding: 20px;
+      backdrop-filter: blur(2px);
+    }
+    .loc-modal.hidden { display: none; }
+    .loc-modal-box {
+      background: #fff; border-radius: 18px; width: 100%; max-width: 560px;
+      overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,.35);
+      display: flex; flex-direction: column; max-height: 92vh;
+    }
+    .loc-modal-head {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      padding: 16px 18px 12px; gap: 12px;
+    }
+    .loc-modal-title { font-size: 17px; font-weight: 800; color: #111; }
+    .loc-badge {
+      display: inline-flex; align-items: center; gap: 6px; margin-top: 6px;
+      border-radius: 999px; padding: 3px 11px; font-size: 12px; font-weight: 700;
+    }
+    .loc-badge.on  { background: rgba(16,185,129,.12); color: #059669; }
+    .loc-badge.off { background: rgba(148,163,184,.18); color: #64748b; }
+    .loc-badge .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .loc-close {
+      border: none; background: #f3f4f6; color: #6b7280; width: 32px; height: 32px;
+      border-radius: 9px; font-size: 16px; cursor: pointer; flex-shrink: 0;
+    }
+    .loc-close:hover { background: #e5e7eb; }
+    .loc-map-wrap { position: relative; }
+    #locMap { width: 100%; height: 320px; background: #eef1f4; }
+    .loc-styles {
+      position: absolute; top: 8px; right: 8px; z-index: 500; display: flex; gap: 3px;
+      background: rgba(255,255,255,.92); border-radius: 9px; padding: 3px;
+      box-shadow: 0 1px 5px rgba(0,0,0,.22); backdrop-filter: blur(3px);
+    }
+    .loc-style-btn {
+      border: none; background: transparent; color: #374151; border-radius: 6px;
+      padding: 4px 9px; font-family: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer;
+    }
+    .loc-style-btn:hover { background: #f0f0f2; }
+    .loc-style-btn.active { background: #10b981; color: #fff; }
+    .loc-info {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+      padding: 14px 18px 6px;
+    }
+    .loc-stat { background: #f7f7f9; border-radius: 10px; padding: 9px 11px; }
+    .loc-stat .k { font-size: 10.5px; text-transform: uppercase; letter-spacing: .4px; color: #9ca3af; font-weight: 700; }
+    .loc-stat .v { font-size: 15px; font-weight: 800; color: #111; margin-top: 2px; }
+    .loc-modal-foot {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 18px 16px; gap: 12px;
+    }
+    .loc-updated { font-size: 12px; color: #9ca3af; }
+    .loc-refresh {
+      border: 1.5px solid #d7d7df; background: #fff; color: #111; border-radius: 10px;
+      padding: 9px 16px; font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+    }
+    .loc-refresh:hover { border-color: #10b981; color: #059669; }
+    .loc-msg { padding: 22px 18px; text-align: center; color: #6b7280; font-size: 14px; }
+    @media (max-width: 640px) {
+      .loc-card { flex-direction: column; align-items: stretch; }
+      .loc-controls { justify-content: stretch; }
+      .loc-select { flex: 1; min-width: 0; }
+      .loc-info { grid-template-columns: repeat(2, 1fr); }
+      #locMap { height: 260px; }
+    }
   </style>
 </head>
 <body>
@@ -690,6 +797,30 @@
       <ul class="alertas-list" id="alertasList">
         <div class="alertas-empty">Cargando alertas…</div>
       </ul>
+    </section>
+
+    <!-- LOCALIZA TU BUS (GPS en vivo vía Traccar) -->
+    <section class="loc-card" id="locCard" style="display:none;">
+      <div class="loc-head">
+        <div class="loc-ic">
+          <svg width="20" height="20" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+          </svg>
+        </div>
+        <div>
+          <div class="loc-title">Localiza tu bus <span class="loc-soon">Próximamente</span></div>
+          <div class="loc-sub" id="locSub">Ubicación en tiempo real del bus seleccionado.</div>
+        </div>
+      </div>
+      <div class="loc-controls">
+        <select class="loc-select" id="locSelect"><option value="">Cargando…</option></select>
+        <button class="loc-btn" id="locBtn" onclick="abrirLocalizacion()" disabled>
+          <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          Localizar
+        </button>
+      </div>
     </section>
 
     <!-- KPI CARDS -->
@@ -1607,6 +1738,183 @@
       a.download = `movilidad_${fechaAyer}.csv`;
       a.click();
     }
+  </script>
+
+  <!-- MODAL: mapa en vivo del bus -->
+  <div class="loc-modal hidden" id="locModal">
+    <div class="loc-modal-box">
+      <div class="loc-modal-head">
+        <div>
+          <div class="loc-modal-title" id="locModalTitle">Bus</div>
+          <span class="loc-badge off" id="locBadge"><span class="dot"></span> —</span>
+        </div>
+        <button class="loc-close" onclick="cerrarLocalizacion()" aria-label="Cerrar">✕</button>
+      </div>
+      <div class="loc-map-wrap">
+        <div id="locMap"></div>
+        <div class="loc-styles" id="locStyles"></div>
+      </div>
+      <div class="loc-info" id="locInfo"></div>
+      <div class="loc-modal-foot">
+        <span class="loc-updated" id="locUpdated"></span>
+        <button class="loc-refresh" onclick="refrescarLocalizacion()">Actualizar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* ── Localiza tu bus: consulta en vivo al servidor Traccar ── */
+    const LOC_API = (window.location.port === '3030')
+      ? 'http://localhost:8001/api' : (window.location.origin + '/api');
+
+    function locFetch(path, opts = {}) {
+      const token = localStorage.getItem('authToken');
+      return fetch(LOC_API + path, {
+        ...opts,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+          ...(opts.headers || {}),
+        },
+      });
+    }
+
+    let locMap = null, locMarker = null, locRefreshTimer = null, locDeviceActual = null;
+    let locTileLayer = null, locStyleActual = localStorage.getItem('locMapStyle') || 'calles';
+
+    // Estilos de mapa (todos gratuitos, sin API key)
+    const MAP_STYLES = {
+      calles:   { name: 'Calles',   sub: 'abcd', maxZoom: 20,
+                  url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
+                  attr: '&copy; OpenStreetMap &copy; CARTO' },
+      claro:    { name: 'Claro',    sub: 'abcd', maxZoom: 20,
+                  url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
+                  attr: '&copy; OpenStreetMap &copy; CARTO' },
+      satelite: { name: 'Satélite', maxZoom: 19,
+                  url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                  attr: '&copy; Esri, Maxar, Earthstar Geographics' },
+      oscuro:   { name: 'Oscuro',   sub: 'abcd', maxZoom: 20,
+                  url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+                  attr: '&copy; OpenStreetMap &copy; CARTO' },
+    };
+
+    function construirSwitcher() {
+      document.getElementById('locStyles').innerHTML = Object.entries(MAP_STYLES).map(
+        ([k, s]) => `<button class="loc-style-btn ${k === locStyleActual ? 'active' : ''}" data-k="${k}" onclick="setMapStyle('${k}')">${s.name}</button>`
+      ).join('');
+    }
+
+    function setMapStyle(key) {
+      locStyleActual = key;
+      localStorage.setItem('locMapStyle', key);
+      const s = MAP_STYLES[key];
+      if (locTileLayer) locMap.removeLayer(locTileLayer);
+      locTileLayer = L.tileLayer(s.url, { maxZoom: s.maxZoom || 19, attribution: s.attr, subdomains: s.sub || 'abc' }).addTo(locMap);
+      document.querySelectorAll('.loc-style-btn').forEach(b => b.classList.toggle('active', b.dataset.k === key));
+    }
+
+    async function cargarLocalizables() {
+      const card = document.getElementById('locCard');
+      const sel  = document.getElementById('locSelect');
+      const btn  = document.getElementById('locBtn');
+      const sub  = document.getElementById('locSub');
+      try {
+        const res = await locFetch('/gps/localizables');
+        if (!res.ok) { card.style.display = 'none'; return; }  // rol sin acceso
+        const data = await res.json();
+        card.style.display = '';
+        if (!data.traccar_configurado) {
+          sel.innerHTML = '<option value="">— Traccar sin configurar —</option>';
+          sub.textContent = 'Falta conectar el servidor Traccar (pídelo al administrador).';
+          btn.disabled = true;
+          return;
+        }
+        if (!data.buses.length) {
+          sel.innerHTML = '<option value="">— Sin buses con GPS —</option>';
+          sub.textContent = 'Asigna dispositivos a buses en "Config GPS".';
+          btn.disabled = true;
+          return;
+        }
+        sel.innerHTML = data.buses.map(b =>
+          `<option value="${b.device_id}">Bus ${b.numero} · ${b.placa}</option>`).join('');
+        sub.textContent = 'Elige un bus y pulsa Localizar para verlo en el mapa.';
+        btn.disabled = false;
+      } catch (e) {
+        card.style.display = 'none';
+      }
+    }
+
+    function abrirLocalizacion() {
+      const sel = document.getElementById('locSelect');
+      if (!sel.value) return;
+      locDeviceActual = sel.value;
+      document.getElementById('locModalTitle').textContent =
+        sel.options[sel.selectedIndex].text;
+      document.getElementById('locModal').classList.remove('hidden');
+      if (!locMap) {
+        locMap = L.map('locMap').setView([4.6482, -74.1067], 13);
+        construirSwitcher();
+        setMapStyle(locStyleActual);
+      }
+      setTimeout(() => locMap.invalidateSize(), 60);
+      consultarUbicacion(true);
+      clearInterval(locRefreshTimer);
+      locRefreshTimer = setInterval(() => consultarUbicacion(false), 12000);
+    }
+
+    function refrescarLocalizacion() { consultarUbicacion(true); }
+
+    function cerrarLocalizacion() {
+      document.getElementById('locModal').classList.add('hidden');
+      clearInterval(locRefreshTimer);
+      locRefreshTimer = null;
+    }
+
+    async function consultarUbicacion(recentrar) {
+      const info    = document.getElementById('locInfo');
+      const badge   = document.getElementById('locBadge');
+      const updated = document.getElementById('locUpdated');
+      if (recentrar) { updated.textContent = 'Consultando…'; }
+      try {
+        const res  = await locFetch(`/gps/localizar?device_id=${encodeURIComponent(locDeviceActual)}`);
+        const data = await res.json();
+        if (!res.ok) {
+          info.innerHTML = `<div class="loc-msg" style="grid-column:1/-1;">${data.error || 'No se pudo obtener la ubicación.'}</div>`;
+          updated.textContent = '';
+          return;
+        }
+        badge.className = 'loc-badge ' + (data.online ? 'on' : 'off');
+        badge.innerHTML = `<span class="dot"></span> ${data.online ? 'En línea' : 'Sin señal'}`;
+        if (data.sin_posicion || data.lat == null) {
+          info.innerHTML = `<div class="loc-msg" style="grid-column:1/-1;">${data.error || 'El dispositivo aún no ha reportado posición.'}</div>`;
+          updated.textContent = '';
+          return;
+        }
+        const vel = (data.velocidad_kmh != null) ? `${Math.round(data.velocidad_kmh)} km/h` : '—';
+        const bat = (data.bateria != null) ? `${Math.round(data.bateria)} %` : '—';
+        info.innerHTML = `
+          <div class="loc-stat"><div class="k">Velocidad</div><div class="v">${vel}</div></div>
+          <div class="loc-stat"><div class="k">Batería</div><div class="v">${bat}</div></div>
+          <div class="loc-stat"><div class="k">Últ. reporte</div><div class="v">${data.hora || '—'}</div></div>`;
+        updated.textContent = 'Actualizado ' + new Date().toLocaleTimeString('es-CO',
+          { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+        const latlng = [data.lat, data.lng];
+        const color = data.online ? '#10b981' : '#9ca3af';
+        const html = `<div style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;background:${color};color:#fff;font-weight:800;font-size:12px;border:2.5px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35);">${data.bus ? data.bus.numero : '?'}</div>`;
+        const icon = L.divIcon({ className: '', html, iconSize: [30,30], iconAnchor: [15,15] });
+        if (locMarker) { locMarker.setLatLng(latlng); locMarker.setIcon(icon); }
+        else { locMarker = L.marker(latlng, { icon }).addTo(locMap); }
+        if (recentrar) locMap.setView(latlng, 15);
+      } catch (e) {
+        updated.textContent = 'Error de conexión';
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', cargarLocalizables);
+    window.addEventListener('message', e => {
+      if (e.data?.type === 'VIEW_SHOWN') cargarLocalizables();
+    });
   </script>
 </body>
 </html>

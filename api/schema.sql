@@ -212,3 +212,13 @@ CREATE TABLE IF NOT EXISTS chequeos_despachador (
     UNIQUE(usuario_id, fecha)
 );
 CREATE INDEX IF NOT EXISTS idx_chequeos_fecha ON chequeos_despachador(fecha);
+
+-- ── Rastreo GPS (vínculo bus↔dispositivo Traccar; la ubicación se consulta en vivo) ──
+CREATE TABLE IF NOT EXISTS gps_dispositivos (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    device_id   TEXT NOT NULL UNIQUE,          -- uniqueId del dispositivo en Traccar
+    bus_id      INTEGER REFERENCES buses(id) ON DELETE SET NULL,
+    activo      INTEGER NOT NULL DEFAULT 1,
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

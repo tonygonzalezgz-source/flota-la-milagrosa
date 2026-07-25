@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <link rel="icon" type="image/png" href="favicon.png" />
+  <link rel="apple-touch-icon" href="favicon.png" />
+  <script>
+    (function() {
+      if (window.location === window.parent.location) {
+        const token = localStorage.getItem('authToken');
+        if (!token) { window.location.href = '/index.html'; }
+      }
+    })();
+  </script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>La Milagrosa — Config GPS (Traccar)</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg:#f4f4f6; --white:#fff; --border:#e5e5eb; --border2:#d0d0d8;
+      --txt:#111; --txt2:#555; --txt3:#888; --primary:#6366f1; --green:#22c55e;
+      --red:#ef4444; --yellow:#f59e0b; --radius:12px; --radius-s:8px;
+      --shadow:0 1px 4px rgba(0,0,0,.07);
+    }
+    body {
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+      background:var(--bg); color:var(--txt); padding:24px; font-size:14px;
+    }
+    .page-header { margin-bottom:18px; }
+    .page-title { font-size:22px; font-weight:800; letter-spacing:-.4px; }
+    .page-sub   { font-size:13px; color:var(--txt2); margin-top:3px; max-width:640px; }
+
+    .status-bar {
+      display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+      background:var(--white); border:1px solid var(--border); border-radius:var(--radius);
+      box-shadow:var(--shadow); padding:12px 16px; margin-bottom:16px; font-size:13px;
+    }
+    .status-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+    .status-dot.ok { background:var(--green); } .status-dot.bad { background:var(--red); }
+    .status-dot.wait { background:var(--yellow); }
+    .btn {
+      border:1px solid var(--border2); background:var(--white); color:var(--txt);
+      border-radius:var(--radius-s); padding:8px 14px; font-family:inherit;
+      font-size:12.5px; font-weight:700; cursor:pointer; box-shadow:var(--shadow);
+    }
+    .btn:hover { border-color:var(--primary); color:var(--primary); }
+
+    .card {
+      background:var(--white); border:1px solid var(--border); border-radius:var(--radius);
+      box-shadow:var(--shadow); padding:16px 18px;
+    }
+    .card-title {
+      font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.5px;
+      color:var(--txt3); margin-bottom:12px;
+    }
+    table { width:100%; border-collapse:collapse; }
+    th {
+      text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.4px;
+      color:var(--txt3); padding:8px; border-bottom:1px solid var(--border);
+    }
+    td { padding:10px 8px; border-bottom:1px solid var(--border); font-size:13px; vertical-align:middle; }
+    tr:last-child td { border-bottom:none; }
+    .pill { display:inline-flex; align-items:center; gap:6px; border-radius:999px;
+      padding:3px 10px; font-size:11.5px; font-weight:700; }
+    .pill.on  { background:rgba(34,197,94,.12); color:#16a34a; }
+    .pill.off { background:rgba(136,136,136,.15); color:var(--txt3); }
+    .pill .dot { width:6px; height:6px; border-radius:50%; background:currentColor; }
+    .mono { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12.5px; color:var(--txt2); }
+    select {
+      padding:8px 10px; border:1.5px solid var(--border2); border-radius:var(--radius-s);
+      font-family:inherit; font-size:13px; background:var(--white); color:var(--txt);
+      cursor:pointer; min-width:180px;
+    }
+    select:focus { outline:none; border-color:var(--primary); }
+    .btn-save {
+      border:none; background:var(--primary); color:#fff; border-radius:var(--radius-s);
+      padding:8px 14px; font-family:inherit; font-size:12.5px; font-weight:700; cursor:pointer;
+    }
+    .btn-save:disabled { opacity:.5; cursor:default; }
+    .empty { text-align:center; color:var(--txt3); padding:22px; font-size:13.5px; line-height:1.6; }
+    .toast {
+      position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+      background:#111; color:#fff; border-radius:var(--radius-s); padding:11px 20px;
+      font-size:13px; font-weight:600; z-index:2000; box-shadow:0 4px 16px rgba(0,0,0,.25);
+      transition:opacity .25s;
+    }
+    .toast.hidden { opacity:0; pointer-events:none; }
+    @media (max-width:640px) {
+      body { padding:16px; padding-top:64px; }
+      select { min-width:130px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="page-header">
+    <div class="page-title">Config GPS (Traccar)</div>
+    <div class="page-sub">Vincula cada dispositivo de Traccar con un bus. La ubicación se consulta en vivo desde Traccar cuando alguien pulsa "Localizar" en el dashboard — no se guardan coordenadas.</div>
+  </div>
+
+  <div class="status-bar" id="statusBar">
+    <span class="status-dot wait"></span>
+    <span id="statusText">Conectando con Traccar…</span>
+    <button class="btn" style="margin-left:auto;" onclick="cargar()">Refrescar</button>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Dispositivos en el servidor Traccar</div>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr><th>Dispositivo</th><th>ID (uniqueId)</th><th>Estado</th><th>Último reporte</th><th>Bus asignado</th><th></th></tr>
+        </thead>
+        <tbody id="tbody">
+          <tr><td colspan="6"><div class="empty">Cargando…</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="toast hidden" id="toast"></div>
+
+<script>
+  const API = (window.location.port === '3030') ? 'http://localhost:8001' : window.location.origin;
+
+  async function apiFetch(path, opts = {}) {
+    const token = localStorage.getItem('authToken');
+    const res = await fetch(API + path, {
+      ...opts,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        ...(opts.headers || {}),
+      },
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error || 'Error del servidor');
+    return json;
+  }
+
+  let buses = [];
+
+  document.addEventListener('DOMContentLoaded', cargar);
+  window.addEventListener('message', e => { if (e.data?.type === 'VIEW_SHOWN') cargar(); });
+
+  function fmtFecha(iso) {
+    if (!iso) return 'Nunca';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    return d.toLocaleString('es-CO', { timeZone: 'America/Bogota',
+      day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  }
+
+  async function cargar() {
+    const bar = document.getElementById('statusBar');
+    const txt = document.getElementById('statusText');
+    const dot = bar.querySelector('.status-dot');
+    const tbody = document.getElementById('tbody');
+    try {
+      if (!buses.length) buses = await apiFetch('/api/buses');
+    } catch (e) { /* buses opcional */ }
+
+    let devices, mapeos;
+    try {
+      [devices, mapeos] = await Promise.all([
+        apiFetch('/api/gps/traccar/devices'),
+        apiFetch('/api/gps/dispositivos'),
+      ]);
+    } catch (e) {
+      dot.className = 'status-dot bad';
+      txt.textContent = e.message;
+      tbody.innerHTML = `<tr><td colspan="6"><div class="empty">
+        No se pudo consultar Traccar.<br>${e.message}<br><br>
+        Verifica que el administrador haya configurado <b>TRACCAR_URL</b> y <b>TRACCAR_TOKEN</b>.
+      </div></td></tr>`;
+      return;
+    }
+
+    dot.className = 'status-dot ok';
+    const online = devices.filter(d => d.status === 'online').length;
+    txt.innerHTML = `Conectado — <b>${devices.length}</b> dispositivo(s), ${online} en línea.`;
+
+    const mapaPorDevice = {};
+    mapeos.forEach(m => { mapaPorDevice[m.device_id] = m.bus_id; });
+
+    if (!devices.length) {
+      tbody.innerHTML = `<tr><td colspan="6"><div class="empty">
+        El servidor Traccar no tiene dispositivos todavía.<br>
+        Configura Traccar Client en las tablets apuntando a este servidor.
+      </div></td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = devices.map(d => {
+      const busId = mapaPorDevice[d.uniqueId] ?? '';
+      const opciones = ['<option value="">— Sin asignar —</option>']
+        .concat(buses.map(b => `<option value="${b.id}" ${b.id === busId ? 'selected' : ''}>Bus ${b.numero} · ${b.placa}</option>`))
+        .join('');
+      const online = d.status === 'online';
+      return `<tr>
+        <td><b>${d.name || '(sin nombre)'}</b></td>
+        <td class="mono">${d.uniqueId}</td>
+        <td><span class="pill ${online ? 'on' : 'off'}"><span class="dot"></span>${online ? 'En línea' : 'Sin señal'}</span></td>
+        <td>${fmtFecha(d.lastUpdate)}</td>
+        <td><select id="sel-${cssId(d.uniqueId)}">${opciones}</select></td>
+        <td><button class="btn-save" onclick="guardar('${jsEsc(d.uniqueId)}')">Guardar</button></td>
+      </tr>`;
+    }).join('');
+  }
+
+  function cssId(s) { return s.replace(/[^a-zA-Z0-9_-]/g, '_'); }
+  function jsEsc(s) { return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"); }
+
+  async function guardar(uniqueId) {
+    const sel = document.getElementById('sel-' + cssId(uniqueId));
+    const busId = sel.value ? parseInt(sel.value, 10) : null;
+    try {
+      await apiFetch('/api/gps/dispositivos/' + encodeURIComponent(uniqueId), {
+        method: 'PUT',
+        body: JSON.stringify({ bus_id: busId }),
+      });
+      toast(busId ? 'Dispositivo vinculado al bus' : 'Dispositivo desvinculado');
+    } catch (e) { toast(e.message); }
+  }
+
+  let toastTimer = null;
+  function toast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.classList.remove('hidden');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.add('hidden'), 2600);
+  }
+</script>
+</body>
+</html>
