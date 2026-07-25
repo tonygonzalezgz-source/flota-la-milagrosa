@@ -8,7 +8,10 @@ from flask_cors import CORS
 import os
 import time
 import json
-from datetime import date, datetime, timedelta
+import urllib.request
+import urllib.parse
+import urllib.error
+from datetime import date, datetime, timedelta, timezone
 from functools import wraps
 from dotenv import load_dotenv
 
@@ -109,10 +112,10 @@ PG_SCHEMA    = os.path.join(os.path.dirname(__file__), "supabase_schema.sql")
 # Versión del esquema. IMPORTANTE: incrementar en 1 cada vez que se agregue
 # una migración (ALTER/CREATE) a migrate_db(); si no se incrementa, la
 # migración nueva NO corre en las BD ya versionadas.
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 ROLE_VIEWS = {
-    "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho", "historial-despacho", "gastos", "tecnologia", "chequeo", "eds"],
+    "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho", "historial-despacho", "gastos", "tecnologia", "chequeo", "eds", "mapa"],
     "Analista":       ["historial"],
     "Técnico Mant.":  ["mant"],
     "Técnico Cámaras":       ["tecnologia"],
@@ -516,6 +519,15 @@ def migrate_db():
             "CREATE INDEX IF NOT EXISTS idx_mant_hist_bus_item ON bus_mantenimiento_historial(bus_id, item_id, fecha_realizado DESC)",
             # Va después de crear puestos_trabajo (la referencia debe existir)
             "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS puesto_id INTEGER REFERENCES puestos_trabajo(id)",
+            # Rastreo GPS: vínculo bus↔dispositivo Traccar — SCHEMA_VERSION 3
+            """CREATE TABLE IF NOT EXISTS gps_dispositivos (
+                id          SERIAL PRIMARY KEY,
+                device_id   TEXT NOT NULL UNIQUE,
+                bus_id      INTEGER REFERENCES buses(id) ON DELETE SET NULL,
+                activo      INTEGER NOT NULL DEFAULT 1,
+                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )""",
         ]:
             try:
                 db.execute(tbl_sql)
@@ -791,6 +803,17 @@ def migrate_db():
         """)
         db.execute("CREATE INDEX IF NOT EXISTS idx_chequeos_fecha ON chequeos_despachador(fecha)")
         db.execute("CREATE INDEX IF NOT EXISTS idx_mant_hist_bus_item ON bus_mantenimiento_historial(bus_id, item_id, fecha_realizado DESC)")
+        # Rastreo GPS: vínculo bus↔dispositivo Traccar — SCHEMA_VERSION 3
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS gps_dispositivos (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                device_id   TEXT NOT NULL UNIQUE,
+                bus_id      INTEGER REFERENCES buses(id) ON DELETE SET NULL,
+                activo      INTEGER NOT NULL DEFAULT 1,
+                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
         for col_sql in [
             "ALTER TABLE buses ADD COLUMN propietario_id INTEGER REFERENCES propietarios(id)",
             "ALTER TABLE registros_movilidad ADD COLUMN ruta_id INTEGER REFERENCES rutas(id)",
@@ -3342,6 +3365,261 @@ def get_mant_alertas():
         return (rank, urg if urg is not None else 999999)
     alertas.sort(key=sort_key)
     return jsonify(alertas)
+
+
+# ──────────────────────────────────────────
+#  Rastreo GPS (consulta en vivo al servidor Traccar)
+# ──────────────────────────────────────────
+#
+# Arquitectura: las tablets corren Traccar Client y transmiten a un servidor
+# Traccar (demo.traccar.org o propio). BusControl NO guarda coordenadas: solo
+# el vínculo bus↔dispositivo (tabla gps_dispositivos). Cuando el usuario pulsa
+# "Localizar", el backend consulta el API REST de Traccar en el momento.
+
+TRACCAR_URL   = os.environ.get("TRACCAR_URL", "").rstrip("/")   # ej. https://demo.traccar.org
+TRACCAR_TOKEN = os.environ.get("TRACCAR_TOKEN", "")             # token de la cuenta Traccar
+
+# La API de Traccar (versiones recientes) solo acepta el token en /api/session,
+# que devuelve una cookie de sesión (JSESSIONID) reutilizable en el resto de
+# endpoints. Se cachea aquí para no reautenticar en cada consulta.
+_traccar_cookie = {"value": None}
+
+
+def _traccar_login():
+    """Abre sesión con el token y guarda la cookie. Devuelve el header Cookie."""
+    url = f"{TRACCAR_URL}/api/session?token={urllib.parse.quote(TRACCAR_TOKEN, safe='')}"
+    try:
+        with urllib.request.urlopen(url, timeout=8) as resp:
+            raw = resp.headers.get_all("Set-Cookie") or []
+    except urllib.error.HTTPError as e:
+        detail = "token revocado o inválido" if e.code in (400, 401, 403) else f"error {e.code}"
+        raise RuntimeError(f"Traccar rechazó la sesión ({detail}).")
+    except (urllib.error.URLError, TimeoutError) as e:
+        raise RuntimeError(f"No se pudo contactar el servidor Traccar: {e}")
+    cookie = "; ".join(c.split(";", 1)[0] for c in raw)
+    if not cookie:
+        raise RuntimeError("Traccar no devolvió cookie de sesión (revisa el token).")
+    _traccar_cookie["value"] = cookie
+    return cookie
+
+
+def _traccar_get(path, params=None):
+    """GET autenticado al API REST de Traccar (reusa/renueva la cookie de sesión)."""
+    if not TRACCAR_URL or not TRACCAR_TOKEN:
+        raise RuntimeError("Traccar no está configurado (faltan TRACCAR_URL o TRACCAR_TOKEN).")
+    qs  = ("?" + urllib.parse.urlencode(params)) if params else ""
+    url = f"{TRACCAR_URL}/api/{path}{qs}"
+
+    def _do():
+        cookie = _traccar_cookie["value"] or _traccar_login()
+        req = urllib.request.Request(url, headers={"Accept": "application/json", "Cookie": cookie})
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+
+    try:
+        return _do()
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403):           # cookie expirada → reautenticar una vez
+            _traccar_cookie["value"] = None
+            try:
+                return _do()
+            except urllib.error.HTTPError as e2:
+                raise RuntimeError(f"Traccar respondió con error {e2.code}.")
+            except (urllib.error.URLError, TimeoutError, ValueError) as e2:
+                raise RuntimeError(f"No se pudo contactar el servidor Traccar: {e2}")
+        raise RuntimeError(f"Traccar respondió con error {e.code}.")
+    except (urllib.error.URLError, TimeoutError, ValueError) as e:
+        raise RuntimeError(f"No se pudo contactar el servidor Traccar: {e}")
+
+
+def _traccar_devices():
+    """Lista normalizada de dispositivos de Traccar."""
+    return [
+        {"id": d.get("id"), "uniqueId": str(d.get("uniqueId")),
+         "name": d.get("name"), "status": d.get("status"),
+         "lastUpdate": d.get("lastUpdate")}
+        for d in _traccar_get("devices")
+    ]
+
+
+def _kmh(knots):
+    """Velocidad de nudos (formato de Traccar) a km/h."""
+    return round(knots * 1.852, 1) if isinstance(knots, (int, float)) else None
+
+
+def _hora_bogota(iso_utc):
+    """deviceTime ISO/UTC de Traccar → ('HH:MM:SS' en Bogotá, antigüedad en segundos)."""
+    if not iso_utc:
+        return None, None
+    try:
+        dt = datetime.fromisoformat(str(iso_utc).replace("Z", "+00:00"))
+        dt_utc = dt.astimezone(timezone.utc).replace(tzinfo=None) if dt.tzinfo else dt
+        edad = max(0, int((datetime.utcnow() - dt_utc).total_seconds()))
+        return (dt_utc - timedelta(hours=5)).strftime("%H:%M:%S"), edad
+    except (ValueError, TypeError):
+        return None, None
+
+
+@app.route("/api/gps/traccar/devices", methods=["GET"])
+@require_role("Administrador")
+def gps_traccar_devices():
+    """Dispositivos vistos por el servidor Traccar (para el mapeo device↔bus)."""
+    try:
+        return jsonify(_traccar_devices())
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 502
+
+
+@app.route("/api/gps/localizables", methods=["GET"])
+@require_role("Administrador", "Jefe de Ruta", "Propietario")
+def gps_localizables():
+    """Buses con dispositivo GPS asignado, para el selector 'Localiza tu bus'.
+    El propietario solo ve los suyos (usuario_buses); admin/jefe ven todos."""
+    db = get_db()
+    if getattr(request, "jwt_user_rol", None) == "Propietario":
+        rows = db.execute(
+            """SELECT d.device_id, b.id AS bus_id, b.numero, b.placa
+               FROM gps_dispositivos d
+               JOIN buses b ON b.id = d.bus_id
+               JOIN usuario_buses ub ON ub.bus_id = b.id
+               WHERE d.activo = 1 AND ub.usuario_id = ?
+               ORDER BY b.numero""",
+            (request.jwt_user_id,),
+        ).fetchall()
+    else:
+        rows = db.execute(
+            """SELECT d.device_id, b.id AS bus_id, b.numero, b.placa
+               FROM gps_dispositivos d JOIN buses b ON b.id = d.bus_id
+               WHERE d.activo = 1 ORDER BY b.numero"""
+        ).fetchall()
+    db.close()
+    return jsonify({
+        "traccar_configurado": bool(TRACCAR_URL and TRACCAR_TOKEN),
+        "buses": [dict(r) for r in rows],
+    })
+
+
+@app.route("/api/gps/localizar", methods=["GET"])
+@require_role("Administrador", "Jefe de Ruta", "Propietario")
+def gps_localizar():
+    """Ubicación en vivo de un bus/dispositivo, consultada al vuelo a Traccar.
+    El propietario solo puede localizar buses que le pertenecen."""
+    device_id = (request.args.get("device_id") or "").strip()
+    bus_id    = request.args.get("bus_id", type=int)
+    es_propietario = getattr(request, "jwt_user_rol", None) == "Propietario"
+
+    db = get_db()
+    if bus_id and not device_id:
+        row = db.execute(
+            "SELECT device_id FROM gps_dispositivos WHERE bus_id = ? AND activo = 1",
+            (bus_id,),
+        ).fetchone()
+        if row:
+            device_id = row["device_id"]
+    bus = None
+    if device_id:
+        b = db.execute(
+            """SELECT b.id, b.numero, b.placa FROM gps_dispositivos d
+               JOIN buses b ON b.id = d.bus_id WHERE d.device_id = ?""",
+            (device_id,),
+        ).fetchone()
+        if b:
+            bus = dict(b)
+        if es_propietario:
+            owned = db.execute(
+                """SELECT 1 FROM gps_dispositivos d
+                   JOIN usuario_buses ub ON ub.bus_id = d.bus_id
+                   WHERE d.device_id = ? AND ub.usuario_id = ?""",
+                (device_id, request.jwt_user_id),
+            ).fetchone()
+            if not owned:
+                db.close()
+                return jsonify({"error": "No autorizado para localizar este bus."}), 403
+    db.close()
+
+    if not device_id:
+        return jsonify({"error": "Ese bus no tiene un dispositivo GPS asignado."}), 404
+
+    try:
+        devices = _traccar_devices()
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 502
+    dev = next((d for d in devices if d["uniqueId"] == device_id), None)
+    if not dev:
+        return jsonify({"error": f"El dispositivo '{device_id}' no aparece en Traccar."}), 404
+
+    online = dev.get("status") == "online"
+    try:
+        posiciones = _traccar_get("positions", {"deviceId": dev["id"]})
+        if not posiciones:  # fallback: filtrar del listado completo
+            posiciones = [p for p in _traccar_get("positions") if p.get("deviceId") == dev["id"]]
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 502
+
+    if not posiciones:
+        return jsonify({"device_id": device_id, "nombre": dev.get("name"), "bus": bus,
+                        "online": online, "sin_posicion": True,
+                        "error": "El dispositivo todavía no ha reportado ninguna posición."}), 200
+
+    p = posiciones[0]
+    attrs = p.get("attributes") or {}
+    hora, edad = _hora_bogota(p.get("deviceTime") or p.get("fixTime"))
+    return jsonify({
+        "device_id":     device_id,
+        "nombre":        dev.get("name"),
+        "bus":           bus,
+        "online":        online,
+        "lat":           p.get("latitude"),
+        "lng":           p.get("longitude"),
+        "velocidad_kmh": _kmh(p.get("speed")),
+        "rumbo":         p.get("course"),
+        "altitud":       p.get("altitude"),
+        "bateria":       attrs.get("batteryLevel", attrs.get("battery")),
+        "hora":          hora,
+        "edad_segundos": edad,
+    })
+
+
+@app.route("/api/gps/dispositivos", methods=["GET"])
+@require_role("Administrador")
+def gps_dispositivos():
+    """Mapeos device↔bus guardados en BusControl."""
+    db = get_db()
+    rows = db.execute(
+        """SELECT d.device_id, d.bus_id, d.activo, b.numero AS bus_numero, b.placa AS bus_placa
+           FROM gps_dispositivos d LEFT JOIN buses b ON b.id = d.bus_id
+           ORDER BY d.device_id"""
+    ).fetchall()
+    db.close()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/gps/dispositivos/<device_id>", methods=["PUT"])
+@require_role("Administrador")
+def gps_asignar_dispositivo(device_id):
+    """Crea o actualiza el vínculo de un dispositivo Traccar con un bus
+    (bus_id null para desasignar)."""
+    data = request.get_json(silent=True) or {}
+    bus_id = data.get("bus_id")
+    if bus_id is not None:
+        try:
+            bus_id = int(bus_id)
+        except (TypeError, ValueError):
+            return jsonify({"error": "bus_id inválido"}), 400
+    db = get_db()
+    if bus_id is not None:
+        if not db.execute("SELECT id FROM buses WHERE id = ?", (bus_id,)).fetchone():
+            db.close()
+            return jsonify({"error": "El bus no existe"}), 404
+    db.execute(
+        """INSERT INTO gps_dispositivos (device_id, bus_id) VALUES (?, ?)
+           ON CONFLICT(device_id) DO UPDATE SET bus_id = excluded.bus_id,
+                                                updated_at = CURRENT_TIMESTAMP""",
+        (device_id, bus_id),
+    )
+    db.commit()
+    db.close()
+    return jsonify({"ok": True})
 
 
 # ──────────────────────────────────────────
