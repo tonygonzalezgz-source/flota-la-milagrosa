@@ -91,6 +91,37 @@
       transition:opacity .25s;
     }
     .toast.hidden { opacity:0; pointer-events:none; }
+
+    .modal-overlay {
+      position:fixed; inset:0; background:rgba(17,17,17,.45); z-index:1500;
+      display:flex; align-items:center; justify-content:center; padding:20px;
+    }
+    .modal-overlay.hidden { display:none; }
+    .modal {
+      background:var(--white); border-radius:var(--radius); box-shadow:0 12px 40px rgba(0,0,0,.28);
+      width:100%; max-width:460px; max-height:88vh; display:flex; flex-direction:column;
+    }
+    .modal-head {
+      padding:16px 18px; border-bottom:1px solid var(--border);
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+    }
+    .modal-head h3 { font-size:16px; font-weight:800; letter-spacing:-.2px; }
+    .modal-x { border:none; background:none; font-size:22px; line-height:1; color:var(--txt3); cursor:pointer; }
+    .modal-body { padding:16px 18px; overflow-y:auto; }
+    .modal-body .field { margin-bottom:14px; }
+    .modal-hint { font-size:12px; color:var(--txt3); line-height:1.6; margin-bottom:12px; }
+    .reloj-list { display:flex; flex-direction:column; gap:8px; }
+    .reloj-item {
+      display:flex; align-items:center; gap:10px; padding:9px 11px;
+      border:1.5px solid var(--border2); border-radius:var(--radius-s); cursor:pointer; font-size:13.5px;
+    }
+    .reloj-item:hover { border-color:var(--primary); }
+    .reloj-item input { width:16px; height:16px; cursor:pointer; }
+    .reloj-empty { font-size:13px; color:var(--txt3); padding:16px; text-align:center; line-height:1.6; }
+    .modal-foot {
+      padding:14px 18px; border-top:1px solid var(--border);
+      display:flex; justify-content:flex-end; gap:10px;
+    }
     @media (max-width:640px) {
       body { padding:16px; padding-top:64px; }
       select { min-width:140px; }
@@ -120,6 +151,7 @@
     </div>
     <button class="btn" id="buscarBtn" onclick="buscar()">Buscar</button>
     <div class="spacer"></div>
+    <button class="btn ghost" id="configBtn" onclick="abrirConfig()" style="display:none;">⚙ Asignar relojes a buses</button>
     <button class="btn excel" id="excelBtn" onclick="exportarExcel()" style="display:none;">Exportar Excel</button>
   </div>
 
@@ -139,6 +171,32 @@
           <tr><td colspan="5"><div class="empty">Elige una fecha y pulsa <b>Buscar</b> para ver los pasos.</div></td></tr>
         </tbody>
       </table>
+    </div>
+  </div>
+
+  <div class="modal-overlay hidden" id="configModal">
+    <div class="modal">
+      <div class="modal-head">
+        <h3>Asignar relojes a buses</h3>
+        <button class="modal-x" onclick="cerrarConfig()" title="Cerrar">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-hint">
+          Elige un bus y marca los puntos de control (<b>Reloj</b>) que le corresponden por su ruta.
+          Si un bus no tiene ninguno marcado, contará <b>todos</b> los relojes (comportamiento por defecto).
+        </div>
+        <div class="field">
+          <label for="cfgBus">Bus</label>
+          <select id="cfgBus" onchange="cargarRelojesBus()"><option value="">Selecciona un bus…</option></select>
+        </div>
+        <div class="reloj-list" id="cfgRelojes">
+          <div class="reloj-empty">Selecciona un bus para ver los relojes disponibles.</div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn ghost" onclick="cerrarConfig()">Cancelar</button>
+        <button class="btn" id="cfgGuardarBtn" onclick="guardarRelojesBus()" disabled>Guardar</button>
+      </div>
     </div>
   </div>
 
@@ -163,6 +221,9 @@
   }
 
   let ultimosPasos = [];
+  let busesGps = [];          // buses con GPS (para el selector de configuración)
+  let relojesDisponibles = []; // geocercas "Reloj" de Traccar
+  let asignaciones = {};       // { bus_id: [{geocerca_id, geocerca_nombre}] }
 
   const LIB_EXCELJS = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
   const _libsCargadas = {};
@@ -196,21 +257,108 @@
     // Botón Excel solo para Administrador
     try {
       const u = JSON.parse(localStorage.getItem('currentUser') || '{}');
-      if (u.rol === 'Administrador') document.getElementById('excelBtn').style.display = 'inline-flex';
+      if (u.rol === 'Administrador') {
+        document.getElementById('excelBtn').style.display = 'inline-flex';
+        document.getElementById('configBtn').style.display = 'inline-flex';
+      }
     } catch (e) { /* ignore */ }
     if (_inicializado) return;
     _inicializado = true;
     // Poblar selector de buses con GPS
     try {
       const data = await apiFetch('/api/gps/localizables');
+      busesGps = data.buses || [];
       const sel = document.getElementById('fBus');
-      (data.buses || []).forEach(b => {
+      busesGps.forEach(b => {
         const o = document.createElement('option');
         o.value = b.bus_id;
         o.textContent = `Bus ${b.numero} · ${b.placa}`;
         sel.appendChild(o);
       });
     } catch (e) { /* selector opcional */ }
+  }
+
+  // ── Configuración: asignar relojes a buses (solo Administrador) ──
+  async function abrirConfig() {
+    const modal = document.getElementById('configModal');
+    modal.classList.remove('hidden');
+    const cont = document.getElementById('cfgRelojes');
+    cont.innerHTML = `<div class="reloj-empty">Cargando relojes de Traccar…</div>`;
+    try {
+      const [geo, asig] = await Promise.all([
+        apiFetch('/api/gps/geocercas'),
+        apiFetch('/api/gps/bus-relojes'),
+      ]);
+      if (!geo.traccar_configurado) {
+        cont.innerHTML = `<div class="reloj-empty">Traccar no está configurado.</div>`;
+        return;
+      }
+      relojesDisponibles = geo.geocercas || [];
+      asignaciones = asig || {};
+    } catch (e) {
+      cont.innerHTML = `<div class="reloj-empty">No se pudieron cargar los relojes.<br>${e.message}</div>`;
+      return;
+    }
+    // Poblar selector de buses (todos los que tienen GPS)
+    const sel = document.getElementById('cfgBus');
+    sel.innerHTML = '<option value="">Selecciona un bus…</option>';
+    busesGps.forEach(b => {
+      const o = document.createElement('option');
+      o.value = b.bus_id;
+      o.textContent = `Bus ${b.numero} · ${b.placa}`;
+      sel.appendChild(o);
+    });
+    cargarRelojesBus();
+  }
+
+  function cerrarConfig() {
+    document.getElementById('configModal').classList.add('hidden');
+  }
+
+  function cargarRelojesBus() {
+    const busId = document.getElementById('cfgBus').value;
+    const cont = document.getElementById('cfgRelojes');
+    const btn = document.getElementById('cfgGuardarBtn');
+    if (!busId) {
+      cont.innerHTML = `<div class="reloj-empty">Selecciona un bus para ver los relojes disponibles.</div>`;
+      btn.disabled = true;
+      return;
+    }
+    if (!relojesDisponibles.length) {
+      cont.innerHTML = `<div class="reloj-empty">No hay geocercas <b>Reloj</b> en Traccar.<br>Crea al menos una geocerca cuyo nombre incluya "Reloj".</div>`;
+      btn.disabled = true;
+      return;
+    }
+    btn.disabled = false;
+    const asignados = new Set((asignaciones[busId] || []).map(r => r.geocerca_id));
+    cont.innerHTML = relojesDisponibles.map(g => `
+      <label class="reloj-item">
+        <input type="checkbox" value="${g.id}" data-nombre="${(g.nombre || '').replace(/"/g, '&quot;')}" ${asignados.has(g.id) ? 'checked' : ''}>
+        <span>${g.nombre || 'Reloj ' + g.id}</span>
+      </label>`).join('');
+  }
+
+  async function guardarRelojesBus() {
+    const busId = document.getElementById('cfgBus').value;
+    if (!busId) { toast('Selecciona un bus'); return; }
+    const btn = document.getElementById('cfgGuardarBtn');
+    btn.disabled = true;
+    const marcados = [...document.querySelectorAll('#cfgRelojes input:checked')].map(c => ({
+      id: parseInt(c.value, 10),
+      nombre: c.getAttribute('data-nombre') || '',
+    }));
+    try {
+      await apiFetch('/api/gps/bus-relojes/' + encodeURIComponent(busId), {
+        method: 'PUT',
+        body: JSON.stringify({ geocercas: marcados }),
+      });
+      asignaciones[busId] = marcados.map(m => ({ geocerca_id: m.id, geocerca_nombre: m.nombre }));
+      toast('Asignación guardada');
+    } catch (e) {
+      toast('No se pudo guardar: ' + e.message);
+    } finally {
+      btn.disabled = false;
+    }
   }
 
   async function buscar() {

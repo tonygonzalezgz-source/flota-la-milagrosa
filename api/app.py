@@ -112,7 +112,7 @@ PG_SCHEMA    = os.path.join(os.path.dirname(__file__), "supabase_schema.sql")
 # Versión del esquema. IMPORTANTE: incrementar en 1 cada vez que se agregue
 # una migración (ALTER/CREATE) a migrate_db(); si no se incrementa, la
 # migración nueva NO corre en las BD ya versionadas.
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 ROLE_VIEWS = {
     "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho", "historial-despacho", "gastos", "tecnologia", "chequeo", "eds", "mapa", "relojes"],
@@ -528,6 +528,15 @@ def migrate_db():
                 created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )""",
+            # Asignación manual de geocercas "Reloj" a cada bus — SCHEMA_VERSION 4
+            """CREATE TABLE IF NOT EXISTS gps_bus_relojes (
+                id              SERIAL PRIMARY KEY,
+                bus_id          INTEGER NOT NULL REFERENCES buses(id) ON DELETE CASCADE,
+                geocerca_id     INTEGER NOT NULL,
+                geocerca_nombre TEXT,
+                created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(bus_id, geocerca_id)
+            )""",
         ]:
             try:
                 db.execute(tbl_sql)
@@ -812,6 +821,17 @@ def migrate_db():
                 activo      INTEGER NOT NULL DEFAULT 1,
                 created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        # Asignación manual de geocercas "Reloj" a cada bus — SCHEMA_VERSION 4
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS gps_bus_relojes (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                bus_id          INTEGER NOT NULL REFERENCES buses(id) ON DELETE CASCADE,
+                geocerca_id     INTEGER NOT NULL,
+                geocerca_nombre TEXT,
+                created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(bus_id, geocerca_id)
             )
         """)
         for col_sql in [
@@ -3618,7 +3638,7 @@ def gps_relojes_reporte():
 
     # Dispositivos a consultar (los que tienen bus asignado; filtro opcional por bus).
     db = get_db()
-    q = """SELECT d.device_id, b.numero AS bus_numero, b.placa AS bus_placa
+    q = """SELECT d.device_id, b.id AS bus_id, b.numero AS bus_numero, b.placa AS bus_placa
            FROM gps_dispositivos d JOIN buses b ON b.id = d.bus_id
            WHERE d.activo = 1"""
     args = []
@@ -3626,6 +3646,12 @@ def gps_relojes_reporte():
         q += " AND b.id = ?"
         args.append(bus_id)
     rows = db.execute(q, tuple(args)).fetchall()
+    # Asignación manual reloj↔bus: {bus_id: {geocerca_id, ...}}. Si un bus tiene
+    # relojes asignados, solo esos cuentan para él; si no tiene ninguno, se toman
+    # todas las geocercas "Reloj" (comportamiento anterior, retrocompatible).
+    relojes_por_bus = {}
+    for r in db.execute("SELECT bus_id, geocerca_id FROM gps_bus_relojes").fetchall():
+        relojes_por_bus.setdefault(r["bus_id"], set()).add(r["geocerca_id"])
     db.close()
     por_device = {r["device_id"]: dict(r) for r in rows}
     if not por_device:
@@ -3652,6 +3678,7 @@ def gps_relojes_reporte():
             })
         except RuntimeError as e:
             return jsonify({"error": str(e)}), 502
+        asignadas = relojes_por_bus.get(info["bus_id"])
         for ev in eventos or []:
             geo_id = ev.get("geofenceId")
             if not geo_id:
@@ -3659,6 +3686,9 @@ def gps_relojes_reporte():
             punto = geocercas.get(geo_id)
             # Solo puntos de control "Reloj" (ignora terminal u otras zonas)
             if not punto or "reloj" not in punto.lower():
+                continue
+            # Si el bus tiene relojes asignados manualmente, respetar esa lista.
+            if asignadas and geo_id not in asignadas:
                 continue
             hora, _ = _hora_bogota(ev.get("eventTime"))
             fecha_ev = None
@@ -3718,6 +3748,70 @@ def gps_asignar_dispositivo(device_id):
                                                 updated_at = CURRENT_TIMESTAMP""",
         (device_id, bus_id),
     )
+    db.commit()
+    db.close()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/gps/geocercas", methods=["GET"])
+@require_role("Administrador")
+def gps_geocercas():
+    """Geocercas 'Reloj' definidas en Traccar (para asignarlas manualmente a buses)."""
+    if not (TRACCAR_URL and TRACCAR_TOKEN):
+        return jsonify({"traccar_configurado": False, "geocercas": []})
+    try:
+        geocercas = _traccar_geofences()
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 502
+    relojes = [
+        {"id": gid, "nombre": nombre}
+        for gid, nombre in geocercas.items()
+        if nombre and "reloj" in nombre.lower()
+    ]
+    relojes.sort(key=lambda g: (g["nombre"] or "").lower())
+    return jsonify({"traccar_configurado": True, "geocercas": relojes})
+
+
+@app.route("/api/gps/bus-relojes", methods=["GET"])
+@require_role("Administrador")
+def gps_bus_relojes():
+    """Asignaciones manuales reloj↔bus. Devuelve un mapa por bus con sus relojes."""
+    db = get_db()
+    rows = db.execute(
+        "SELECT bus_id, geocerca_id, geocerca_nombre FROM gps_bus_relojes"
+    ).fetchall()
+    db.close()
+    por_bus = {}
+    for r in rows:
+        por_bus.setdefault(str(r["bus_id"]), []).append(
+            {"geocerca_id": r["geocerca_id"], "geocerca_nombre": r["geocerca_nombre"]}
+        )
+    return jsonify(por_bus)
+
+
+@app.route("/api/gps/bus-relojes/<int:bus_id>", methods=["PUT"])
+@require_role("Administrador")
+def gps_asignar_relojes(bus_id):
+    """Reemplaza la lista de geocercas 'Reloj' asignadas a un bus.
+    Body: {"geocercas": [{"id": 12, "nombre": "Reloj Milagrosa"}, ...]}.
+    Lista vacía = el bus vuelve a contar todos los relojes (comportamiento por defecto)."""
+    data = request.get_json(silent=True) or {}
+    geocercas = data.get("geocercas") or []
+    db = get_db()
+    if not db.execute("SELECT id FROM buses WHERE id = ?", (bus_id,)).fetchone():
+        db.close()
+        return jsonify({"error": "El bus no existe"}), 404
+    db.execute("DELETE FROM gps_bus_relojes WHERE bus_id = ?", (bus_id,))
+    for g in geocercas:
+        try:
+            gid = int(g.get("id"))
+        except (TypeError, ValueError, AttributeError):
+            continue
+        nombre = (g.get("nombre") or "").strip() or None
+        db.execute(
+            "INSERT INTO gps_bus_relojes (bus_id, geocerca_id, geocerca_nombre) VALUES (?, ?, ?)",
+            (bus_id, gid, nombre),
+        )
     db.commit()
     db.close()
     return jsonify({"ok": True})
