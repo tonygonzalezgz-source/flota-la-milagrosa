@@ -115,7 +115,7 @@ PG_SCHEMA    = os.path.join(os.path.dirname(__file__), "supabase_schema.sql")
 SCHEMA_VERSION = 3
 
 ROLE_VIEWS = {
-    "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho", "historial-despacho", "gastos", "tecnologia", "chequeo", "eds", "mapa"],
+    "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho", "historial-despacho", "gastos", "tecnologia", "chequeo", "eds", "mapa", "relojes"],
     "Analista":       ["historial"],
     "Técnico Mant.":  ["mant"],
     "Técnico Cámaras":       ["tecnologia"],
@@ -123,7 +123,7 @@ ROLE_VIEWS = {
     "Operador EDS":   ["eds"],
     "Propietario":    ["propietario", "gastos", "tecnologia"],
     "Despachador":    ["despacho", "historial-despacho", "chequeo"],
-    "Jefe de Ruta":   ["dashboard", "despacho", "historial-despacho", "chequeo", "alistamiento"],
+    "Jefe de Ruta":   ["dashboard", "despacho", "historial-despacho", "chequeo", "alistamiento", "relojes"],
     "Conductor":      ["alistamiento"],
 }
 
@@ -3442,6 +3442,11 @@ def _traccar_devices():
     ]
 
 
+def _traccar_geofences():
+    """Mapa {id: nombre} de las geocercas definidas en Traccar (p. ej. 'Reloj 1')."""
+    return {g.get("id"): g.get("name") for g in _traccar_get("geofences")}
+
+
 def _kmh(knots):
     """Velocidad de nudos (formato de Traccar) a km/h."""
     return round(knots * 1.852, 1) if isinstance(knots, (int, float)) else None
@@ -3578,6 +3583,93 @@ def gps_localizar():
         "hora":          hora,
         "edad_segundos": edad,
     })
+
+
+@app.route("/api/gps/relojes/reporte", methods=["GET"])
+@require_role("Administrador", "Jefe de Ruta")
+def gps_relojes_reporte():
+    """Reporte de pasos por los puntos de control ('Reloj'): a qué hora cruzó cada
+    bus cada geocerca de Traccar en un rango de fechas. Consulta en vivo el histórico
+    de eventos geofenceEnter de Traccar; no se guarda nada en BusControl."""
+    if not (TRACCAR_URL and TRACCAR_TOKEN):
+        return jsonify({"traccar_configurado": False, "pasos": []})
+
+    fecha     = (request.args.get("fecha") or hoy_bogota()).strip()
+    fecha_fin = (request.args.get("fecha_fin") or fecha).strip()
+    bus_id    = request.args.get("bus_id", type=int)
+
+    # Rango [fecha 00:00, fecha_fin 23:59:59] en Bogotá → UTC (Bogotá = UTC-5).
+    try:
+        desde_utc = (datetime.fromisoformat(f"{fecha}T00:00:00") + timedelta(hours=5))
+        hasta_utc = (datetime.fromisoformat(f"{fecha_fin}T23:59:59") + timedelta(hours=5))
+    except ValueError:
+        return jsonify({"error": "Fecha inválida (usa YYYY-MM-DD)."}), 400
+    from_iso = desde_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+    to_iso   = hasta_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    # Dispositivos a consultar (los que tienen bus asignado; filtro opcional por bus).
+    db = get_db()
+    q = """SELECT d.device_id, b.numero AS bus_numero, b.placa AS bus_placa
+           FROM gps_dispositivos d JOIN buses b ON b.id = d.bus_id
+           WHERE d.activo = 1"""
+    args = []
+    if bus_id:
+        q += " AND b.id = ?"
+        args.append(bus_id)
+    rows = db.execute(q, tuple(args)).fetchall()
+    db.close()
+    por_device = {r["device_id"]: dict(r) for r in rows}
+    if not por_device:
+        return jsonify({"traccar_configurado": True, "pasos": []})
+
+    try:
+        devices   = _traccar_devices()
+        geocercas = _traccar_geofences()
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 502
+
+    # uniqueId (device_id guardado) → id interno de Traccar
+    id_traccar = {d["uniqueId"]: d["id"] for d in devices}
+
+    pasos = []
+    for device_id, info in por_device.items():
+        traccar_id = id_traccar.get(device_id)
+        if traccar_id is None:
+            continue  # el dispositivo aún no aparece en Traccar
+        try:
+            eventos = _traccar_get("reports/events", {
+                "from": from_iso, "to": to_iso,
+                "deviceId": traccar_id, "type": "geofenceEnter",
+            })
+        except RuntimeError as e:
+            return jsonify({"error": str(e)}), 502
+        for ev in eventos or []:
+            geo_id = ev.get("geofenceId")
+            if not geo_id:
+                continue
+            punto = geocercas.get(geo_id)
+            # Solo puntos de control "Reloj" (ignora terminal u otras zonas)
+            if not punto or "reloj" not in punto.lower():
+                continue
+            hora, _ = _hora_bogota(ev.get("eventTime"))
+            fecha_ev = None
+            try:
+                dt = datetime.fromisoformat(str(ev.get("eventTime")).replace("Z", "+00:00"))
+                dt_utc = dt.astimezone(timezone.utc).replace(tzinfo=None) if dt.tzinfo else dt
+                fecha_ev = (dt_utc - timedelta(hours=5)).strftime("%Y-%m-%d")
+            except (ValueError, TypeError):
+                pass
+            pasos.append({
+                "bus_numero": info["bus_numero"],
+                "bus_placa":  info["bus_placa"],
+                "punto":      punto,
+                "fecha":      fecha_ev,
+                "hora":       hora,
+                "eventTime":  ev.get("eventTime"),
+            })
+
+    pasos.sort(key=lambda p: p["eventTime"] or "")
+    return jsonify({"traccar_configurado": True, "pasos": pasos})
 
 
 @app.route("/api/gps/dispositivos", methods=["GET"])
