@@ -945,10 +945,19 @@ def login():
     else:
         valid = (stored_pw == password)
         if valid:
-            # Hashear y guardar para la próxima vez
-            hashed = generate_password_hash(password, method='pbkdf2:sha256')
-            db.execute("UPDATE usuarios SET password = ? WHERE id = ?", (hashed, user["id"]))
-            db.commit()
+            # Hashear y guardar para la próxima vez. Si la escritura falla (BD en
+            # solo lectura, pooler, etc.) NO se debe bloquear el inicio de sesión:
+            # el usuario ya se autenticó. Se registra el error para diagnóstico.
+            try:
+                hashed = generate_password_hash(password, method='pbkdf2:sha256')
+                db.execute("UPDATE usuarios SET password = ? WHERE id = ?", (hashed, user["id"]))
+                db.commit()
+            except Exception as e:
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
+                print(f"[login] no se pudo migrar la contraseña del usuario {user['id']}: {e}")
 
     if not valid:
         db.close()
