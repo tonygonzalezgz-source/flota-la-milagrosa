@@ -262,7 +262,7 @@
     .dc-stat-val.amber { color: #fbbf24; }
     .dc-stat-val.up    { color: #4ade80; }
     .dc-stat-val.down  { color: #f87171; }
-    .dc-chart-wrap { height: 230px; position: relative; margin: 8px -6px 0; }
+    .dc-chart-wrap { height: 280px; position: relative; margin: 8px -6px 0; }
     .dark-card .empty-state p     { color: #9ca3af; }
     .dark-card .empty-state small { color: #4b5563; }
     .dark-card .empty-state svg   { color: #374151; }
@@ -390,6 +390,40 @@
       align-items: center; justify-content: center; gap: 8px;
       color: #ccc; font-size: 12px;
     }
+    .trend-card.buses::before { background: linear-gradient(90deg,#f97316,#fbbf24); }
+
+    /* ─── LEYENDAS DE BARRAS ─── */
+    .lg-item {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 11px; font-weight: 600; color: #6b7280;
+    }
+    .lg-dot { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+    .dc-legend { display: flex; gap: 16px; margin: 2px 0 -2px; }
+    .dc-legend .lg-item { color: #9ca3af; }
+    .bar-legend { display: flex; gap: 16px; margin: 4px 0 0; }
+
+    /* ─── COLUMNAS DEL GRID (izquierda: hero+dona / derecha: rutas) ─── */
+    .content-main { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+    .content-side { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+    /* La tarjeta de rutas llena su columna; el resumen queda anclado abajo */
+    .content-side > .card { flex: 1; display: flex; flex-direction: column; }
+    .content-side > .card .resumen-stats { margin-top: auto; }
+
+    /* ─── DONA ESTADO DE FLOTA ─── */
+    .donut-wrap { display: flex; align-items: center; gap: 16px; }
+    .donut-canvas { position: relative; width: 118px; height: 118px; flex-shrink: 0; }
+    .donut-center {
+      position: absolute; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; pointer-events: none;
+    }
+    .donut-center-val { font-size: 24px; font-weight: 800; color: #111; line-height: 1; }
+    .donut-center-lbl { font-size: 10px; color: #aaa; text-transform: uppercase; letter-spacing: .5px; margin-top: 2px; }
+    .donut-legend { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+    .dl-item { display: flex; align-items: center; gap: 8px; }
+    .dl-dot { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+    .dl-name { flex: 1; font-size: 12px; color: #444; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .dl-val  { font-size: 12px; font-weight: 700; color: #111; }
+    .dl-pct  { font-size: 11px; color: #aaa; min-width: 34px; text-align: right; }
 
     /* ─── EMPTY STATE ─── */
     .empty-state {
@@ -584,6 +618,7 @@
     @media (max-width: 480px) {
       .kpi-row { grid-template-columns: 1fr; }
       .resumen-stats { grid-template-columns: 1fr; }
+      .donut-wrap { flex-wrap: wrap; justify-content: center; }
       .trend-stats { font-size: 12px; }
       .greeting-big { font-size: 20px; }
       .trend-big { font-size: 24px; }
@@ -893,102 +928,140 @@
     <!-- CONTENT GRID -->
     <div class="content-grid">
 
-      <!-- LEFT: Pasajeros diarios (14 días) -->
-      <div class="dark-card">
-        <div class="dc-header">
-          <div class="dc-left">
-            <div class="dc-label">Pasajeros diarios · Últimos 14 días</div>
-            <div class="dc-big-row">
-              <span class="dc-big" id="dcTotal">—</span>
-              <span class="dc-badge flat" id="dcBadge">—</span>
+      <!-- LEFT: Pasajeros movilizados + estado de la flota -->
+      <div class="content-main">
+
+        <div class="dark-card">
+          <div class="dc-header">
+            <div class="dc-left">
+              <div class="dc-label">Pasajeros movilizados · Esta semana vs. anterior</div>
+              <div class="dc-big-row">
+                <span class="dc-big" id="dcTotal">—</span>
+                <span class="dc-badge flat" id="dcBadge">—</span>
+              </div>
+              <div class="dc-period" id="dcPeriod">—</div>
             </div>
-            <div class="dc-period" id="dcPeriod">—</div>
+            <div class="dc-stats">
+              <div class="dc-stat"><span class="dc-stat-lbl">Máx</span><span class="dc-stat-val blue" id="dcMax">—</span></div>
+              <div class="dc-stat"><span class="dc-stat-lbl">Mín</span><span class="dc-stat-val amber" id="dcMin">—</span></div>
+              <div class="dc-stat"><span class="dc-stat-lbl">Cambio</span><span class="dc-stat-val" id="dcCambio">—</span></div>
+            </div>
           </div>
-          <div class="dc-stats">
-            <div class="dc-stat"><span class="dc-stat-lbl">Máx</span><span class="dc-stat-val blue" id="dcMax">—</span></div>
-            <div class="dc-stat"><span class="dc-stat-lbl">Mín</span><span class="dc-stat-val amber" id="dcMin">—</span></div>
-            <div class="dc-stat"><span class="dc-stat-lbl">Cambio</span><span class="dc-stat-val" id="dcCambio">—</span></div>
+          <div class="dc-legend">
+            <span class="lg-item"><span class="lg-dot" style="background:#a78bfa"></span>Esta semana</span>
+            <span class="lg-item"><span class="lg-dot" style="background:#4b5563"></span>Semana pasada</span>
+          </div>
+          <div class="dc-chart-wrap" id="dcChartWrap">
+            <canvas id="barPax"></canvas>
           </div>
         </div>
-        <div class="dc-chart-wrap" id="dcChartWrap">
-          <canvas id="chartPaxDiarios"></canvas>
+
+        <!-- Estado de la flota (dona) -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Estado de la flota</div>
+              <div class="card-sub">Hoy · según despacho</div>
+            </div>
+          </div>
+          <div class="donut-wrap">
+            <div class="donut-canvas">
+              <canvas id="donutFlota"></canvas>
+              <div class="donut-center"><span class="donut-center-val" id="donutTotal">—</span><span class="donut-center-lbl">buses</span></div>
+            </div>
+            <div class="donut-legend" id="donutLegend"></div>
+          </div>
         </div>
+
       </div>
 
-      <!-- RIGHT: Desglose por ruta -->
-      <div class="card">
-        <div class="card-header">
-          <div>
-            <div class="card-title">Pasajeros por Ruta</div>
-            <div class="card-sub">Distribución del día</div>
+      <!-- RIGHT: desglose por ruta -->
+      <div class="content-side">
+
+        <!-- Pasajeros por ruta -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Pasajeros por Ruta</div>
+              <div class="card-sub">Distribución del día</div>
+            </div>
           </div>
-        </div>
-        <div class="rutas-list" id="rutasList">
-          <div class="ruta-empty">Cargando…</div>
+          <div class="rutas-list" id="rutasList">
+            <div class="ruta-empty">Cargando…</div>
+          </div>
+
+          <div class="resumen-stats" id="resumenStats" style="display:none">
+            <div class="rs-item">
+              <div class="rs-val" id="rsKm">—</div>
+              <div class="rs-lbl">Km recorridos</div>
+            </div>
+            <div class="rs-item">
+              <div class="rs-val" id="rsProm">—</div>
+              <div class="rs-lbl">Pax / bus promedio</div>
+            </div>
+            <div class="rs-item">
+              <div class="rs-val" id="rsVueltas">—</div>
+              <div class="rs-lbl">Vueltas totales</div>
+            </div>
+            <div class="rs-item">
+              <div class="rs-val" id="rsRutas">—</div>
+              <div class="rs-lbl">Rutas activas</div>
+            </div>
+          </div>
         </div>
 
-        <div class="resumen-stats" id="resumenStats" style="display:none">
-          <div class="rs-item">
-            <div class="rs-val" id="rsKm">—</div>
-            <div class="rs-lbl">Km recorridos</div>
-          </div>
-          <div class="rs-item">
-            <div class="rs-val" id="rsProm">—</div>
-            <div class="rs-lbl">Pax / bus promedio</div>
-          </div>
-          <div class="rs-item">
-            <div class="rs-val" id="rsVueltas">—</div>
-            <div class="rs-lbl">Vueltas totales</div>
-          </div>
-          <div class="rs-item">
-            <div class="rs-val" id="rsRutas">—</div>
-            <div class="rs-lbl">Rutas activas</div>
-          </div>
-        </div>
       </div>
 
     </div>
 
-    <!-- TENDENCIAS -->
+    <!-- COMPARATIVOS: esta semana vs. semana anterior -->
     <div class="trend-row">
 
-      <!-- Pasajeros trend -->
-      <div class="trend-card pax">
-        <div class="trend-label">Pasajeros movilizados</div>
-        <div class="trend-top">
-          <div>
-            <div class="trend-big" id="trendPaxTotal">—</div>
-            <div class="trend-period" id="trendPaxPeriod">Últimos 14 días</div>
-          </div>
-          <span class="trend-badge flat" id="trendPaxBadge">—</span>
-        </div>
-        <div class="trend-chart-wrap">
-          <canvas id="chartPax"></canvas>
-        </div>
-        <div class="trend-stats">
-          <div class="ts-item"><div class="ts-val" id="tsPaxMin">—</div><div class="ts-lbl">Mínimo</div></div>
-          <div class="ts-item"><div class="ts-val" id="tsPaxProm">—</div><div class="ts-lbl">Promedio</div></div>
-          <div class="ts-item"><div class="ts-val" id="tsPaxMax">—</div><div class="ts-lbl">Máximo</div></div>
-        </div>
-      </div>
-
-      <!-- Viajes trend -->
+      <!-- Viajes (vueltas) -->
       <div class="trend-card viajes">
         <div class="trend-label">Viajes (Vueltas) realizadas</div>
         <div class="trend-top">
           <div>
             <div class="trend-big" id="trendViajesTotal">—</div>
-            <div class="trend-period" id="trendViajesPeriod">Últimos 14 días</div>
+            <div class="trend-period" id="trendViajesPeriod">Esta semana vs. anterior</div>
           </div>
           <span class="trend-badge flat" id="trendViajesBadge">—</span>
         </div>
+        <div class="bar-legend">
+          <span class="lg-item"><span class="lg-dot" style="background:#10b981"></span>Esta semana</span>
+          <span class="lg-item"><span class="lg-dot" style="background:#d1d5db"></span>Semana pasada</span>
+        </div>
         <div class="trend-chart-wrap">
-          <canvas id="chartViajes"></canvas>
+          <canvas id="barViajes"></canvas>
         </div>
         <div class="trend-stats">
           <div class="ts-item"><div class="ts-val" id="tsViajesMin">—</div><div class="ts-lbl">Mínimo</div></div>
           <div class="ts-item"><div class="ts-val" id="tsViajesProm">—</div><div class="ts-lbl">Promedio</div></div>
           <div class="ts-item"><div class="ts-val" id="tsViajesMax">—</div><div class="ts-lbl">Máximo</div></div>
+        </div>
+      </div>
+
+      <!-- Vehículos que trabajaron -->
+      <div class="trend-card buses">
+        <div class="trend-label">Vehículos que trabajaron</div>
+        <div class="trend-top">
+          <div>
+            <div class="trend-big" id="trendBusesTotal">—</div>
+            <div class="trend-period" id="trendBusesPeriod">Promedio diario · esta semana vs. anterior</div>
+          </div>
+          <span class="trend-badge flat" id="trendBusesBadge">—</span>
+        </div>
+        <div class="bar-legend">
+          <span class="lg-item"><span class="lg-dot" style="background:#f97316"></span>Esta semana</span>
+          <span class="lg-item"><span class="lg-dot" style="background:#d1d5db"></span>Semana pasada</span>
+        </div>
+        <div class="trend-chart-wrap">
+          <canvas id="barBuses"></canvas>
+        </div>
+        <div class="trend-stats">
+          <div class="ts-item"><div class="ts-val" id="tsBusesMin">—</div><div class="ts-lbl">Mínimo</div></div>
+          <div class="ts-item"><div class="ts-val" id="tsBusesProm">—</div><div class="ts-lbl">Promedio</div></div>
+          <div class="ts-item"><div class="ts-val" id="tsBusesMax">—</div><div class="ts-lbl">Máximo</div></div>
         </div>
       </div>
 
@@ -1018,9 +1091,10 @@
     let allBuses       = [];
     let allRutas       = [];
     let despachoBuses  = [];
-    let paxDiariosChart = null;
-    let trendPaxChart  = null;
-    let trendViajesChart = null;
+    let barPaxChart    = null;
+    let barViajesChart = null;
+    let barBusesChart  = null;
+    let donutFlotaChart = null;
     let fechaAyer      = '';
 
     const RUTAS_COLORS = [
@@ -1264,6 +1338,7 @@
 
         renderKpis();
         renderRutas();
+        renderDonutFlota();
         const series = buildSeriesDiarias(rangoData);
         renderPaxDiarios(series);
         renderTendencias(series);
@@ -1304,38 +1379,108 @@
       }
     }
 
-    /* Crosshair vertical punteado que sigue al tooltip (solo esta gráfica) */
-    const dcCrosshairPlugin = {
-      id: 'dcCrosshair',
-      afterDatasetsDraw(chart) {
-        const actives = chart.tooltip && chart.tooltip.getActiveElements();
-        if (!actives || !actives.length) return;
-        const x = actives[0].element.x;
-        const { top, bottom } = chart.chartArea;
-        const ctx = chart.ctx;
-        ctx.save();
-        ctx.setLineDash([4, 4]);
-        ctx.lineWidth = 1;
-        ctx.strokeStyle = 'rgba(255,255,255,.25)';
-        ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke();
-        ctx.restore();
-      }
-    };
+    /* Barras agrupadas: "Esta semana" (color) vs "Semana pasada" (gris) */
+    function buildBarComparativo({ canvasId, labels, actual, anterior, color, unidad, dark }) {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return null;
+      const ctx = canvas.getContext('2d');
+      const gridColor = dark ? 'rgba(255,255,255,.06)' : '#f0f0f0';
+      const tickColor = dark ? '#6b7280' : '#9ca3af';
+      return new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [
+            { label: 'Esta semana', data: actual, backgroundColor: color,
+              borderRadius: 6, borderSkipped: false, maxBarThickness: 22 },
+            { label: 'Semana pasada', data: anterior, backgroundColor: dark ? '#4b5563' : '#d1d5db',
+              borderRadius: 6, borderSkipped: false, maxBarThickness: 22 },
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: { duration: 600 },
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: dark ? '#1a1a20' : '#111',
+              titleColor: '#fff', bodyColor: dark ? '#c4b5fd' : '#ddd',
+              padding: 10, cornerRadius: 10, displayColors: true, boxWidth: 8, boxHeight: 8,
+              callbacks: { label: it => ` ${it.dataset.label}: ${it.raw.toLocaleString()} ${unidad}` }
+            }
+          },
+          scales: {
+            x: { grid: { display: false }, border: { display: false },
+                 ticks: { color: tickColor, font: { size: 10 }, maxRotation: 0 } },
+            y: { beginAtZero: true, grid: { color: gridColor, drawTicks: false },
+                 border: { display: false },
+                 ticks: { color: tickColor, font: { size: 10 }, maxTicksLimit: 5,
+                          callback: v => v >= 1000 ? (v / 1000) + 'k' : v } }
+          }
+        }
+      });
+    }
 
-    /* Glow morado sutil bajo la línea */
-    const dcGlowPlugin = {
-      id: 'dcGlow',
-      beforeDatasetDraw(chart) {
-        chart.ctx.save();
-        chart.ctx.shadowColor = 'rgba(139,92,246,.4)';
-        chart.ctx.shadowBlur = 10;
-        chart.ctx.shadowOffsetY = 3;
-      },
-      afterDatasetDraw(chart) { chart.ctx.restore(); }
-    };
+    /* Dona de estado de la flota HOY (según el despacho del día) */
+    function renderDonutFlota() {
+      const canvas = document.getElementById('donutFlota');
+      if (!canvas) return;
+      const trabajando = despachoBuses.filter(b => b.estado === 'trabajando').length;
+      const taller     = despachoBuses.filter(b => b.estado === 'taller').length;
+      const descanso   = despachoBuses.filter(b => b.estado === 'descanso').length;
+      const reportados = trabajando + taller + descanso;
+      const total      = allBuses.length;
+      const sinRep     = Math.max(0, total - reportados);
+
+      const segs = [
+        { name: 'Trabajando',   val: trabajando, color: '#22c55e' },
+        { name: 'En taller',    val: taller,     color: '#f97316' },
+        { name: 'Descanso',     val: descanso,   color: '#6366f1' },
+        { name: 'Sin reportar', val: sinRep,     color: '#d1d5db' },
+      ].filter(s => s.val > 0);
+
+      document.getElementById('donutTotal').textContent = total || '—';
+
+      const legend = document.getElementById('donutLegend');
+      if (!segs.length) {
+        legend.innerHTML = '<div class="ruta-empty" style="padding:10px 0">Sin despacho hoy</div>';
+        if (donutFlotaChart) { donutFlotaChart.destroy(); donutFlotaChart = null; }
+        return;
+      }
+      legend.innerHTML = segs.map(s => {
+        const pct = total > 0 ? Math.round(s.val / total * 100) : 0;
+        return `<div class="dl-item">
+          <span class="dl-dot" style="background:${s.color}"></span>
+          <span class="dl-name">${s.name}</span>
+          <span class="dl-val">${s.val}</span>
+          <span class="dl-pct">${pct}%</span>
+        </div>`;
+      }).join('');
+
+      if (donutFlotaChart) donutFlotaChart.destroy();
+      donutFlotaChart = new Chart(canvas.getContext('2d'), {
+        type: 'doughnut',
+        data: {
+          labels: segs.map(s => s.name),
+          datasets: [{ data: segs.map(s => s.val), backgroundColor: segs.map(s => s.color),
+                       borderWidth: 0, cutout: '70%' }]
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: { backgroundColor: '#111', padding: 9, cornerRadius: 8, displayColors: true,
+                       boxWidth: 8, boxHeight: 8,
+                       callbacks: { label: it => ` ${it.label}: ${it.raw} bus${it.raw !== 1 ? 'es' : ''}` } }
+          }
+        }
+      });
+    }
 
     function renderPaxDiarios(series) {
-      const { fechas, labelsCortos, paxSerie } = series;
+      const { fechas, paxSerie } = series;
       const wrap = document.getElementById('dcChartWrap');
 
       if (paxSerie.every(v => v === 0)) {
@@ -1387,103 +1532,18 @@
         cambioEl.className = 'dc-stat-val';
       }
 
-      /* ── Marcadores: primer dato, mínimo y máximo ── */
-      const marcados = new Set([
-        idxDatos[0],
-        paxSerie.indexOf(minVal),
-        paxSerie.indexOf(maxVal),
-      ]);
-
-      /* ── Chart ── */
-      if (paxDiariosChart) { paxDiariosChart.destroy(); paxDiariosChart = null; }
-      wrap.innerHTML = '<canvas id="chartPaxDiarios"></canvas>';
-      const ctx = document.getElementById('chartPaxDiarios').getContext('2d');
-
-      const grad = ctx.createLinearGradient(0, 0, 0, 230);
-      grad.addColorStop(0, 'rgba(139,92,246,.10)');
-      grad.addColorStop(1, 'rgba(139,92,246,0)');
-
-      /* Animación de dibujo progresivo (patrón oficial Chart.js 4) */
-      const totalDuration = 1100;
-      const delayBetween  = totalDuration / paxSerie.length;
-      const previousY = c => c.index === 0
-        ? c.chart.scales.y.getPixelForValue(0)
-        : c.chart.getDatasetMeta(c.datasetIndex).data[c.index - 1].getProps(['y'], true).y;
-      const progressiveAnim = {
-        x: {
-          type: 'number', easing: 'linear', duration: delayBetween, from: NaN,
-          delay(c) {
-            if (c.type !== 'data' || c.xStarted) return 0;
-            c.xStarted = true;
-            return c.index * delayBetween;
-          }
-        },
-        y: {
-          type: 'number', easing: 'linear', duration: delayBetween, from: previousY,
-          delay(c) {
-            if (c.type !== 'data' || c.yStarted) return 0;
-            c.yStarted = true;
-            return c.index * delayBetween;
-          }
-        }
-      };
-
-      paxDiariosChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: labelsCortos,
-          datasets: [{
-            data: paxSerie,
-            borderColor: '#8b5cf6',
-            borderWidth: 2.5,
-            tension: 0.4,
-            fill: true,
-            backgroundColor: grad,
-            pointRadius: c => marcados.has(c.dataIndex) ? 4.5 : 0,
-            pointBackgroundColor: '#a855f7',
-            pointBorderColor: '#fff',
-            pointBorderWidth: 2,
-            pointHoverRadius: 5,
-            pointHoverBackgroundColor: '#a855f7',
-            pointHoverBorderColor: '#fff',
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          animation: progressiveAnim,
-          interaction: { mode: 'index', intersect: false },
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              backgroundColor: '#1a1a20',
-              borderColor: 'rgba(255,255,255,.1)',
-              borderWidth: 1,
-              titleColor: '#fff',
-              bodyColor: '#c4b5fd',
-              displayColors: false,
-              padding: 10,
-              cornerRadius: 10,
-              callbacks: {
-                label: item => ` ${item.raw.toLocaleString()} pasajeros`
-              }
-            }
-          },
-          scales: {
-            x: {
-              grid: { display: false },
-              border: { display: false },
-              ticks: { color: '#6b7280', font: { size: 10 }, maxTicksLimit: 7, maxRotation: 0 }
-            },
-            y: {
-              grid: { color: 'rgba(255,255,255,.06)', drawTicks: false },
-              border: { display: false, dash: [3,3] },
-              ticks: { color: '#6b7280', font: { size: 10 }, maxTicksLimit: 5 },
-              min: 0
-            }
-          }
-        },
-        plugins: [dcCrosshairPlugin, dcGlowPlugin]
+      /* ── Chart: barras "esta semana" vs "semana pasada" ── */
+      if (barPaxChart) { barPaxChart.destroy(); barPaxChart = null; }
+      wrap.innerHTML = '<canvas id="barPax"></canvas>';
+      const semPax = splitSemanas(paxSerie, fechas);
+      barPaxChart = buildBarComparativo({
+        canvasId: 'barPax',
+        labels: semPax.labels,
+        actual: semPax.actual,
+        anterior: semPax.anterior,
+        color: '#a78bfa',
+        unidad: 'pasajeros',
+        dark: true,
       });
     }
 
@@ -1555,9 +1615,10 @@
       const byFecha = {};
       rangoData.forEach(r => {
         const key = toISODate(r.fecha);
-        if (!byFecha[key]) byFecha[key] = { pax: 0, vueltas: 0 };
+        if (!byFecha[key]) byFecha[key] = { pax: 0, vueltas: 0, buses: new Set() };
         byFecha[key].pax     += (r.pasajeros || 0);
         byFecha[key].vueltas += (r.vueltas   || 0);
+        if (r.bus_id != null) byFecha[key].buses.add(r.bus_id);
       });
 
       /* Genera array de las 14 fechas consecutivas */
@@ -1571,27 +1632,26 @@
 
       const paxSerie    = fechas.map(f => byFecha[f]?.pax     ?? 0);
       const viajesSerie = fechas.map(f => byFecha[f]?.vueltas ?? 0);
+      const busesSerie  = fechas.map(f => byFecha[f]?.buses.size ?? 0);
 
-      const labelsCortos = fechas.map(f => {
-        const p = f.slice(5).split('-');
-        const m = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-        return `${parseInt(p[1])} ${m[parseInt(p[0])-1]}`;
+      return { fechas, paxSerie, viajesSerie, busesSerie };
+    }
+
+    /* Divide una serie de 14 días en "semana pasada" (0-6) y "esta semana" (7-13),
+       con etiquetas por día de la semana + fecha de la semana actual (ej. "Lun 22"). */
+    function splitSemanas(serie14, fechas) {
+      const dias = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+      const anterior = serie14.slice(0, 7);
+      const actual   = serie14.slice(7);
+      const labels   = fechas.slice(7).map(f => {
+        const d = new Date(f + 'T00:00:00');
+        return `${dias[d.getDay()]} ${d.getDate()}`;
       });
-
-      return { fechas, labelsCortos, paxSerie, viajesSerie };
+      return { labels, actual, anterior };
     }
 
     function renderTendencias(series) {
-      const { fechas, labelsCortos, paxSerie, viajesSerie } = series;
-
-      const totalPax    = paxSerie.reduce((s,v)=>s+v,0);
-      const totalViajes = viajesSerie.reduce((s,v)=>s+v,0);
-
-      /* Comparar primera semana vs segunda semana */
-      const pax1    = paxSerie.slice(0,7).reduce((s,v)=>s+v,0);
-      const pax2    = paxSerie.slice(7).reduce((s,v)=>s+v,0);
-      const viajes1 = viajesSerie.slice(0,7).reduce((s,v)=>s+v,0);
-      const viajes2 = viajesSerie.slice(7).reduce((s,v)=>s+v,0);
+      const { fechas, viajesSerie, busesSerie } = series;
 
       function badgeHtml(pct, id) {
         if (pct === null) return `<span class="trend-badge flat" id="${id}">Sin comparar</span>`;
@@ -1610,102 +1670,41 @@
         };
       }
 
-      /* ── Pasajeros ── */
-      const sPax = statVal(paxSerie);
-      document.getElementById('trendPaxTotal').textContent    = totalPax.toLocaleString();
-      document.getElementById('trendPaxPeriod').textContent   = `${fmtFecha(fechas[0])} — ${fmtFecha(fechas[13])}`;
-      document.getElementById('trendPaxBadge').outerHTML      = badgeHtml(pctChange(pax1, pax2), 'trendPaxBadge');
-      document.getElementById('tsPaxMin').textContent  = sPax.min.toLocaleString();
-      document.getElementById('tsPaxProm').textContent = sPax.prom.toLocaleString();
-      document.getElementById('tsPaxMax').textContent  = sPax.max.toLocaleString();
-
-      /* ── Viajes ── */
-      const sViajes = statVal(viajesSerie);
-      document.getElementById('trendViajesTotal').textContent  = totalViajes.toLocaleString();
-      document.getElementById('trendViajesPeriod').textContent = `${fmtFecha(fechas[0])} — ${fmtFecha(fechas[13])}`;
-      document.getElementById('trendViajesBadge').outerHTML    = badgeHtml(pctChange(viajes1, viajes2), 'trendViajesBadge');
+      /* ── Viajes (vueltas) ── */
+      const semViajes = splitSemanas(viajesSerie, fechas);
+      const sViajes   = statVal(viajesSerie);
+      const viajesAnt = semViajes.anterior.reduce((s,v)=>s+v,0);
+      const viajesAct = semViajes.actual.reduce((s,v)=>s+v,0);
+      document.getElementById('trendViajesTotal').textContent = viajesAct.toLocaleString();
+      document.getElementById('trendViajesBadge').outerHTML   = badgeHtml(pctChange(viajesAnt, viajesAct), 'trendViajesBadge');
       document.getElementById('tsViajesMin').textContent  = sViajes.min.toLocaleString();
       document.getElementById('tsViajesProm').textContent = sViajes.prom.toLocaleString();
       document.getElementById('tsViajesMax').textContent  = sViajes.max.toLocaleString();
 
-      /* ── Charts ── */
-      buildTrendChart('chartPax',    labelsCortos, paxSerie,    '#6366f1', '#a78bfa');
-      buildTrendChart('chartViajes', labelsCortos, viajesSerie, '#10b981', '#34d399');
-    }
-
-    function buildTrendChart(canvasId, labels, data, colorLine, colorLight) {
-      const canvas = document.getElementById(canvasId);
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-
-      /* Degradado de área */
-      const grad = ctx.createLinearGradient(0, 0, 0, 110);
-      grad.addColorStop(0,   colorLine + '33');
-      grad.addColorStop(0.7, colorLine + '08');
-      grad.addColorStop(1,   colorLine + '00');
-
-      const instance = canvasId === 'chartPax' ? trendPaxChart : trendViajesChart;
-      if (instance) instance.destroy();
-
-      const chart = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels,
-          datasets: [{
-            data,
-            borderColor: colorLine,
-            borderWidth: 2.5,
-            backgroundColor: grad,
-            fill: true,
-            tension: 0.45,
-            pointRadius: 0,
-            pointHoverRadius: 5,
-            pointHoverBackgroundColor: '#fff',
-            pointHoverBorderColor: colorLine,
-            pointHoverBorderWidth: 2.5,
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          interaction: { mode: 'index', intersect: false },
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              backgroundColor: '#111',
-              titleColor: '#fff',
-              bodyColor: '#aaa',
-              padding: 10,
-              cornerRadius: 10,
-              displayColors: false,
-              callbacks: {
-                title: items => items[0].label,
-                label: item => ` ${item.raw.toLocaleString()} ${canvasId === 'chartPax' ? 'pasajeros' : 'viajes'}`,
-              }
-            }
-          },
-          scales: {
-            x: {
-              grid: { display: false },
-              border: { display: false },
-              ticks: {
-                color: '#ccc', font: { size: 10 },
-                maxTicksLimit: 7,
-                maxRotation: 0,
-              }
-            },
-            y: {
-              grid: { color: '#f5f5f5', drawTicks: false },
-              border: { display: false },
-              ticks: { display: false },
-              min: 0,
-            }
-          }
-        }
+      if (barViajesChart) { barViajesChart.destroy(); barViajesChart = null; }
+      barViajesChart = buildBarComparativo({
+        canvasId: 'barViajes',
+        labels: semViajes.labels, actual: semViajes.actual, anterior: semViajes.anterior,
+        color: '#10b981', unidad: 'viajes', dark: false,
       });
 
-      if (canvasId === 'chartPax')    trendPaxChart    = chart;
-      else                            trendViajesChart = chart;
+      /* ── Vehículos que trabajaron ── */
+      const semBuses = splitSemanas(busesSerie, fechas);
+      const sBuses   = statVal(busesSerie);
+      const busesAnt = semBuses.anterior.reduce((s,v)=>s+v,0);
+      const busesAct = semBuses.actual.reduce((s,v)=>s+v,0);
+      document.getElementById('trendBusesTotal').textContent = `${sBuses.prom}`;
+      document.getElementById('trendBusesBadge').outerHTML   = badgeHtml(pctChange(busesAnt, busesAct), 'trendBusesBadge');
+      document.getElementById('tsBusesMin').textContent  = sBuses.min.toLocaleString();
+      document.getElementById('tsBusesProm').textContent = sBuses.prom.toLocaleString();
+      document.getElementById('tsBusesMax').textContent  = sBuses.max.toLocaleString();
+
+      if (barBusesChart) { barBusesChart.destroy(); barBusesChart = null; }
+      barBusesChart = buildBarComparativo({
+        canvasId: 'barBuses',
+        labels: semBuses.labels, actual: semBuses.actual, anterior: semBuses.anterior,
+        color: '#f97316', unidad: 'buses', dark: false,
+      });
     }
 
     function exportarCSV() {
