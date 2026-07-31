@@ -2661,6 +2661,9 @@ def delete_gasto(gasto_id):
 # ──────────────────────────────────────────
 
 ROLES_TECNOLOGIA = ("Administrador", "Técnico Cámaras", "Jefe Op. Tecnológicas")
+# Roles que ven TODAS las intervenciones (de todos los técnicos). El resto
+# (Técnico Cámaras) solo ve/borra las suyas; Propietario se limita a sus buses.
+TECNOLOGIA_ROLES_VER_TODO = ("Administrador", "Jefe Op. Tecnológicas")
 TECNOLOGIA_AREAS = ("camaras", "sensores")
 TECNOLOGIA_MAX_FOTOS = 5
 
@@ -2723,8 +2726,11 @@ def get_intervenciones_tecnologia():
     desde  = request.args.get("desde")
     hasta  = request.args.get("hasta")
 
+    rol     = getattr(request, "jwt_user_rol", None)
+    user_id = getattr(request, "jwt_user_id", None)
+
     db = get_db()
-    is_prop, bus_ids = _bus_ids_for_user(db, getattr(request, "jwt_user_id", None))
+    is_prop, bus_ids = _bus_ids_for_user(db, user_id)
 
     where  = []
     params = []
@@ -2733,6 +2739,10 @@ def get_intervenciones_tecnologia():
             db.close(); return jsonify([])
         where.append("t.bus_id IN (%s)" % ",".join("?" * len(bus_ids)))
         params.extend(bus_ids)
+    # Un técnico solo ve sus propias intervenciones; Administrador,
+    # Jefe Op. Tecnológicas y Propietario ven todas (según su alcance).
+    if not is_prop and rol not in TECNOLOGIA_ROLES_VER_TODO:
+        where.append("t.usuario_id = ?"); params.append(user_id)
     if bus_id:
         where.append("t.bus_id = ?"); params.append(bus_id)
     if area in TECNOLOGIA_AREAS:
@@ -2762,16 +2772,22 @@ def get_intervenciones_tecnologia():
 @app.route("/api/tecnologia/<int:int_id>/fotos", methods=["GET"])
 @require_auth
 def get_intervencion_tecnologia_fotos(int_id):
+    rol     = getattr(request, "jwt_user_rol", None)
+    user_id = getattr(request, "jwt_user_id", None)
+
     db = get_db()
     row = db.execute(
-        "SELECT bus_id, firma_base64, firma_nombre "
+        "SELECT bus_id, usuario_id, firma_base64, firma_nombre "
         "FROM intervenciones_tecnologia WHERE id = ?", (int_id,)
     ).fetchone()
     if not row:
         db.close(); return jsonify({"error": "No encontrado"}), 404
 
-    is_prop, bus_ids = _bus_ids_for_user(db, getattr(request, "jwt_user_id", None))
+    is_prop, bus_ids = _bus_ids_for_user(db, user_id)
     if is_prop and row["bus_id"] not in bus_ids:
+        db.close(); return jsonify({"error": "No autorizado"}), 403
+    # Un técnico solo puede ver evidencias de sus propias intervenciones.
+    if not is_prop and rol not in TECNOLOGIA_ROLES_VER_TODO and row["usuario_id"] != user_id:
         db.close(); return jsonify({"error": "No autorizado"}), 403
 
     fotos = db.execute(
@@ -2792,10 +2808,17 @@ def get_intervencion_tecnologia_fotos(int_id):
 def delete_intervencion_tecnologia(int_id):
     db = get_db()
     row = db.execute(
-        "SELECT id FROM intervenciones_tecnologia WHERE id = ?", (int_id,)
+        "SELECT id, usuario_id FROM intervenciones_tecnologia WHERE id = ?", (int_id,)
     ).fetchone()
     if not row:
         db.close(); return jsonify({"error": "No encontrado"}), 404
+
+    # Un técnico solo puede borrar sus propias intervenciones;
+    # Administrador y Jefe Op. Tecnológicas pueden borrar cualquiera.
+    rol     = getattr(request, "jwt_user_rol", None)
+    user_id = getattr(request, "jwt_user_id", None)
+    if rol not in TECNOLOGIA_ROLES_VER_TODO and row["usuario_id"] != user_id:
+        db.close(); return jsonify({"error": "No autorizado"}), 403
 
     # SQLite con FK ON + Postgres: el CASCADE borra las fotos
     db.execute("DELETE FROM intervenciones_tecnologia WHERE id = ?", (int_id,))
