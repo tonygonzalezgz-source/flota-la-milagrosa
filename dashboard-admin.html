@@ -534,6 +534,7 @@
     }
     .alerta-tag.SOAT          { background: #dbeafe; color: #1d4ed8; }
     .alerta-tag.TECNOMECANICA { background: #f3e8ff; color: #7c3aed; }
+    .alerta-tag.TARJETA_OP    { background: #cffafe; color: #0e7490; }
     .alerta-tag.PREVENTIVO    { background: #fef3c7; color: #92400e; }
     .alerta-tag.FALLA         { background: #fee2e2; color: #991b1b; }
 
@@ -1197,12 +1198,38 @@
         document.getElementById('alertasSub').textContent =
           'Sin items de mantenimiento configurados o error al cargar';
       }
+
+      // Alertas de documentos legales (SOAT / Tec.Mec. / Tarjeta Op.)
+      try {
+        const rd = await apiFetch(`${API}/documentos/alertas`);
+        if (rd.ok) {
+          const rawDocs = await rd.json();
+          const docAlerts = (Array.isArray(rawDocs) ? rawDocs : []).map(a => ({
+            id: `doc_${a.bus_id}_${a.tipo}`,
+            bus_id:          a.bus_id,
+            placa:           a.bus_placa,
+            numero:          a.bus_numero,
+            tipo:            a.tipo,                      // SOAT | TECNOMECANICA | TARJETA_OP
+            ventana:         a.estado === 'por_vencer' && a.dias_restantes > 2 ? '7_DIAS' : '2_DIAS',
+            fecha_objetivo:  a.fecha_vencimiento || new Date().toISOString().slice(0,10),
+            confirmada:      false,
+            extra:           a.estado === 'vencido' ? '¡Vencido!'
+                             : a.estado === 'sin_registrar' ? 'Sin fecha registrada'
+                             : 'Próximo a vencer',
+            tipo_intervalo:  'FECHA',
+            dias_restantes:  a.dias_restantes,
+          }));
+          alertas = alertas.concat(docAlerts);
+        }
+      } catch (_) { /* silencioso */ }
+
       renderAlertas(alertas);
     }
 
     const TIPO_LABEL = {
       SOAT: 'SOAT',
       TECNOMECANICA: 'Téc. Mecánica',
+      TARJETA_OP: 'Tarjeta Op.',
       PREVENTIVO: 'Preventivo',
       FALLA: 'Falla activa'
     };

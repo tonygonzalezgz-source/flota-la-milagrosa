@@ -753,11 +753,14 @@
             <th>Estado</th>
             <th>Km</th>
             <th>Propietario</th>
+            <th>SOAT</th>
+            <th>Tec. Mec.</th>
+            <th>Tarjeta Op.</th>
             <th style="text-align:right">Acciones</th>
           </tr>
         </thead>
         <tbody id="tbody-buses">
-          <tr class="loading-row"><td colspan="8">Cargando…</td></tr>
+          <tr class="loading-row"><td colspan="11">Cargando…</td></tr>
         </tbody>
       </table>
     </div>
@@ -1534,11 +1537,28 @@
     </tr>`;
   }
 
+  /* ─── Badge de vencimiento de documento ─── */
+  function docBadge(fechaIso) {
+    if (!fechaIso) {
+      return `<span title="Sin fecha registrada" style="display:inline-block;padding:3px 7px;border-radius:6px;background:#fee2e2;color:#b91c1c;font-size:10px;font-weight:700">SIN REGISTRAR</span>`;
+    }
+    const fecha = new Date(String(fechaIso).slice(0,10) + 'T00:00:00');
+    const hoy   = new Date();
+    hoy.setHours(0,0,0,0);
+    const dias  = Math.round((fecha - hoy) / 86400000);
+    let bg, fg, txt;
+    if (dias < 0)         { bg = '#fecaca'; fg = '#991b1b'; txt = `Vencido ${-dias}d`; }
+    else if (dias === 0)  { bg = '#fecaca'; fg = '#991b1b'; txt = `Vence hoy`; }
+    else if (dias <= 30)  { bg = '#fef3c7'; fg = '#92400e'; txt = `${dias}d`; }
+    else                  { bg = '#dcfce7'; fg = '#166534'; txt = fecha.toLocaleDateString('es-CO', {day:'2-digit', month:'short', year:'2-digit'}); }
+    return `<span title="Vence ${fecha.toLocaleDateString('es-CO')}" style="display:inline-block;padding:3px 7px;border-radius:6px;background:${bg};color:${fg};font-size:10px;font-weight:700;white-space:nowrap">${txt}</span>`;
+  }
+
   /* ─── RENDER: BUSES ─── */
   function renderBuses() {
     const tbody = document.getElementById('tbody-buses');
     if (!buses.length) {
-      tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><p>No hay buses registrados</p></div></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="11"><div class="empty-state"><p>No hay buses registrados</p></div></td></tr>`;
       return;
     }
     tbody.innerHTML = buses.map(b => {
@@ -1552,6 +1572,9 @@
         <td><span class="badge badge-${estadoClass}">${capitalizar(b.estado)}</span></td>
         <td>${(b.km_actuales||0).toLocaleString()} km</td>
         <td>${prop ? prop.nombre : '<span style="color:var(--txt3)">—</span>'}</td>
+        <td>${docBadge(b.soat_vencimiento)}</td>
+        <td>${docBadge(b.tecno_vencimiento)}</td>
+        <td>${docBadge(b.tarjeta_op_vencimiento)}</td>
         <td><div class="td-actions">
           <button class="icon-btn" onclick="openModal('bus', ${b.id})" title="Editar">
             <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
@@ -1726,6 +1749,24 @@
             <option value="">— Sin asignar —</option>
             ${propOpts}
           </select>
+        </div>
+        <div class="field full" style="margin-top:8px;padding-top:12px;border-top:1px dashed var(--border2)">
+          <label style="font-weight:700;color:var(--txt1);font-size:12px;letter-spacing:.3px;text-transform:uppercase">Documentos legales</label>
+          <div style="font-size:11px;color:var(--txt3);margin-bottom:6px">Al vencer, el sistema notifica y bloquea el despacho hasta que actualices la fecha.</div>
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label>Vencimiento SOAT</label>
+            <input type="date" id="f-soat" value="${d ? (d.soat_vencimiento ? d.soat_vencimiento.slice(0,10) : '') : ''}" />
+          </div>
+          <div class="field">
+            <label>Vencimiento Tecnomecánica</label>
+            <input type="date" id="f-tecno" value="${d ? (d.tecno_vencimiento ? d.tecno_vencimiento.slice(0,10) : '') : ''}" />
+          </div>
+        </div>
+        <div class="field full">
+          <label>Vencimiento Tarjeta de Operación</label>
+          <input type="date" id="f-tarjetaop" value="${d ? (d.tarjeta_op_vencimiento ? d.tarjeta_op_vencimiento.slice(0,10) : '') : ''}" />
         </div>
       `;
     }
@@ -1924,6 +1965,9 @@
           estado:        document.getElementById('f-estado').value,
           km_actuales:   parseInt(document.getElementById('f-km').value) || 0,
           propietario_id: propVal ? parseInt(propVal) : null,
+          soat_vencimiento:       document.getElementById('f-soat').value       || null,
+          tecno_vencimiento:      document.getElementById('f-tecno').value      || null,
+          tarjeta_op_vencimiento: document.getElementById('f-tarjetaop').value  || null,
         };
         if (!body.numero) { showToast('El número de bus es requerido', 'error'); return; }
         url    = modalId ? `/api/buses/${modalId}` : '/api/buses';
