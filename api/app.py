@@ -112,7 +112,7 @@ PG_SCHEMA    = os.path.join(os.path.dirname(__file__), "supabase_schema.sql")
 # Versión del esquema. IMPORTANTE: incrementar en 1 cada vez que se agregue
 # una migración (ALTER/CREATE) a migrate_db(); si no se incrementa, la
 # migración nueva NO corre en las BD ya versionadas.
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 ROLE_VIEWS = {
     "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho", "historial-despacho", "gastos", "tecnologia", "chequeo", "eds", "mapa", "relojes"],
@@ -304,6 +304,10 @@ def migrate_db():
             "ALTER TABLE alistamiento_vehicular ADD COLUMN IF NOT EXISTS novedades TEXT",
             "ALTER TABLE intervenciones_tecnologia ADD COLUMN IF NOT EXISTS firma_base64 TEXT",
             "ALTER TABLE intervenciones_tecnologia ADD COLUMN IF NOT EXISTS firma_nombre TEXT",
+            # Documentos legales — SCHEMA_VERSION 5
+            "ALTER TABLE buses ADD COLUMN IF NOT EXISTS soat_vencimiento DATE",
+            "ALTER TABLE buses ADD COLUMN IF NOT EXISTS tecno_vencimiento DATE",
+            "ALTER TABLE buses ADD COLUMN IF NOT EXISTS tarjeta_op_vencimiento DATE",
         ]:
             # Commit/rollback por sentencia: en Postgres un fallo (p.ej. ALTER
             # sobre una tabla que aún no existe) aborta la transacción y haría
@@ -843,6 +847,10 @@ def migrate_db():
             "ALTER TABLE usuarios ADD COLUMN puesto_id INTEGER REFERENCES puestos_trabajo(id)",
             "ALTER TABLE intervenciones_tecnologia ADD COLUMN firma_base64 TEXT",
             "ALTER TABLE intervenciones_tecnologia ADD COLUMN firma_nombre TEXT",
+            # Documentos legales — SCHEMA_VERSION 5
+            "ALTER TABLE buses ADD COLUMN soat_vencimiento DATE",
+            "ALTER TABLE buses ADD COLUMN tecno_vencimiento DATE",
+            "ALTER TABLE buses ADD COLUMN tarjeta_op_vencimiento DATE",
         ]:
             try:
                 db.execute(col_sql)
@@ -1095,6 +1103,9 @@ def create_bus():
     estado     = data.get("estado", "activo")
     km         = data.get("km_actuales", 0)
     prop_id    = data.get("propietario_id") or None
+    soat       = data.get("soat_vencimiento") or None
+    tecno      = data.get("tecno_vencimiento") or None
+    tarjeta_op = data.get("tarjeta_op_vencimiento") or None
 
     if not numero:
         return jsonify({"error": "El número de bus es requerido"}), 400
@@ -1102,8 +1113,10 @@ def create_bus():
     db = get_db()
     try:
         cursor = db.execute(
-            "INSERT INTO buses (numero, placa, modelo, grupo, estado, km_actuales, propietario_id) VALUES (?,?,?,?,?,?,?)",
-            (numero, placa, modelo, grupo, estado, km, prop_id),
+            "INSERT INTO buses (numero, placa, modelo, grupo, estado, km_actuales, propietario_id, "
+            "soat_vencimiento, tecno_vencimiento, tarjeta_op_vencimiento) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (numero, placa, modelo, grupo, estado, km, prop_id, soat, tecno, tarjeta_op),
         )
         db.commit()
         new_id = cursor.lastrowid
@@ -1124,12 +1137,16 @@ def update_bus(bus_id):
         db.close()
         return jsonify({"error": "Bus no encontrado"}), 404
 
-    fields = ["numero", "placa", "modelo", "grupo", "estado", "km_actuales", "propietario_id"]
+    fields = [
+        "numero", "placa", "modelo", "grupo", "estado", "km_actuales", "propietario_id",
+        "soat_vencimiento", "tecno_vencimiento", "tarjeta_op_vencimiento",
+    ]
+    nullable = ("propietario_id", "soat_vencimiento", "tecno_vencimiento", "tarjeta_op_vencimiento")
     updates, values = [], []
     for f in fields:
         if f in data:
             updates.append(f"{f} = ?")
-            values.append(data[f] if data[f] != "" or f not in ("propietario_id",) else None)
+            values.append(data[f] if data[f] != "" or f not in nullable else None)
 
     if not updates:
         db.close()
@@ -1705,6 +1722,7 @@ def get_despacho():
         ph    = ",".join("?" * len(grupos))
         buses = db.execute(
             f"""SELECT b.id, b.numero, b.placa, b.modelo, b.grupo,
+                       b.soat_vencimiento, b.tecno_vencimiento, b.tarjeta_op_vencimiento,
                        d.estado, d.conductor_id, d.ruta_id, d.cerrado,
                        CASE WHEN a.bus_id IS NOT NULL THEN 1 ELSE 0 END AS tiene_alistamiento
                 FROM buses b
@@ -1719,6 +1737,7 @@ def get_despacho():
         rutas = [dict(r) for r in rutas]
         buses = db.execute(
             """SELECT b.id, b.numero, b.placa, b.modelo, b.grupo,
+                      b.soat_vencimiento, b.tecno_vencimiento, b.tarjeta_op_vencimiento,
                       d.estado, d.conductor_id, d.ruta_id, d.cerrado,
                       CASE WHEN a.bus_id IS NOT NULL THEN 1 ELSE 0 END AS tiene_alistamiento
                FROM buses b
@@ -1800,6 +1819,46 @@ def batch_upsert_despacho():
     estados_validos = ("trabajando", "taller", "descanso")
     db    = get_db()
     saved = 0
+
+    # Validación previa: si algún bus queda en 'trabajando' pero tiene
+    # documentos vencidos (SOAT / Tecnomecánica / Tarjeta de Operación), se
+    # aborta el lote entero para que el despachador vea el error y no se
+    # active parcialmente.
+    hoy = date.today()
+    docs_bloqueados = []
+    for r in registros:
+        bus_id = r.get("bus_id")
+        estado = r.get("estado") or "trabajando"
+        if not bus_id or estado != "trabajando":
+            continue
+        bus_row = db.execute(
+            "SELECT numero, placa, soat_vencimiento, tecno_vencimiento, tarjeta_op_vencimiento "
+            "FROM buses WHERE id = ?",
+            (bus_id,),
+        ).fetchone()
+        if not bus_row:
+            continue
+        bd = dict(bus_row)
+        vencidos = _documentos_vencidos_bus(bd, hoy)
+        if vencidos:
+            etiquetas = [label for campo, _tipo, label in DOC_FIELDS if campo in vencidos]
+            docs_bloqueados.append({
+                "bus_id":     bus_id,
+                "bus_numero": bd.get("numero"),
+                "bus_placa":  bd.get("placa"),
+                "documentos": etiquetas,
+            })
+    if docs_bloqueados:
+        db.close()
+        detalle = "; ".join(
+            f"Bus {b['bus_numero']} ({', '.join(b['documentos'])})"
+            for b in docs_bloqueados
+        )
+        return jsonify({
+            "error": f"No se puede activar despacho: documentos vencidos — {detalle}. Solicita al Administrador la renovación.",
+            "docs_bloqueados": docs_bloqueados,
+        }), 409
+
     for r in registros:
         bus_id = r.get("bus_id")
         if not bus_id:
@@ -3416,6 +3475,127 @@ def get_mant_alertas():
         urg  = a.get("km_restante") if a["tipo"] == "KM" else a.get("dias_restantes")
         return (rank, urg if urg is not None else 999999)
     alertas.sort(key=sort_key)
+    return jsonify(alertas)
+
+
+# ══════════════════════════════════════════
+#  Documentos legales del bus (SOAT, Tec.Mec., Tarjeta Op.)
+# ══════════════════════════════════════════
+#
+# Ventana de aviso: se notifica cuando faltan ≤30 días para el vencimiento y
+# se recuerda cada día hasta que Administrador renueve (asigna una fecha nueva
+# posterior). Un bus con al menos un documento vencido no puede pasar a
+# 'trabajando' en el despacho.
+
+DOC_FIELDS = (
+    ("soat_vencimiento",        "SOAT",           "SOAT"),
+    ("tecno_vencimiento",       "TECNOMECANICA",  "Téc. Mecánica"),
+    ("tarjeta_op_vencimiento",  "TARJETA_OP",     "Tarjeta de Operación"),
+)
+
+VENTANA_AVISO_DIAS = 30
+
+
+def _parse_iso_date(v):
+    """Devuelve un `date` a partir de una fecha ISO / datetime / date."""
+    if v is None or v == "":
+        return None
+    if isinstance(v, date) and not isinstance(v, datetime):
+        return v
+    if isinstance(v, datetime):
+        return v.date()
+    try:
+        return datetime.strptime(str(v)[:10], "%Y-%m-%d").date()
+    except Exception:
+        return None
+
+
+def _documentos_vencidos_bus(row_bus, hoy=None):
+    """Devuelve la lista de campos con documento vencido (fecha ≤ hoy)."""
+    hoy = hoy or date.today()
+    vencidos = []
+    for campo, _tipo, _label in DOC_FIELDS:
+        fecha = _parse_iso_date(row_bus.get(campo) if isinstance(row_bus, dict) else row_bus[campo])
+        if fecha and fecha < hoy:
+            vencidos.append(campo)
+    return vencidos
+
+
+@app.route("/api/documentos/alertas", methods=["GET"])
+@require_auth
+def get_documentos_alertas():
+    """Alertas de documentos legales por bus, filtradas por rol.
+
+    Propietario/Técnico Mant. → solo sus buses asignados.
+    Cualquier otro rol autenticado → toda la flota.
+    Devuelve una fila por (bus × documento) que esté por vencer (≤30 días) o
+    ya vencido, incluidas las fechas nulas (sin registrar) como aviso."""
+    db  = get_db()
+    rol = getattr(request, "jwt_user_rol", None)
+    uid = getattr(request, "jwt_user_id", None)
+
+    if rol in ("Propietario", "Técnico Mant.") and uid:
+        rows = db.execute(
+            """SELECT b.id, b.numero, b.placa,
+                      b.soat_vencimiento, b.tecno_vencimiento, b.tarjeta_op_vencimiento
+                 FROM buses b
+                 JOIN usuario_buses ub ON ub.bus_id = b.id
+                WHERE ub.usuario_id = ?
+                ORDER BY b.numero""",
+            (uid,),
+        ).fetchall()
+    else:
+        rows = db.execute(
+            """SELECT id, numero, placa,
+                      soat_vencimiento, tecno_vencimiento, tarjeta_op_vencimiento
+                 FROM buses
+                ORDER BY numero"""
+        ).fetchall()
+    db.close()
+
+    hoy = date.today()
+    alertas = []
+    for r in rows:
+        d = dict(r)
+        for campo, tipo, label in DOC_FIELDS:
+            fecha = _parse_iso_date(d.get(campo))
+            if fecha is None:
+                # Documento sin fecha registrada: aviso amarillo permanente
+                alertas.append({
+                    "bus_id":       d["id"],
+                    "bus_numero":   d["numero"],
+                    "bus_placa":    d["placa"],
+                    "tipo":         tipo,
+                    "tipo_label":   label,
+                    "fecha_vencimiento": None,
+                    "dias_restantes":    None,
+                    "estado":       "sin_registrar",
+                })
+                continue
+            dias = (fecha - hoy).days
+            if dias < 0:
+                estado = "vencido"
+            elif dias <= VENTANA_AVISO_DIAS:
+                estado = "por_vencer"
+            else:
+                continue
+            alertas.append({
+                "bus_id":       d["id"],
+                "bus_numero":   d["numero"],
+                "bus_placa":    d["placa"],
+                "tipo":         tipo,
+                "tipo_label":   label,
+                "fecha_vencimiento": fecha.isoformat(),
+                "dias_restantes":    dias,
+                "estado":       estado,
+            })
+
+    orden_estado = {"vencido": 0, "por_vencer": 1, "sin_registrar": 2}
+    alertas.sort(key=lambda a: (
+        orden_estado.get(a["estado"], 9),
+        a["dias_restantes"] if a["dias_restantes"] is not None else 9999,
+        a["bus_numero"] or 0,
+    ))
     return jsonify(alertas)
 
 

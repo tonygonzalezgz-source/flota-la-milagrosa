@@ -158,6 +158,17 @@
 
     .empty-state { padding: 40px; text-align: center; color: var(--txt3); }
 
+    /* Aviso de documentos vencidos / por vencer */
+    tr.row-doc-vencido td { background: #fef2f2; }
+    .doc-alert {
+      display: inline-flex; align-items: center; gap: 4px;
+      margin-top: 4px; padding: 2px 7px; border-radius: 5px;
+      background: #fee2e2; color: #b91c1c;
+      font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px;
+    }
+    .doc-alert.warn { background: #fef3c7; color: #92400e; }
+    .doc-alert svg { width: 11px; height: 11px; }
+
     /* Botón alistamiento */
     .btn-alist {
       padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;
@@ -463,6 +474,43 @@
     document.getElementById('content').innerHTML = html;
   }
 
+  /* Documentos legales del bus: devuelve {estado, vencidos:[label], porVencer:[{label,dias}]} */
+  const DOCS_DEF = [
+    { key: 'soat_vencimiento',       label: 'SOAT' },
+    { key: 'tecno_vencimiento',      label: 'Téc. Mecánica' },
+    { key: 'tarjeta_op_vencimiento', label: 'Tarjeta de Op.' },
+  ];
+  function docsBus(b) {
+    const hoy = new Date(); hoy.setHours(0,0,0,0);
+    const vencidos = [], porVencer = [];
+    DOCS_DEF.forEach(d => {
+      const raw = b[d.key];
+      if (!raw) return;
+      const f = new Date(String(raw).slice(0,10) + 'T00:00:00');
+      const dias = Math.round((f - hoy) / 86400000);
+      if (dias < 0) vencidos.push({ label: d.label, dias });
+      else if (dias <= 30) porVencer.push({ label: d.label, dias });
+    });
+    return { vencidos, porVencer, bloqueado: vencidos.length > 0 };
+  }
+  function docsChipHtml(docs) {
+    if (docs.vencidos.length) {
+      const txt = docs.vencidos.map(v => `${v.label} (venc. hace ${-v.dias}d)`).join(' · ');
+      return `<div class="doc-alert" title="Renueve para poder despachar">
+        <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        Docs vencidos: ${escapeHtml(txt)}
+      </div>`;
+    }
+    if (docs.porVencer.length) {
+      const txt = docs.porVencer.map(v => `${v.label} (${v.dias}d)`).join(' · ');
+      return `<div class="doc-alert warn" title="Documentos próximos a vencer">
+        <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Por vencer: ${escapeHtml(txt)}
+      </div>`;
+    }
+    return '';
+  }
+
   function rowHtml(b) {
     const rutaOpts = `<option value="">— Sin ruta —</option>` + rutas
       .filter(r => r.grupo === b.grupo)
@@ -476,8 +524,19 @@
     const condNombre = b.conductor_id ? (conductores.find(c => c.id === b.conductor_id)?.nombre || '') : '';
     const condOpts = `<div class="cond-opt" data-id="" onclick="selectCond(${b.id},'',this)">— Sin conductor —</div>`
       + conductores.map(c => `<div class="cond-opt" data-id="${c.id}" onclick="selectCond(${b.id},'${c.id}',this)">${escapeHtml(c.nombre)}</div>`).join('');
-    return `<tr class="${sugerida ? 'row-sugerida' : ''}">
-      <td class="cell-unidad"><span class="bus-num">${b.numero}</span>${b.placa ? `<div class="bus-placa">${escapeHtml(b.placa)}</div>` : ''}${sugerida ? '<div class="tag-ayer">Sugerido</div>' : ''}</td>
+    const docs = docsBus(b);
+    const trabDisabled = docs.bloqueado ? 'disabled' : '';
+    const trClass = [
+      sugerida ? 'row-sugerida' : '',
+      docs.bloqueado ? 'row-doc-vencido' : '',
+    ].filter(Boolean).join(' ');
+    return `<tr class="${trClass}">
+      <td class="cell-unidad">
+        <span class="bus-num">${b.numero}</span>
+        ${b.placa ? `<div class="bus-placa">${escapeHtml(b.placa)}</div>` : ''}
+        ${sugerida ? '<div class="tag-ayer">Sugerido</div>' : ''}
+        ${docsChipHtml(docs)}
+      </td>
       <td data-label="Ruta"><select onchange="onChange(${b.id}, 'ruta_id', this.value)">${rutaOpts}</select></td>
       <td data-label="Conductor">
         <div class="cond-combo" id="combo-${b.id}">
@@ -490,7 +549,7 @@
       <td data-label="Estado">
         <select class="estado-sel ${sugerida ? 'sin-confirmar' : estado}" onchange="onChange(${b.id}, 'estado', this.value)">
           ${sugerida ? '<option value="" selected disabled>— Confirmar —</option>' : ''}
-          <option value="trabajando" ${!sugerida && estado === 'trabajando' ? 'selected' : ''}>Trabajando</option>
+          <option value="trabajando" ${!sugerida && estado === 'trabajando' ? 'selected' : ''} ${trabDisabled} title="${docs.bloqueado ? 'Bloqueado: hay documentos vencidos' : ''}">Trabajando${docs.bloqueado ? ' 🚫' : ''}</option>
           <option value="taller"     ${!sugerida && estado === 'taller'     ? 'selected' : ''}>En taller</option>
           <option value="descanso"   ${!sugerida && estado === 'descanso'   ? 'selected' : ''}>Descanso</option>
         </select>
@@ -619,6 +678,19 @@
     const bus = buses.find(b => b.id === busId);
     if (!bus) return;
 
+    // Bloqueo local (feedback inmediato): si intentan poner 'trabajando' en
+    // un bus con documentos vencidos, revertimos y avisamos sin llamar API.
+    if (campo === 'estado' && valor === 'trabajando') {
+      const docs = docsBus(bus);
+      if (docs.bloqueado) {
+        const nombres = docs.vencidos.map(v => v.label).join(', ');
+        showToast(`Bus ${bus.numero}: documentos vencidos (${nombres}). Solicita al Administrador la renovación.`, 'error');
+        if (event && event.target) event.target.value = bus.estado || 'descanso';
+        return;
+      }
+    }
+
+    const estadoPrevio = bus.estado;
     // Marcar como trabajando por defecto si todavía no tenía estado al asignar algo
     if (campo === 'estado') {
       bus.estado = valor;
@@ -652,7 +724,12 @@
       if (bus._sugerido) { bus._sugerido = false; render(); }
       showToast(`Bus ${bus.numero} actualizado`);
     } catch (e) {
+      // El backend también rechaza 'trabajando' con docs vencidos: revertir.
+      if (campo === 'estado') {
+        bus.estado = estadoPrevio || null;
+      }
       showToast(e.message, 'error');
+      render();
     }
   }
 

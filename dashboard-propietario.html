@@ -1442,15 +1442,17 @@
         const primerDia = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-01`;
         const hoy      = now.toISOString().slice(0,10);
 
-        const [busesRes, dashRes, movRes] = await Promise.all([
+        const [busesRes, dashRes, movRes, docsRes] = await Promise.all([
           apiFetch(`${API}/buses${qs}`),
           apiFetch(`${API}/dashboard/propietario${qs}`),
           apiFetch(`${API}/movilidad/rango?desde=${primerDia}&hasta=${hoy}${uid ? '&user_id='+uid : ''}`),
+          apiFetch(`${API}/documentos/alertas`),
         ]);
         busesData = await busesRes.json();
         const dash = await dashRes.json();
         const movMes = await movRes.json();
         movMesData = Array.isArray(movMes) ? movMes : [];
+        const docsAlerts = docsRes.ok ? await docsRes.json() : [];
 
         const paxMes = {};
         movMes.forEach(r => { paxMes[r.bus_id] = (paxMes[r.bus_id]||0) + (r.pasajeros||0); });
@@ -1464,7 +1466,26 @@
         document.getElementById('kpiIngresoTrend').textContent  = 'hoy';
         document.getElementById('kpiIngresoTrend').className    = 'kpi-badge up';
         document.getElementById('kpiBusesActivos').textContent  = statusMap['activo'] || 0;
-        const alerts = dash.alerts || [];
+        const alerts = (dash.alerts || []).slice();
+        // Añade alertas de documentos legales (SOAT / Tec.Mec. / Tarjeta Op.)
+        (Array.isArray(docsAlerts) ? docsAlerts : []).forEach(d => {
+          alerts.push({
+            _origen:       'documento',
+            estado:        d.estado === 'por_vencer' ? 'warn' : 'alert',
+            bus_numero:    d.bus_numero,
+            novedad_label: d.tipo_label + (
+              d.estado === 'vencido' ? ' vencido'
+              : d.estado === 'sin_registrar' ? ' sin registrar'
+              : ' por vencer'
+            ),
+            ultima_obs:    d.estado === 'sin_registrar'
+              ? 'Solicita al Administrador cargar la fecha.'
+              : (d.dias_restantes < 0
+                  ? `Venció hace ${-d.dias_restantes} día(s). El bus no puede despachar hasta renovar.`
+                  : `Faltan ${d.dias_restantes} día(s) para vencer.`),
+            updated_at:    d.fecha_vencimiento || null,
+          });
+        });
         document.getElementById('kpiAlertas').textContent = alerts.length;
         if (!alerts.length) document.getElementById('notifDot').style.display = 'none';
 
