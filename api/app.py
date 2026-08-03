@@ -112,7 +112,7 @@ PG_SCHEMA    = os.path.join(os.path.dirname(__file__), "supabase_schema.sql")
 # Versión del esquema. IMPORTANTE: incrementar en 1 cada vez que se agregue
 # una migración (ALTER/CREATE) a migrate_db(); si no se incrementa, la
 # migración nueva NO corre en las BD ya versionadas.
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 ROLE_VIEWS = {
     "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho", "historial-despacho", "gastos", "tecnologia", "chequeo", "eds", "mapa", "relojes"],
@@ -308,6 +308,8 @@ def migrate_db():
             "ALTER TABLE buses ADD COLUMN IF NOT EXISTS soat_vencimiento DATE",
             "ALTER TABLE buses ADD COLUMN IF NOT EXISTS tecno_vencimiento DATE",
             "ALTER TABLE buses ADD COLUMN IF NOT EXISTS tarjeta_op_vencimiento DATE",
+            # Vínculo Propietario (usuario ↔ catálogo propietarios) — SCHEMA_VERSION 6
+            "ALTER TABLE propietarios ADD COLUMN IF NOT EXISTS usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL",
         ]:
             # Commit/rollback por sentencia: en Postgres un fallo (p.ej. ALTER
             # sobre una tabla que aún no existe) aborta la transacción y haría
@@ -851,11 +853,33 @@ def migrate_db():
             "ALTER TABLE buses ADD COLUMN soat_vencimiento DATE",
             "ALTER TABLE buses ADD COLUMN tecno_vencimiento DATE",
             "ALTER TABLE buses ADD COLUMN tarjeta_op_vencimiento DATE",
+            # Vínculo Propietario (usuario ↔ catálogo propietarios) — SCHEMA_VERSION 6
+            "ALTER TABLE propietarios ADD COLUMN usuario_id INTEGER REFERENCES usuarios(id)",
         ]:
             try:
                 db.execute(col_sql)
             except Exception:
                 pass
+
+    # Backfill: cada usuario con rol='Propietario' debe tener una fila en
+    # el catálogo `propietarios` (así aparece en el select del bus). Se
+    # ejecuta cada vez que se migra el schema — idempotente porque solo
+    # inserta los que aún no tienen usuario_id vinculado.
+    try:
+        pendientes = db.execute(
+            """SELECT u.id, u.nombre
+                 FROM usuarios u
+            LEFT JOIN propietarios p ON p.usuario_id = u.id
+                WHERE u.rol = 'Propietario' AND u.activo = 1 AND p.id IS NULL"""
+        ).fetchall()
+        for u in pendientes:
+            urow = dict(u)
+            db.execute(
+                "INSERT INTO propietarios (nombre, activo, usuario_id) VALUES (?, 1, ?)",
+                (urow["nombre"], urow["id"]),
+            )
+    except Exception as e:
+        print(f"[migrate_db] backfill propietarios: {e}")
 
     # Insertar tarifas iniciales si la tabla está vacía (ambos motores)
     count = db.execute("SELECT COUNT(*) FROM tarifas").fetchone()
@@ -3022,6 +3046,39 @@ def admin_get_usuarios():
     return jsonify([dict(r) for r in rows])
 
 
+def _sync_propietario_from_usuario(db, usuario_id, nombre, rol, activo=1):
+    """Mantiene coherencia entre `usuarios` (cuentas) y `propietarios` (catálogo).
+
+    - Si el rol es Propietario y no existe una fila en `propietarios` ligada a
+      este usuario, la crea con el mismo nombre.
+    - Si ya existe una fila ligada, actualiza nombre y activo (para reflejar
+      cambios hechos desde la pantalla de usuarios).
+    - Si el rol dejó de ser Propietario, desactiva (no borra) el catálogo
+      ligado para preservar las asignaciones históricas del bus.
+    """
+    try:
+        row = db.execute(
+            "SELECT id FROM propietarios WHERE usuario_id = ?", (usuario_id,)
+        ).fetchone()
+        if rol == "Propietario":
+            if row:
+                db.execute(
+                    "UPDATE propietarios SET nombre = ?, activo = ? WHERE usuario_id = ?",
+                    (nombre, 1 if activo else 0, usuario_id),
+                )
+            else:
+                db.execute(
+                    "INSERT INTO propietarios (nombre, activo, usuario_id) VALUES (?, ?, ?)",
+                    (nombre, 1 if activo else 0, usuario_id),
+                )
+        elif row:
+            db.execute(
+                "UPDATE propietarios SET activo = 0 WHERE usuario_id = ?", (usuario_id,)
+            )
+    except Exception as e:
+        print(f"[sync_propietario] {e}")
+
+
 @app.route("/api/admin/usuarios", methods=["POST"])
 @require_role("Administrador")
 def admin_create_usuario():
@@ -3043,8 +3100,9 @@ def admin_create_usuario():
             "INSERT INTO usuarios (username, password, nombre, rol, iniciales, color, puesto_id) VALUES (?,?,?,?,?,?,?)",
             (username, hashed_pw, nombre, rol, iniciales, color, data.get("puesto_id") or None),
         )
-        db.commit()
         new_id = cursor.lastrowid
+        _sync_propietario_from_usuario(db, new_id, nombre, rol, activo=1)
+        db.commit()
     except Exception as e:
         db.close()
         return jsonify({"error": str(e)}), 400
@@ -3074,7 +3132,14 @@ def admin_update_usuario(uid):
     if updates:
         values.append(uid)
         db.execute(f"UPDATE usuarios SET {', '.join(updates)} WHERE id = ?", values)
-        db.commit()
+    # Refleja cambios de nombre/rol/activo en el catálogo `propietarios`
+    fresh = db.execute(
+        "SELECT nombre, rol, activo FROM usuarios WHERE id = ?", (uid,)
+    ).fetchone()
+    if fresh:
+        f = dict(fresh)
+        _sync_propietario_from_usuario(db, uid, f["nombre"], f["rol"], f.get("activo", 1))
+    db.commit()
     db.close()
     return jsonify({"ok": True})
 
