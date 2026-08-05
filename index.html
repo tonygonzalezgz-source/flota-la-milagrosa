@@ -1001,6 +1001,18 @@
               <span class="sb-access" style="background:rgba(34,197,94,.1);color:#16a34a;" data-roles="admin">EDS</span>
             </button>
           </li>
+          <!-- Lavada Primeriada -->
+          <li>
+            <button class="sb-link" id="nav-lavada" data-view="lavada" data-src="lavada-primeriada.html" onclick="switchView(this)">
+              <span class="sb-icon">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                  <path d="M12 2s6 7.5 6 12a6 6 0 1 1-12 0c0-4.5 6-12 6-12z"/>
+                </svg>
+              </span>
+              Lavada Primeriada
+              <span class="sb-access" style="background:rgba(6,182,212,.12);color:#0891b2;" data-roles="admin">Lavado</span>
+            </button>
+          </li>
         </ul>
       </li>
 
@@ -1257,6 +1269,16 @@
               onload="iframeLoaded('eds')"></iframe>
     </div>
 
+    <!-- LAVADA PRIMERIADA VIEW -->
+    <div class="view-panel" id="view-lavada">
+      <div class="iframe-loader" id="loader-lavada">
+        <div class="loader-ring"></div>
+        <div class="loader-text">Cargando Lavada Primeriada…</div>
+      </div>
+      <iframe id="iframe-lavada" src="" title="Lavada Primeriada"
+              onload="iframeLoaded('lavada')"></iframe>
+    </div>
+
     <!-- DISPOSITIVOS TECNOLÓGICOS VIEW -->
     <div class="view-panel" id="view-tecnologia">
       <div class="iframe-loader" id="loader-tecnologia">
@@ -1387,6 +1409,7 @@
     gastos:      { label: 'Gastos y Facturas',   icon: 'receipt',  src: 'gastos.html' },
     tecnologia:  { label: 'Disp. Tecnológicos',  icon: 'camera',   src: 'tecnologia.html' },
     eds:         { label: 'Operador EDS',        icon: 'station',  src: 'operador-eds.html' },
+    lavada:      { label: 'Lavada Primeriada',   icon: 'droplet',  src: 'lavada-primeriada.html' },
     catalogo:    { label: 'Catálogo',            icon: 'book',     src: 'catalogo.html' },
     despacho:             { label: 'Despacho',            icon: 'check',    src: 'despacho.html' },
     'historial-despacho': { label: 'Historial Despacho',  icon: 'calendar', src: 'historial-despacho.html' },
@@ -1671,6 +1694,7 @@
     gastos:      { bg: '#2a1e08', svg: `<svg width="18" height="18" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1-2-1z"/><path d="M8 7h8M8 11h8M8 15h5"/></svg>` },
     tecnologia:  { bg: '#082a2e', svg: `<svg width="18" height="18" fill="none" stroke="#06b6d4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>` },
     eds:         { bg: '#0a2a1a', svg: `<svg width="18" height="18" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M3 22v-8l9-4 9 4v8"/><path d="M12 10V2"/><path d="M9 2h6"/><path d="M7 22v-5h10v5"/></svg>` },
+    lavada:      { bg: '#082533', svg: `<svg width="18" height="18" fill="none" stroke="#06b6d4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M12 2s6 7.5 6 12a6 6 0 1 1-12 0c0-4.5 6-12 6-12z"/></svg>` },
     catalogo:    { bg: '#1a1e2e', svg: `<svg width="18" height="18" fill="none" stroke="#6366f1" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>` },
     historial:   { bg: '#0a1e2e', svg: `<svg width="18" height="18" fill="none" stroke="#14b8a6" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>` },
     operador:    { bg: '#1a1a2e', svg: `<svg width="18" height="18" fill="none" stroke="#a855f7" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>` },

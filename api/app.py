@@ -112,16 +112,17 @@ PG_SCHEMA    = os.path.join(os.path.dirname(__file__), "supabase_schema.sql")
 # Versión del esquema. IMPORTANTE: incrementar en 1 cada vez que se agregue
 # una migración (ALTER/CREATE) a migrate_db(); si no se incrementa, la
 # migración nueva NO corre en las BD ya versionadas.
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 ROLE_VIEWS = {
-    "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho", "historial-despacho", "gastos", "tecnologia", "chequeo", "eds", "mapa", "relojes"],
+    "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho", "historial-despacho", "gastos", "tecnologia", "chequeo", "eds", "lavada", "mapa", "relojes"],
     "Analista":       ["historial"],
     "Técnico Mant.":  ["mant"],
     "Técnico Cámaras":       ["tecnologia"],
     "Jefe Op. Tecnológicas": ["tecnologia"],
     "Operador EDS":   ["eds"],
-    "Propietario":    ["propietario", "gastos", "tecnologia"],
+    "Operador Lavada": ["lavada"],
+    "Propietario":    ["propietario", "gastos", "tecnologia", "lavada"],
     "Despachador":    ["despacho", "historial-despacho", "chequeo"],
     "Jefe de Ruta":   ["dashboard", "despacho", "historial-despacho", "chequeo", "alistamiento", "relojes"],
     "Conductor":      ["alistamiento"],
@@ -496,6 +497,29 @@ def migrate_db():
                 orden        INTEGER NOT NULL DEFAULT 0
             )""",
             "CREATE INDEX IF NOT EXISTS idx_eds_fotos ON actividad_eds_fotos(actividad_id)",
+            # Lavada Primeriada (área de lavado, solo micros) — SCHEMA_VERSION 7
+            # tipo: 'lavada' (exterior), 'primeriada' (interior), 'ambas'
+            # (las dos en el mismo asiento cuando se hicieron juntas), 'novedad'.
+            """CREATE TABLE IF NOT EXISTS actividades_lavada (
+                id            SERIAL PRIMARY KEY,
+                bus_id        INTEGER NOT NULL REFERENCES buses(id),
+                tipo          TEXT NOT NULL CHECK(tipo IN ('lavada','primeriada','ambas','novedad')),
+                fecha         DATE NOT NULL,
+                descripcion   TEXT,
+                realizado_por TEXT NOT NULL,
+                usuario_id    INTEGER REFERENCES usuarios(id),
+                created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )""",
+            "CREATE INDEX IF NOT EXISTS idx_lavada_fecha ON actividades_lavada(fecha)",
+            "CREATE INDEX IF NOT EXISTS idx_lavada_bus   ON actividades_lavada(bus_id)",
+            "CREATE INDEX IF NOT EXISTS idx_lavada_tipo  ON actividades_lavada(tipo)",
+            """CREATE TABLE IF NOT EXISTS actividad_lavada_fotos (
+                id           SERIAL PRIMARY KEY,
+                actividad_id INTEGER NOT NULL REFERENCES actividades_lavada(id) ON DELETE CASCADE,
+                foto_base64  TEXT NOT NULL,
+                orden        INTEGER NOT NULL DEFAULT 0
+            )""",
+            "CREATE INDEX IF NOT EXISTS idx_lavada_fotos ON actividad_lavada_fotos(actividad_id)",
             """CREATE TABLE IF NOT EXISTS puestos_trabajo (
                 id          SERIAL PRIMARY KEY,
                 nombre      TEXT NOT NULL UNIQUE,
@@ -787,6 +811,33 @@ def migrate_db():
             )
         """)
         db.execute("CREATE INDEX IF NOT EXISTS idx_eds_fotos ON actividad_eds_fotos(actividad_id)")
+        # Lavada Primeriada (área de lavado, solo micros) — SCHEMA_VERSION 7
+        # tipo: 'lavada' (exterior), 'primeriada' (interior), 'ambas'
+        # (las dos en el mismo asiento cuando se hicieron juntas), 'novedad'.
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS actividades_lavada (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                bus_id        INTEGER NOT NULL REFERENCES buses(id),
+                tipo          TEXT NOT NULL CHECK(tipo IN ('lavada','primeriada','ambas','novedad')),
+                fecha         DATE NOT NULL,
+                descripcion   TEXT,
+                realizado_por TEXT NOT NULL,
+                usuario_id    INTEGER REFERENCES usuarios(id),
+                created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        db.execute("CREATE INDEX IF NOT EXISTS idx_lavada_fecha ON actividades_lavada(fecha)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_lavada_bus   ON actividades_lavada(bus_id)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_lavada_tipo  ON actividades_lavada(tipo)")
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS actividad_lavada_fotos (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                actividad_id INTEGER NOT NULL REFERENCES actividades_lavada(id) ON DELETE CASCADE,
+                foto_base64  TEXT NOT NULL,
+                orden        INTEGER NOT NULL DEFAULT 0
+            )
+        """)
+        db.execute("CREATE INDEX IF NOT EXISTS idx_lavada_fotos ON actividad_lavada_fotos(actividad_id)")
         db.execute("""
             CREATE TABLE IF NOT EXISTS puestos_trabajo (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -3019,6 +3070,155 @@ def delete_actividad_eds(act_id):
 
     # SQLite con FK ON + Postgres: el CASCADE borra las fotos
     db.execute("DELETE FROM actividades_eds WHERE id = ?", (act_id,))
+    db.commit()
+    db.close()
+    return jsonify({"ok": True})
+
+
+# ──────────────────────────────────────────
+#  Lavada Primeriada (área de lavado — solo micros, grupo 'B')
+#  Escritura: Admin + Operador Lavada. Lectura: además Propietario
+#  (filtrado a sus buses vía _bus_ids_for_user).
+# ──────────────────────────────────────────
+
+ROLES_LAVADA_ESCRITURA = ("Administrador", "Operador Lavada")
+ROLES_LAVADA_LECTURA   = ("Administrador", "Operador Lavada", "Propietario")
+# tipo del registro. 'lavada' es la exterior, 'primeriada' es la interior — algunas
+# jornadas se hacen las dos y otras solo una. 'novedad' es un hallazgo sin lavado.
+LAVADA_TIPOS           = ("lavada", "primeriada", "ambas", "novedad")
+LAVADA_TIPOS_LAVADO    = ("lavada", "primeriada", "ambas")   # todo lo que no es novedad
+LAVADA_MAX_FOTOS       = 5
+
+
+@app.route("/api/lavada", methods=["POST"])
+@require_role(*ROLES_LAVADA_ESCRITURA)
+def create_actividad_lavada():
+    data          = request.get_json(force=True)
+    bus_id        = data.get("bus_id")
+    tipo          = (data.get("tipo") or "").strip().lower()
+    fecha         = data.get("fecha")
+    descripcion   = (data.get("descripcion") or "").strip()
+    realizado_por = (data.get("realizado_por") or "").strip()
+    fotos         = data.get("fotos") or []
+
+    if not bus_id or not tipo or not fecha or not realizado_por:
+        return jsonify({"error": "Faltan campos requeridos (bus, tipo, fecha, responsable)."}), 400
+    if tipo not in LAVADA_TIPOS:
+        return jsonify({"error": "Tipo de actividad inválido."}), 400
+    if tipo == "novedad" and not descripcion:
+        return jsonify({"error": "Describe la novedad observada."}), 400
+    if not isinstance(fotos, list) or len(fotos) > LAVADA_MAX_FOTOS:
+        return jsonify({"error": f"Máximo {LAVADA_MAX_FOTOS} fotos por registro."}), 400
+
+    db  = get_db()
+    bus = db.execute("SELECT id, grupo FROM buses WHERE id = ?", (bus_id,)).fetchone()
+    if not bus:
+        db.close(); return jsonify({"error": "Vehículo no encontrado."}), 404
+    if bus["grupo"] != "B":
+        db.close(); return jsonify({"error": "Solo se permiten micros (grupo B) en Lavada Primeriada."}), 400
+
+    cursor = db.execute(
+        """INSERT INTO actividades_lavada
+               (bus_id, tipo, fecha, descripcion, realizado_por, usuario_id)
+           VALUES (?,?,?,?,?,?)""",
+        (bus_id, tipo, fecha, descripcion or None, realizado_por,
+         getattr(request, "jwt_user_id", None)),
+    )
+    new_id = cursor.lastrowid
+    for i, foto in enumerate(fotos):
+        if not foto:
+            continue
+        db.execute(
+            "INSERT INTO actividad_lavada_fotos (actividad_id, foto_base64, orden) VALUES (?,?,?)",
+            (new_id, foto, i),
+        )
+    db.commit()
+    db.close()
+    return jsonify({"ok": True, "id": new_id}), 201
+
+
+@app.route("/api/lavada", methods=["GET"])
+@require_role(*ROLES_LAVADA_LECTURA)
+def get_actividades_lavada():
+    """Lista metadata (SIN base64 de fotos). El propietario ve solo sus buses."""
+    tipo    = request.args.get("tipo")
+    desde   = request.args.get("desde")
+    hasta   = request.args.get("hasta")
+    bus_arg = request.args.get("bus_id", type=int)
+
+    user_id          = getattr(request, "jwt_user_id", None)
+    db               = get_db()
+    is_prop, bus_ids = _bus_ids_for_user(db, user_id)
+
+    where, params = [], []
+    if is_prop:
+        if not bus_ids:
+            db.close(); return jsonify([])
+        where.append("a.bus_id IN (%s)" % ",".join("?" * len(bus_ids)))
+        params.extend(bus_ids)
+    if bus_arg:
+        where.append("a.bus_id = ?"); params.append(bus_arg)
+    # 'lavados' agrupa lavada + primeriada (sin novedades); los tipos concretos
+    # filtran por su propio valor. La cadena 'lavada' ya es un tipo real (exterior).
+    if tipo == "lavados":
+        where.append("a.tipo != ?"); params.append("novedad")
+    elif tipo in LAVADA_TIPOS:
+        where.append("a.tipo = ?"); params.append(tipo)
+    if desde:
+        where.append("a.fecha >= ?"); params.append(desde)
+    if hasta:
+        where.append("a.fecha <= ?"); params.append(hasta)
+
+    where_sql = ("WHERE " + " AND ".join(where)) if where else ""
+    rows = db.execute(
+        f"""SELECT a.id, a.bus_id, a.tipo, a.fecha, a.descripcion, a.realizado_por, a.created_at,
+                   b.numero AS bus_numero, b.placa AS bus_placa, b.modelo AS bus_modelo,
+                   (SELECT COUNT(*) FROM actividad_lavada_fotos f
+                     WHERE f.actividad_id = a.id) AS num_fotos
+            FROM actividades_lavada a
+            JOIN buses b ON b.id = a.bus_id
+            {where_sql}
+            ORDER BY a.fecha DESC, a.id DESC""",
+        params,
+    ).fetchall()
+    db.close()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/lavada/<int:act_id>/fotos", methods=["GET"])
+@require_role(*ROLES_LAVADA_LECTURA)
+def get_actividad_lavada_fotos(act_id):
+    db  = get_db()
+    row = db.execute(
+        "SELECT id, bus_id FROM actividades_lavada WHERE id = ?", (act_id,)
+    ).fetchone()
+    if not row:
+        db.close(); return jsonify({"error": "No encontrado"}), 404
+
+    # Propietario solo puede ver fotos de sus propios buses
+    user_id          = getattr(request, "jwt_user_id", None)
+    is_prop, bus_ids = _bus_ids_for_user(db, user_id)
+    if is_prop and row["bus_id"] not in bus_ids:
+        db.close(); return jsonify({"error": "No autorizado"}), 403
+
+    fotos = db.execute(
+        "SELECT foto_base64 FROM actividad_lavada_fotos "
+        "WHERE actividad_id = ? ORDER BY orden, id",
+        (act_id,),
+    ).fetchall()
+    db.close()
+    return jsonify({"fotos": [f["foto_base64"] for f in fotos]})
+
+
+@app.route("/api/lavada/<int:act_id>", methods=["DELETE"])
+@require_role("Administrador")   # solo el admin borra historial
+def delete_actividad_lavada(act_id):
+    db  = get_db()
+    row = db.execute("SELECT id FROM actividades_lavada WHERE id = ?", (act_id,)).fetchone()
+    if not row:
+        db.close(); return jsonify({"error": "No encontrado"}), 404
+
+    db.execute("DELETE FROM actividades_lavada WHERE id = ?", (act_id,))
     db.commit()
     db.close()
     return jsonify({"ok": True})

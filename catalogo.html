@@ -1509,7 +1509,7 @@
   function renderMecanicos() {
     const tbody = document.getElementById('tbody-mecanicos');
     if (!tbody) return;
-    const lista = usuarios.filter(u => ['Técnico Mant.', 'Técnico Cámaras', 'Jefe Op. Tecnológicas', 'Operador EDS'].includes(u.rol));
+    const lista = usuarios.filter(u => ['Técnico Mant.', 'Técnico Cámaras', 'Jefe Op. Tecnológicas', 'Operador EDS', 'Operador Lavada'].includes(u.rol));
     if (!lista.length) {
       tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><p>No hay cuentas de mecánico o técnico registradas</p></div></td></tr>`;
       return;
@@ -1889,6 +1889,7 @@
             <option value="Técnico Cámaras" ${d && d.rol === 'Técnico Cámaras' ? 'selected' : ''}>Técnico Cámaras</option>
             <option value="Jefe Op. Tecnológicas" ${d && d.rol === 'Jefe Op. Tecnológicas' ? 'selected' : ''}>Jefe de Operaciones Tecnológicas</option>
             <option value="Operador EDS" ${d && d.rol === 'Operador EDS' ? 'selected' : ''}>Operador EDS (aseo estación y novedades)</option>
+            <option value="Operador Lavada" ${d && d.rol === 'Operador Lavada' ? 'selected' : ''}>Operador Lavada (área de lavado — micros)</option>
           </select>
         </div>` : ''}
         ${type === 'despachador' ? `
