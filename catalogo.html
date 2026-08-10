@@ -1537,12 +1537,30 @@
     </tr>`;
   }
 
+  /* ─── Normaliza una fecha (ISO 'YYYY-MM-DD…' o RFC 2822 'Fri, 15 Aug 2025 …') a 'YYYY-MM-DD'.
+        Postgres (producción) devuelve DATE en RFC 2822; SQLite (dev) la devuelve ya como ISO. ─── */
+  function toIsoDate(v) {
+    if (!v) return '';
+    const s = String(v);
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+    const d = new Date(s);
+    if (isNaN(d)) return '';
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(d.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${dd}`;
+  }
+
   /* ─── Badge de vencimiento de documento ─── */
   function docBadge(fechaIso) {
     if (!fechaIso) {
       return `<span title="Sin fecha registrada" style="display:inline-block;padding:3px 7px;border-radius:6px;background:#fee2e2;color:#b91c1c;font-size:10px;font-weight:700">SIN REGISTRAR</span>`;
     }
-    const fecha = new Date(String(fechaIso).slice(0,10) + 'T00:00:00');
+    const iso = toIsoDate(fechaIso);
+    if (!iso) {
+      return `<span title="Fecha inválida" style="display:inline-block;padding:3px 7px;border-radius:6px;background:#fee2e2;color:#b91c1c;font-size:10px;font-weight:700">SIN REGISTRAR</span>`;
+    }
+    const fecha = new Date(iso + 'T00:00:00');
     const hoy   = new Date();
     hoy.setHours(0,0,0,0);
     const dias  = Math.round((fecha - hoy) / 86400000);
@@ -1757,16 +1775,16 @@
         <div class="form-row">
           <div class="field">
             <label>Vencimiento SOAT</label>
-            <input type="date" id="f-soat" value="${d ? (d.soat_vencimiento ? d.soat_vencimiento.slice(0,10) : '') : ''}" />
+            <input type="date" id="f-soat" min="2020-01-01" max="2050-12-31" value="${d ? toIsoDate(d.soat_vencimiento) : ''}" />
           </div>
           <div class="field">
             <label>Vencimiento Tecnomecánica</label>
-            <input type="date" id="f-tecno" value="${d ? (d.tecno_vencimiento ? d.tecno_vencimiento.slice(0,10) : '') : ''}" />
+            <input type="date" id="f-tecno" min="2020-01-01" max="2050-12-31" value="${d ? toIsoDate(d.tecno_vencimiento) : ''}" />
           </div>
         </div>
         <div class="field full">
           <label>Vencimiento Tarjeta de Operación</label>
-          <input type="date" id="f-tarjetaop" value="${d ? (d.tarjeta_op_vencimiento ? d.tarjeta_op_vencimiento.slice(0,10) : '') : ''}" />
+          <input type="date" id="f-tarjetaop" min="2020-01-01" max="2050-12-31" value="${d ? toIsoDate(d.tarjeta_op_vencimiento) : ''}" />
         </div>
       `;
     }
@@ -1944,7 +1962,7 @@
   }
 
   function handleOverlayClick(e) {
-    if (e.target === document.getElementById('modal-overlay')) closeModal();
+    // Cerrar solo con los botones X / Cancelar para no perder datos escritos por accidente.
   }
 
   /* ─── MODAL: GUARDAR ─── */
@@ -1958,6 +1976,18 @@
 
       if (modalType === 'bus') {
         const propVal = document.getElementById('f-propietario').value;
+        const soatVal  = document.getElementById('f-soat').value       || null;
+        const tecnoVal = document.getElementById('f-tecno').value      || null;
+        const tarjVal  = document.getElementById('f-tarjetaop').value  || null;
+        for (const [label, v] of [['SOAT', soatVal], ['Tecnomecánica', tecnoVal], ['Tarjeta de Operación', tarjVal]]) {
+          if (v) {
+            const y = parseInt(v.slice(0, 4), 10);
+            if (isNaN(y) || y < 2020 || y > 2050) {
+              showToast(`Fecha de ${label} inválida: el año debe estar entre 2020 y 2050`, 'error');
+              return;
+            }
+          }
+        }
         body   = {
           numero:        parseInt(document.getElementById('f-numero').value),
           placa:         document.getElementById('f-placa').value.trim().toUpperCase(),
@@ -1966,9 +1996,9 @@
           estado:        document.getElementById('f-estado').value,
           km_actuales:   parseInt(document.getElementById('f-km').value) || 0,
           propietario_id: propVal ? parseInt(propVal) : null,
-          soat_vencimiento:       document.getElementById('f-soat').value       || null,
-          tecno_vencimiento:      document.getElementById('f-tecno').value      || null,
-          tarjeta_op_vencimiento: document.getElementById('f-tarjetaop').value  || null,
+          soat_vencimiento:       soatVal,
+          tecno_vencimiento:      tecnoVal,
+          tarjeta_op_vencimiento: tarjVal,
         };
         if (!body.numero) { showToast('El número de bus es requerido', 'error'); return; }
         url    = modalId ? `/api/buses/${modalId}` : '/api/buses';

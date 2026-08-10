@@ -480,13 +480,26 @@
     { key: 'tecno_vencimiento',      label: 'Téc. Mecánica' },
     { key: 'tarjeta_op_vencimiento', label: 'Tarjeta de Op.' },
   ];
+  /* Postgres devuelve DATE como RFC 2822 ('Fri, 15 Aug 2025 …'); SQLite como ISO.
+     Normalizamos a 'YYYY-MM-DD' antes de calcular días. */
+  function toIsoDate(v) {
+    if (!v) return '';
+    const s = String(v);
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+    const d = new Date(s);
+    if (isNaN(d)) return '';
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(d.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${dd}`;
+  }
   function docsBus(b) {
     const hoy = new Date(); hoy.setHours(0,0,0,0);
     const vencidos = [], porVencer = [];
     DOCS_DEF.forEach(d => {
-      const raw = b[d.key];
-      if (!raw) return;
-      const f = new Date(String(raw).slice(0,10) + 'T00:00:00');
+      const iso = toIsoDate(b[d.key]);
+      if (!iso) return;
+      const f = new Date(iso + 'T00:00:00');
       const dias = Math.round((f - hoy) / 86400000);
       if (dias < 0) vencidos.push({ label: d.label, dias });
       else if (dias <= 30) porVencer.push({ label: d.label, dias });
