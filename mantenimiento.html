@@ -595,10 +595,12 @@
       .maint-grid { grid-template-columns: repeat(3, 1fr); }
     }
     @media (max-width: 768px) {
+      /* iOS: 'position: sticky' dentro del iframe desactiva el scroll táctil por
+         inercia. En móvil topbar/tabs fluyen con el contenido (como despacho). */
       /* padding-left deja libre el botón de menú flotante de la shell */
-      .topbar { padding: 12px 14px 12px 60px; flex-wrap: wrap; gap: 10px; }
+      .topbar { position: static; padding: 12px 14px 12px 60px; flex-wrap: wrap; gap: 10px; }
       .topbar-title { font-size: 15px; }
-      .tabs-bar { padding: 0 14px; top: 64px; }
+      .tabs-bar { position: static; top: auto; padding: 0 14px; }
       .tab { padding: 12px 14px; font-size: 12px; }
       .page { padding: 16px 14px 32px; }
       .card { padding: 18px 16px; }
