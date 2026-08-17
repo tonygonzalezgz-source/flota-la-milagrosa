@@ -6,6 +6,8 @@ y continúa la conversación.
 """
 import os
 
+from ai.tools._common import json_safe
+
 
 def _to_gemini_schema(js):
     """Convierte un JSON Schema simple a google.genai.types.Schema."""
@@ -101,7 +103,7 @@ class GoogleProvider:
                 resp_parts.append(
                     types.Part(
                         function_response=types.FunctionResponse(
-                            name=fc.name, response=result
+                            name=fc.name, response=json_safe(result)
                         )
                     )
                 )
