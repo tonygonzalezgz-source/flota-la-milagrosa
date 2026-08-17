@@ -1,5 +1,27 @@
 """Helpers compartidos entre tools del chatbot."""
-from datetime import date
+from datetime import date, datetime
+from decimal import Decimal
+
+
+def json_safe(obj):
+    """Normaliza recursivamente un valor para que sea JSON-serializable.
+
+    Postgres (psycopg2) devuelve DATE como `datetime.date` y NUMERIC como
+    `Decimal`; SQLite devuelve strings. Como las tools construyen sus
+    respuestas a partir de filas de la BD, este helper garantiza que el
+    resultado final se pueda serializar tanto para el SDK de Anthropic
+    (`json.dumps`) como para el de Google (`FunctionResponse`).
+    """
+    if isinstance(obj, dict):
+        return {k: json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [json_safe(v) for v in obj]
+    if isinstance(obj, (datetime, date)):
+        return obj.isoformat()
+    if isinstance(obj, Decimal):
+        # Los enteros exactos se preservan como int; el resto como float.
+        return int(obj) if obj == obj.to_integral_value() else float(obj)
+    return obj
 
 
 # Roles con visibilidad restringida por usuario_buses (mismo criterio que /api/buses).

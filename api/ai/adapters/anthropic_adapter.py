@@ -7,6 +7,8 @@ conversación y vuelve a transmitir la siguiente respuesta.
 import os
 import json
 
+from ai.tools._common import json_safe
+
 
 class AnthropicProvider:
     def __init__(self):
@@ -62,7 +64,7 @@ class AnthropicProvider:
                 tool_results.append({
                     "type": "tool_result",
                     "tool_use_id": block.id,
-                    "content": json.dumps(result, ensure_ascii=False),
+                    "content": json.dumps(json_safe(result), ensure_ascii=False),
                 })
 
             conv.append({"role": "user", "content": tool_results})
