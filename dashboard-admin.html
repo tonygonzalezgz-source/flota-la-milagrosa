@@ -1915,7 +1915,16 @@
     #cbMsgs{ flex:1; overflow-y:auto; padding:14px; display:flex; flex-direction:column; gap:10px; }
     .cb-msg{ max-width:85%; padding:9px 12px; border-radius:12px; font-size:13.5px; line-height:1.45; white-space:pre-wrap; word-wrap:break-word; }
     .cb-msg.user{ align-self:flex-end; background:#6366f1; color:#fff; border-bottom-right-radius:4px; }
-    .cb-msg.bot{ align-self:flex-start; background:#1e1e22; color:#e8e8ea; border-bottom-left-radius:4px; }
+    .cb-msg.bot{ align-self:flex-start; background:#1e1e22; color:#e8e8ea; border-bottom-left-radius:4px; white-space:normal; line-height:1.5; }
+    /* Markdown del asistente renderizado (no se muestran ** ni * literales) */
+    .cb-msg.bot p{ margin:0 0 7px; }
+    .cb-msg.bot p:last-child{ margin-bottom:0; }
+    .cb-msg.bot ul, .cb-msg.bot ol{ margin:5px 0 7px; padding-left:16px; }
+    .cb-msg.bot ul:last-child, .cb-msg.bot ol:last-child{ margin-bottom:0; }
+    .cb-msg.bot li{ margin-bottom:4px; }
+    .cb-msg.bot li:last-child{ margin-bottom:0; }
+    .cb-msg.bot strong{ font-weight:600; color:#fff; }
+    .cb-msg.bot code{ background:#2a2a2f; padding:1px 5px; border-radius:5px; font-size:12.5px; }
     .cb-msg.tool{ align-self:flex-start; background:transparent; color:#808080; font-size:12px; font-style:italic; padding:2px 4px; }
     .cb-msg.err{ align-self:flex-start; background:rgba(239,68,68,.12); color:#ef4444; }
     #cbForm{ display:flex; gap:8px; padding:12px; border-top:1px solid #1e1e22; }
@@ -1976,10 +1985,54 @@
         }catch(e){ /* silencioso */ }
       }
 
+      /* ── Markdown mínimo → HTML ──
+         El modelo responde con markdown; sin esto se verían los ** y * crudos.
+         Se escapa primero, así el texto del modelo nunca inyecta HTML. */
+      function cbEsc(s){
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      }
+
+      function cbInline(s){
+        return s
+          .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+          .replace(/\*([^*\n]+)\*/g,   '<em>$1</em>')
+          .replace(/`([^`]+)`/g,       '<code>$1</code>');
+      }
+
+      function cbFormat(text){
+        // Durante el streaming puede llegar un ** sin cerrar: se oculta para que no parpadee
+        let src = String(text || '');
+        if((src.match(/\*\*/g) || []).length % 2 === 1) src = src.replace(/\*\*(?![\s\S]*\*\*)/, '');
+
+        const lines = cbEsc(src).split('\n');
+        let html = '', listTag = '';
+        const closeList = () => { if(listTag){ html += `</${listTag}>`; listTag = ''; } };
+
+        for(const line of lines){
+          const vineta   = line.match(/^\s*[-*•]\s+(.*)$/);
+          const numerada = line.match(/^\s*\d+[.)]\s+(.*)$/);
+          const titulo   = line.match(/^\s*#{1,6}\s+(.*)$/);
+
+          if(vineta || numerada){
+            const tag = vineta ? 'ul' : 'ol';
+            if(listTag !== tag){ closeList(); html += `<${tag}>`; listTag = tag; }
+            html += '<li>' + cbInline((vineta || numerada)[1]) + '</li>';
+            continue;
+          }
+          closeList();
+          if(!line.trim()) continue;                       // colapsa líneas en blanco
+          if(titulo){ html += '<p><strong>' + cbInline(titulo[1]) + '</strong></p>'; continue; }
+          html += '<p>' + cbInline(line) + '</p>';
+        }
+        closeList();
+        return html;
+      }
+
       function addBubble(cls, text){
         const el = document.createElement('div');
         el.className = 'cb-msg ' + cls;
-        el.textContent = text || '';
+        if(cls === 'bot') el.innerHTML = cbFormat(text);
+        else              el.textContent = text || '';
         $msgs.appendChild(el);
         $msgs.scrollTop = $msgs.scrollHeight;
         return el;
@@ -2045,7 +2098,7 @@
                 if(toolEl){ toolEl.remove(); toolEl = null; }
                 if(!botEl) botEl = addBubble('bot', '');
                 botText += ev.text;
-                botEl.textContent = botText;
+                botEl.innerHTML = cbFormat(botText);
                 $msgs.scrollTop = $msgs.scrollHeight;
               } else if(ev.type === 'tool'){
                 if(!toolEl) toolEl = addBubble('tool', '🔎 Consultando datos…');
