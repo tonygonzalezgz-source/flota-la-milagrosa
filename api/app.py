@@ -3,7 +3,7 @@ La Milagrosa — API Flask
 Corre en: http://localhost:8001
 Soporta SQLite (local) y PostgreSQL/Supabase (producción).
 """
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, Response, stream_with_context
 from flask_cors import CORS
 import os
 import time
@@ -1125,7 +1125,75 @@ def get_current_user():
         "iniciales": user["iniciales"],
         "color": user["color"],
         "allowedViews": allowed_views,
+        # Feature flag del chatbot (Fase 1): off salvo que FEATURE_CHATBOT sea true.
+        "chatbot_enabled": _feature_chatbot_enabled(),
     })
+
+
+def _feature_chatbot_enabled():
+    return os.environ.get("FEATURE_CHATBOT", "false").strip().lower() in ("1", "true", "yes", "on")
+
+
+# ──────────────────────────────────────────
+#  Chatbot con IA (Fase 1) — /api/chat
+# ──────────────────────────────────────────
+@app.route("/api/chat", methods=["POST"])
+@require_auth
+def chat():
+    """Chat con streaming (SSE) y tool calling.
+
+    Valida sesión (require_auth), arma el contexto con la identidad del usuario
+    y transmite la respuesta del LLM token a token. Las tools consultan la BD
+    respetando el rol del usuario autenticado.
+    """
+    if not _feature_chatbot_enabled():
+        return jsonify({"error": "El chatbot no está habilitado."}), 404
+
+    data = request.get_json(force=True, silent=True) or {}
+    raw_messages = data.get("messages", [])
+
+    # Sanea el historial: solo roles válidos y contenido de texto.
+    messages = []
+    for m in raw_messages:
+        if not isinstance(m, dict):
+            continue
+        role = m.get("role")
+        content = m.get("content")
+        if role in ("user", "assistant") and isinstance(content, str) and content.strip():
+            messages.append({"role": role, "content": content})
+
+    if not messages or messages[-1]["role"] != "user":
+        return jsonify({"error": "Falta un mensaje del usuario."}), 400
+
+    # Import perezoso: solo se cargan los SDKs de IA cuando se usa el chat.
+    from ai.provider import get_provider, SYSTEM_PROMPT
+    from ai.tools import REGISTRY
+
+    ctx = {
+        "user_id": request.jwt_user_id,
+        "rol": request.jwt_user_rol,
+        "get_db": get_db,
+        "hoy": hoy_bogota(),
+    }
+
+    try:
+        provider = get_provider()
+    except Exception as e:
+        return jsonify({"error": f"Configuración de IA inválida: {e}"}), 500
+
+    def gen():
+        try:
+            for ev in provider.stream(SYSTEM_PROMPT, messages, REGISTRY, ctx):
+                yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
+        except Exception as e:
+            err = {"type": "error", "error": str(e)}
+            yield f"data: {json.dumps(err, ensure_ascii=False)}\n\n"
+
+    return Response(
+        stream_with_context(gen()),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 # ──────────────────────────────────────────
