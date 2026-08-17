@@ -1942,5 +1942,194 @@
       if (e.data?.type === 'VIEW_SHOWN') cargarLocalizables();
     });
   </script>
+
+  <!-- ══════════════════════════════════════════════
+       CHATBOT IA (Fase 2) — oculto tras FEATURE_CHATBOT
+  ═══════════════════════════════════════════════ -->
+  <style>
+    #cbLauncher{
+      position:fixed; right:20px; bottom:20px; z-index:9000;
+      width:56px; height:56px; border:none; border-radius:50%;
+      display:none; align-items:center; justify-content:center; cursor:pointer;
+      background:linear-gradient(135deg,#6366f1,#4f46e5);
+      box-shadow:0 8px 24px rgba(79,70,229,.45); color:#fff; font-size:24px;
+      transition:transform .15s ease;
+    }
+    #cbLauncher:hover{ transform:scale(1.06); }
+    #cbDrawer{
+      position:fixed; right:20px; bottom:88px; z-index:9001;
+      width:min(380px,calc(100vw - 40px)); height:min(560px,calc(100vh - 120px));
+      display:none; flex-direction:column; overflow:hidden;
+      background:#141416; border:1px solid #1e1e22; border-radius:16px;
+      box-shadow:0 20px 60px rgba(0,0,0,.55); color:#fff;
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Inter',sans-serif;
+    }
+    #cbDrawer.open{ display:flex; }
+    #cbHead{
+      display:flex; align-items:center; justify-content:space-between;
+      padding:14px 16px; border-bottom:1px solid #1e1e22;
+      background:#0f0f11;
+    }
+    #cbHead .cb-title{ font-weight:600; font-size:15px; }
+    #cbHead .cb-sub{ font-size:11px; color:#808080; }
+    #cbClose{ background:none; border:none; color:#808080; font-size:18px; cursor:pointer; }
+    #cbMsgs{ flex:1; overflow-y:auto; padding:14px; display:flex; flex-direction:column; gap:10px; }
+    .cb-msg{ max-width:85%; padding:9px 12px; border-radius:12px; font-size:13.5px; line-height:1.45; white-space:pre-wrap; word-wrap:break-word; }
+    .cb-msg.user{ align-self:flex-end; background:#6366f1; color:#fff; border-bottom-right-radius:4px; }
+    .cb-msg.bot{ align-self:flex-start; background:#1e1e22; color:#e8e8ea; border-bottom-left-radius:4px; }
+    .cb-msg.tool{ align-self:flex-start; background:transparent; color:#808080; font-size:12px; font-style:italic; padding:2px 4px; }
+    .cb-msg.err{ align-self:flex-start; background:rgba(239,68,68,.12); color:#ef4444; }
+    #cbForm{ display:flex; gap:8px; padding:12px; border-top:1px solid #1e1e22; }
+    #cbInput{
+      flex:1; background:#0f0f11; border:1px solid #1e1e22; border-radius:10px;
+      padding:9px 12px; color:#fff; font-size:13.5px; outline:none;
+    }
+    #cbInput:focus{ border-color:#6366f1; }
+    #cbSend{
+      border:none; border-radius:10px; padding:0 14px; cursor:pointer;
+      background:#6366f1; color:#fff; font-size:14px; font-weight:600;
+    }
+    #cbSend:disabled{ opacity:.5; cursor:default; }
+  </style>
+
+  <button id="cbLauncher" title="Asistente BusControl" aria-label="Abrir asistente">💬</button>
+  <div id="cbDrawer" role="dialog" aria-label="Asistente BusControl">
+    <div id="cbHead">
+      <div>
+        <div class="cb-title">Asistente BusControl</div>
+        <div class="cb-sub">Estado, vencimientos y movilidad de la flota</div>
+      </div>
+      <button id="cbClose" aria-label="Cerrar">✕</button>
+    </div>
+    <div id="cbMsgs"></div>
+    <form id="cbForm" autocomplete="off">
+      <input id="cbInput" type="text" placeholder="Ej: ¿qué buses tienen SOAT vencido?" />
+      <button id="cbSend" type="submit">Enviar</button>
+    </form>
+  </div>
+
+  <script>
+    (function(){
+      const CB_API = (window.location.port === '3030')
+        ? 'http://localhost:8001/api'
+        : (window.location.origin + '/api');
+      const cbToken = () => localStorage.getItem('authToken');
+      const history = [];
+      let streaming = false;
+
+      const $launcher = document.getElementById('cbLauncher');
+      const $drawer   = document.getElementById('cbDrawer');
+      const $msgs     = document.getElementById('cbMsgs');
+      const $form     = document.getElementById('cbForm');
+      const $input    = document.getElementById('cbInput');
+      const $send     = document.getElementById('cbSend');
+
+      async function cbInit(){
+        try{
+          const r = await fetch(CB_API + '/me', {
+            headers: { 'Authorization': `Bearer ${cbToken()}` }
+          });
+          if(!r.ok) return;
+          const me = await r.json();
+          if(me.chatbot_enabled){
+            $launcher.style.display = 'flex';
+          }
+        }catch(e){ /* silencioso */ }
+      }
+
+      function addBubble(cls, text){
+        const el = document.createElement('div');
+        el.className = 'cb-msg ' + cls;
+        el.textContent = text || '';
+        $msgs.appendChild(el);
+        $msgs.scrollTop = $msgs.scrollHeight;
+        return el;
+      }
+
+      function setBusy(on){
+        streaming = on;
+        $send.disabled = on;
+        $input.disabled = on;
+      }
+
+      $launcher.addEventListener('click', () => {
+        $drawer.classList.add('open');
+        if(!$msgs.childElementCount){
+          addBubble('bot', 'Hola 👋 Puedo consultar el estado del día, los vencimientos (SOAT, tecno, tarjeta de operación) y la movilidad de cualquier bus. Prueba: «¿qué buses tienen SOAT venciendo este mes?».');
+        }
+        $input.focus();
+      });
+      document.getElementById('cbClose').addEventListener('click', () => {
+        $drawer.classList.remove('open');
+      });
+
+      $form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const text = $input.value.trim();
+        if(!text || streaming) return;
+        $input.value = '';
+        addBubble('user', text);
+        history.push({ role:'user', content:text });
+        setBusy(true);
+
+        let botEl = null;
+        let botText = '';
+        let toolEl = null;
+
+        try{
+          const resp = await fetch(CB_API + '/chat', {
+            method:'POST',
+            headers:{ 'Content-Type':'application/json', 'Authorization':`Bearer ${cbToken()}` },
+            body: JSON.stringify({ messages: history }),
+          });
+          if(!resp.ok || !resp.body){
+            addBubble('err', 'No se pudo conectar con el asistente.');
+            setBusy(false);
+            return;
+          }
+          const reader = resp.body.getReader();
+          const dec = new TextDecoder();
+          let buf = '';
+          while(true){
+            const { done, value } = await reader.read();
+            if(done) break;
+            buf += dec.decode(value, { stream:true });
+            let idx;
+            while((idx = buf.indexOf('\n\n')) >= 0){
+              const raw = buf.slice(0, idx); buf = buf.slice(idx + 2);
+              const line = raw.split('\n').find(l => l.startsWith('data:'));
+              if(!line) continue;
+              let ev;
+              try{ ev = JSON.parse(line.slice(5).trim()); }catch(_){ continue; }
+
+              if(ev.type === 'text'){
+                if(toolEl){ toolEl.remove(); toolEl = null; }
+                if(!botEl) botEl = addBubble('bot', '');
+                botText += ev.text;
+                botEl.textContent = botText;
+                $msgs.scrollTop = $msgs.scrollHeight;
+              } else if(ev.type === 'tool'){
+                if(!toolEl) toolEl = addBubble('tool', '🔎 Consultando datos…');
+              } else if(ev.type === 'error'){
+                if(toolEl){ toolEl.remove(); toolEl = null; }
+                addBubble('err', 'Error: ' + (ev.error || 'desconocido'));
+              } else if(ev.type === 'done'){
+                if(toolEl){ toolEl.remove(); toolEl = null; }
+              }
+            }
+          }
+          if(botText) history.push({ role:'assistant', content:botText });
+        }catch(err){
+          addBubble('err', 'Error de conexión con el asistente.');
+        }finally{
+          setBusy(false);
+          $input.focus();
+        }
+      });
+
+      document.addEventListener('DOMContentLoaded', cbInit);
+      if(document.readyState !== 'loading') cbInit();
+    })();
+  </script>
 </body>
 </html>
