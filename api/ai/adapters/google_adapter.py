@@ -5,8 +5,12 @@ el modelo emite un function_call ejecuta la tool, devuelve el function_response
 y continúa la conversación.
 """
 import os
+import time
 
-from ai.tools._common import json_safe
+from ai.tools._common import json_safe, is_retryable_error, retry_delay_seconds
+
+
+MAX_RETRIES = 3
 
 
 def _to_gemini_schema(js):
@@ -69,18 +73,38 @@ class GoogleProvider:
         for _ in range(6):
             text_parts = []   # Parts con texto (preservan thought_signature si viene)
             fn_parts = []     # Parts con function_call (idem; requerido por Gemini 3.x)
-            for chunk in self._client.models.generate_content_stream(
-                model=self._model, contents=contents, config=config
-            ):
-                cand = chunk.candidates[0] if chunk.candidates else None
-                if not cand or not cand.content or not cand.content.parts:
-                    continue
-                for part in cand.content.parts:
-                    if getattr(part, "text", None):
-                        text_parts.append(part)
-                        yield {"type": "text", "text": part.text}
-                    if getattr(part, "function_call", None):
-                        fn_parts.append(part)
+            # Retry solo si el fallo ocurre ANTES de yield-ear texto al usuario.
+            # Si el error es mid-stream reintentar duplicaría contenido.
+            text_emitted_this_turn = False
+
+            for attempt in range(MAX_RETRIES):
+                # Reset por si un intento anterior alcanzó a poblar los arrays
+                # antes de fallar sin haber emitido texto (raro pero posible).
+                text_parts = []
+                fn_parts = []
+                try:
+                    for chunk in self._client.models.generate_content_stream(
+                        model=self._model, contents=contents, config=config
+                    ):
+                        cand = chunk.candidates[0] if chunk.candidates else None
+                        if not cand or not cand.content or not cand.content.parts:
+                            continue
+                        for part in cand.content.parts:
+                            if getattr(part, "text", None):
+                                text_parts.append(part)
+                                text_emitted_this_turn = True
+                                yield {"type": "text", "text": part.text}
+                            if getattr(part, "function_call", None):
+                                fn_parts.append(part)
+                    break  # éxito, salir del retry loop
+                except Exception as e:
+                    if (
+                        text_emitted_this_turn
+                        or not is_retryable_error(e)
+                        or attempt == MAX_RETRIES - 1
+                    ):
+                        raise
+                    time.sleep(retry_delay_seconds(attempt))
 
             if not fn_parts:
                 break

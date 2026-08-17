@@ -3,6 +3,31 @@ from datetime import date, datetime
 from decimal import Decimal
 
 
+# ── Retry para errores transitorios de los proveedores de LLM ──────────
+#
+# 429 = rate limit / cuota agotada, 503 = modelo saturado, 5xx = fallo
+# temporal del backend. Estos son recuperables reintentando; el resto
+# (400, 401, 403, 404) NO se reintenta porque son errores de nuestro lado.
+RETRYABLE_STATUS = (429, 500, 502, 503, 504)
+RETRYABLE_MARKERS = ("RESOURCE_EXHAUSTED", "UNAVAILABLE", "overloaded")
+
+
+def is_retryable_error(exc):
+    """True si la excepción del SDK del LLM parece un fallo transitorio."""
+    status = getattr(exc, "code", None) or getattr(exc, "status_code", None)
+    if status in RETRYABLE_STATUS:
+        return True
+    msg = str(exc)
+    if any(m in msg for m in RETRYABLE_MARKERS):
+        return True
+    return any(f" {s} " in f" {msg} " or f"{s} " in msg[:6] for s in RETRYABLE_STATUS)
+
+
+def retry_delay_seconds(attempt):
+    """Backoff exponencial: 1s, 2s, 4s. Attempt es 0-indexed."""
+    return 2 ** attempt
+
+
 def json_safe(obj):
     """Normaliza recursivamente un valor para que sea JSON-serializable.
 
