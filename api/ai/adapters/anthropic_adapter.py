@@ -6,8 +6,12 @@ conversación y vuelve a transmitir la siguiente respuesta.
 """
 import os
 import json
+import time
 
-from ai.tools._common import json_safe
+from ai.tools._common import json_safe, is_retryable_error, retry_delay_seconds
+
+
+MAX_RETRIES = 3
 
 
 class AnthropicProvider:
@@ -34,16 +38,33 @@ class AnthropicProvider:
 
         # Límite de vueltas para no ciclar indefinidamente sobre tools.
         for _ in range(6):
-            with self._client.messages.stream(
-                model=self._model,
-                max_tokens=self._max_tokens,
-                system=system,
-                messages=conv,
-                tools=anth_tools,
-            ) as stream:
-                for text in stream.text_stream:
-                    yield {"type": "text", "text": text}
-                final = stream.get_final_message()
+            # Retry solo si el fallo ocurre ANTES de yield-ear texto al usuario.
+            # Si el error es mid-stream reintentar duplicaría contenido.
+            text_emitted_this_turn = False
+            final = None
+
+            for attempt in range(MAX_RETRIES):
+                try:
+                    with self._client.messages.stream(
+                        model=self._model,
+                        max_tokens=self._max_tokens,
+                        system=system,
+                        messages=conv,
+                        tools=anth_tools,
+                    ) as stream:
+                        for text in stream.text_stream:
+                            text_emitted_this_turn = True
+                            yield {"type": "text", "text": text}
+                        final = stream.get_final_message()
+                    break  # éxito, salir del retry loop
+                except Exception as e:
+                    if (
+                        text_emitted_this_turn
+                        or not is_retryable_error(e)
+                        or attempt == MAX_RETRIES - 1
+                    ):
+                        raise
+                    time.sleep(retry_delay_seconds(attempt))
 
             if final.stop_reason != "tool_use":
                 break
