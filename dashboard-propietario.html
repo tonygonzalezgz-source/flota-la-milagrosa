@@ -2461,7 +2461,7 @@
                 if(!toolEl) toolEl = addBubble('tool', '🔎 Consultando datos…');
               } else if(ev.type === 'error'){
                 if(toolEl){ toolEl.remove(); toolEl = null; }
-                addBubble('err', 'Error: ' + (ev.error || 'desconocido'));
+                addBubble('err', ev.error || 'El asistente tuvo un problema al responder. Intenta de nuevo.');
               } else if(ev.type === 'done'){
                 if(toolEl){ toolEl.remove(); toolEl = null; }
               }

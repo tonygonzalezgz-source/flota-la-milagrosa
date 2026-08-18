@@ -3,10 +3,75 @@
 Implementa el loop de streaming + function calling: transmite texto, y cuando
 el modelo emite un function_call ejecuta la tool, devuelve el function_response
 y continúa la conversación.
+
+Ante un 503 UNAVAILABLE (el modelo saturado por picos de demanda) reintenta con
+espera creciente y, si el modelo sigue caído, pasa al siguiente de la cadena de
+respaldo. Ver `_model_chain()`.
 """
 import os
+import random
+import time
 
 from ai.tools._common import json_safe
+
+# Cadena de modelos por defecto: un GA estable adelante y dos respaldos con
+# mucha capacidad detrás. A propósito NO se usa el alias `gemini-flash-latest`:
+# apunta siempre al modelo más nuevo, que es justo el más saturado (503).
+DEFAULT_MODEL = "gemini-3.5-flash"
+DEFAULT_FALLBACKS = "gemini-2.5-flash,gemini-2.5-flash-lite"
+
+# Códigos y estados que corresponden a saturación o fallo pasajero: vale la
+# pena reintentar. El resto (400, 401, 403, 404…) es error de configuración y
+# reintentarlo solo hace perder tiempo.
+_TRANSIENT_CODES = {429, 500, 502, 503, 504}
+_TRANSIENT_STATUS = (
+    "UNAVAILABLE",
+    "RESOURCE_EXHAUSTED",
+    "INTERNAL",
+    "DEADLINE_EXCEEDED",
+    "ABORTED",
+    "OVERLOADED",
+)
+
+MSG_SATURADO = (
+    "El asistente está saturado en este momento. Espera unos segundos y "
+    "vuelve a preguntar."
+)
+
+
+def _es_transitorio(exc):
+    """True si el error viene de saturación del modelo y conviene reintentar."""
+    code = getattr(exc, "code", None)
+    if isinstance(code, int):
+        return code in _TRANSIENT_CODES
+    status = str(getattr(exc, "status", "") or "").upper()
+    if status in _TRANSIENT_STATUS:
+        return True
+    msg = str(exc).upper()
+    return any(s in msg for s in _TRANSIENT_STATUS) or "503" in msg or "429" in msg
+
+
+def _espera(intento):
+    """Backoff exponencial con jitter: ~1s, ~2s, ~4s (tope 8s)."""
+    return min(8.0, 2.0 ** intento) * (0.75 + random.random() * 0.5)
+
+
+def _model_chain():
+    """Modelos a probar en orden: el principal y sus respaldos.
+
+    GOOGLE_MODEL define el principal; GOOGLE_MODEL_FALLBACKS los respaldos
+    separados por coma (déjalo vacío para desactivar el cambio de modelo).
+    """
+    principal = (os.environ.get("GOOGLE_MODEL") or DEFAULT_MODEL).strip()
+    crudos = os.environ.get("GOOGLE_MODEL_FALLBACKS")
+    if crudos is None:
+        crudos = DEFAULT_FALLBACKS
+    cadena = [principal]
+    for m in crudos.split(","):
+        m = m.strip()
+        if m and m not in cadena:
+            cadena.append(m)
+    return cadena
 
 
 def _to_gemini_schema(js):
@@ -39,7 +104,53 @@ class GoogleProvider:
             or os.environ.get("GOOGLE_API_KEY")
         )
         self._client = genai.Client(api_key=api_key)
-        self._model = os.environ.get("GOOGLE_MODEL", "gemini-flash-latest")
+        self._models = _model_chain()
+        self._intentos = max(1, int(os.environ.get("GOOGLE_ATTEMPTS_PER_MODEL", "2")))
+        # Índice del modelo vigente: una vez que uno responde, los demás turnos
+        # de esta misma conversación siguen con él.
+        self._idx = 0
+
+    def _turno(self, contents, config, text_parts, fn_parts):
+        """Un turno del modelo, con reintentos y cambio de modelo si hace falta.
+
+        Emite los eventos de texto conforme llegan y acumula los Parts en
+        `text_parts` / `fn_parts`. Nunca reintenta después de haber emitido
+        texto: eso duplicaría la respuesta en pantalla.
+        """
+        ultimo = None
+        for i in range(self._idx, len(self._models)):
+            modelo = self._models[i]
+            for intento in range(self._intentos):
+                emitido = False
+                try:
+                    for chunk in self._client.models.generate_content_stream(
+                        model=modelo, contents=contents, config=config
+                    ):
+                        cand = chunk.candidates[0] if chunk.candidates else None
+                        if not cand or not cand.content or not cand.content.parts:
+                            continue
+                        for part in cand.content.parts:
+                            if getattr(part, "text", None):
+                                text_parts.append(part)
+                                emitido = True
+                                yield {"type": "text", "text": part.text}
+                            if getattr(part, "function_call", None):
+                                fn_parts.append(part)
+                    self._idx = i
+                    return
+                except Exception as e:
+                    ultimo = e
+                    if emitido or not _es_transitorio(e):
+                        raise
+                    # Turno descartado: se limpia lo acumulado y se repite.
+                    text_parts.clear()
+                    fn_parts.clear()
+                    print(f"[chat] {modelo} no disponible (intento {intento + 1}): {e}")
+                    if intento < self._intentos - 1:
+                        time.sleep(_espera(intento))
+            if i + 1 < len(self._models):
+                print(f"[chat] cambiando a modelo de respaldo: {self._models[i + 1]}")
+        raise RuntimeError(MSG_SATURADO) from ultimo
 
     def stream(self, system, messages, tools, ctx):
         from google.genai import types
@@ -69,18 +180,7 @@ class GoogleProvider:
         for _ in range(6):
             text_parts = []   # Parts con texto (preservan thought_signature si viene)
             fn_parts = []     # Parts con function_call (idem; requerido por Gemini 3.x)
-            for chunk in self._client.models.generate_content_stream(
-                model=self._model, contents=contents, config=config
-            ):
-                cand = chunk.candidates[0] if chunk.candidates else None
-                if not cand or not cand.content or not cand.content.parts:
-                    continue
-                for part in cand.content.parts:
-                    if getattr(part, "text", None):
-                        text_parts.append(part)
-                        yield {"type": "text", "text": part.text}
-                    if getattr(part, "function_call", None):
-                        fn_parts.append(part)
+            yield from self._turno(contents, config, text_parts, fn_parts)
 
             if not fn_parts:
                 break

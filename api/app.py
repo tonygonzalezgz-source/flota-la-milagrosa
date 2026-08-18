@@ -1134,6 +1134,24 @@ def _feature_chatbot_enabled():
     return os.environ.get("FEATURE_CHATBOT", "false").strip().lower() in ("1", "true", "yes", "on")
 
 
+def _mensaje_error_ia(e):
+    """Traduce un fallo del proveedor de IA a algo legible para el operador.
+
+    El detalle técnico queda en los logs del servidor; en pantalla solo va una
+    frase entendible y accionable.
+    """
+    txt = f"{getattr(e, 'code', '')} {getattr(e, 'status', '')} {e}".upper()
+    if any(s in txt for s in ("UNAVAILABLE", "503", "OVERLOAD", "HIGH DEMAND",
+                              "RESOURCE_EXHAUSTED", "429", "QUOTA", "SATURADO")):
+        return ("El asistente está saturado en este momento. Espera unos "
+                "segundos y vuelve a preguntar.")
+    if any(s in txt for s in ("API KEY", "API_KEY", "UNAUTHENTICATED",
+                              "PERMISSION_DENIED", "NOT_FOUND", "401", "403", "404")):
+        return ("El asistente no está configurado correctamente. "
+                "Avisa al administrador.")
+    return "El asistente tuvo un problema al responder. Intenta de nuevo."
+
+
 # ──────────────────────────────────────────
 #  Chatbot con IA (Fase 1) — /api/chat
 # ──────────────────────────────────────────
@@ -1186,7 +1204,8 @@ def chat():
             for ev in provider.stream(SYSTEM_PROMPT, messages, REGISTRY, ctx):
                 yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
         except Exception as e:
-            err = {"type": "error", "error": str(e)}
+            print(f"[chat] fallo del proveedor de IA: {e!r}")
+            err = {"type": "error", "error": _mensaje_error_ia(e)}
             yield f"data: {json.dumps(err, ensure_ascii=False)}\n\n"
 
     return Response(
