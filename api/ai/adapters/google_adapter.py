@@ -17,12 +17,15 @@ from ai.tools._common import json_safe
 # Cadena de modelos por defecto: un GA estable adelante y dos respaldos con
 # mucha capacidad detrás. A propósito NO se usa el alias `gemini-flash-latest`:
 # apunta siempre al modelo más nuevo, que es justo el más saturado (503).
-DEFAULT_MODEL = "gemini-3.5-flash"
-DEFAULT_FALLBACKS = "gemini-2.5-flash,gemini-2.5-flash-lite"
+# Ojo al mantener esta lista: los modelos 2.5 quedaron cerrados para proyectos
+# nuevos (404 "no longer available to new users"), así que la cadena va sobre
+# la familia 3.x, con un `lite` al final porque es el que más cupo tiene.
+DEFAULT_MODEL = "gemini-3.6-flash"
+DEFAULT_FALLBACKS = "gemini-3.7-flash,gemini-3.5-flash-lite"
 
 # Códigos y estados que corresponden a saturación o fallo pasajero: vale la
-# pena reintentar. El resto (400, 401, 403, 404…) es error de configuración y
-# reintentarlo solo hace perder tiempo.
+# pena reintentar el mismo modelo. El resto (400, 401, 403…) es error de
+# configuración y reintentarlo solo hace perder tiempo.
 _TRANSIENT_CODES = {429, 500, 502, 503, 504}
 _TRANSIENT_STATUS = (
     "UNAVAILABLE",
@@ -49,6 +52,20 @@ def _es_transitorio(exc):
         return True
     msg = str(exc).upper()
     return any(s in msg for s in _TRANSIENT_STATUS) or "503" in msg or "429" in msg
+
+
+def _modelo_no_disponible(exc):
+    """True si el modelo en sí no existe o el proyecto no lo tiene habilitado.
+
+    Reintentarlo no sirve, pero el siguiente de la cadena sí puede responder:
+    es un 404 de ese modelo, no un problema de credencial ni de la petición.
+    """
+    if getattr(exc, "code", None) == 404:
+        return True
+    if str(getattr(exc, "status", "") or "").upper() == "NOT_FOUND":
+        return True
+    msg = str(exc).upper()
+    return "404" in msg and ("NOT_FOUND" in msg or "NOT FOUND" in msg)
 
 
 def _espera(intento):
@@ -140,16 +157,28 @@ class GoogleProvider:
                     return
                 except Exception as e:
                     ultimo = e
-                    if emitido or not _es_transitorio(e):
+                    if emitido:
                         raise
-                    # Turno descartado: se limpia lo acumulado y se repite.
+                    # Turno descartado: se limpia lo acumulado antes de repetir
+                    # o de pasar al siguiente modelo.
                     text_parts.clear()
                     fn_parts.clear()
+                    if _modelo_no_disponible(e):
+                        # El modelo no existe para este proyecto: no se reintenta,
+                        # se pasa directo al siguiente de la cadena.
+                        print(f"[chat] {modelo} no habilitado para este proyecto: {e}")
+                        break
+                    if not _es_transitorio(e):
+                        raise
                     print(f"[chat] {modelo} no disponible (intento {intento + 1}): {e}")
                     if intento < self._intentos - 1:
                         time.sleep(_espera(intento))
             if i + 1 < len(self._models):
                 print(f"[chat] cambiando a modelo de respaldo: {self._models[i + 1]}")
+        # Agotada la cadena: si el último fallo no fue saturación (p. ej. ningún
+        # modelo habilitado), se propaga tal cual para no mentir en el mensaje.
+        if ultimo is not None and not _es_transitorio(ultimo):
+            raise ultimo
         raise RuntimeError(MSG_SATURADO) from ultimo
 
     def stream(self, system, messages, tools, ctx):
