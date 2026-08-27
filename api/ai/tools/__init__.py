@@ -11,6 +11,8 @@ from ai.tools import (
     vencimientos_flota_proximos,
     comparativa_movilidad_bus,
     comparativa_movilidad_flota,
+    despachadores_de_turno,
+    chequeos_despachadores,
 )
 
 REGISTRY = [
@@ -20,6 +22,8 @@ REGISTRY = [
     vencimientos_flota_proximos.TOOL,
     comparativa_movilidad_bus.TOOL,
     comparativa_movilidad_flota.TOOL,
+    despachadores_de_turno.TOOL,
+    chequeos_despachadores.TOOL,
 ]
 
 BY_NAME = {t["name"]: t for t in REGISTRY}
