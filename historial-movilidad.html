@@ -275,6 +275,10 @@
     }
     .num-input:focus { border-color: var(--accent); background: #1a1a20; }
     .num-input.touched { border-color: var(--yellow); }
+    /* Oculta las flechitas del spinner para que el ingreso sea solo por teclado */
+    .num-input::-webkit-outer-spin-button,
+    .num-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .num-input { -moz-appearance: textfield; appearance: textfield; }
 
     .ruta-select {
       width: 190px;
@@ -1002,13 +1006,13 @@
           ${despBadge}
         </td>
         <td data-label="Grupo"><span class="badge-grupo badge-${(b.grupo || 'A').toLowerCase()}">${b.grupo}</span></td>
-        <td data-label="Vueltas"><input  class="num-input"   id="v-${b.id}"    type="number" min="0"
+        <td data-label="Vueltas"><input  class="num-input"   id="v-${b.id}"    type="number" min="0" inputmode="numeric"
                     value="${rec ? rec.vueltas : ''}" placeholder="0"
                     oninput="markDirty(${b.id})" /></td>
-        <td data-label="Pasajeros"><input  class="num-input"   id="p-${b.id}"    type="number" min="0"
+        <td data-label="Pasajeros"><input  class="num-input"   id="p-${b.id}"    type="number" min="0" inputmode="numeric"
                     value="${rec ? rec.pasajeros : ''}" placeholder="0"
                     oninput="markDirty(${b.id})" /></td>
-        <td data-label="Km"><input  class="num-input"   id="k-${b.id}"    type="number" min="0" step="0.1"
+        <td data-label="Km"><input  class="num-input"   id="k-${b.id}"    type="number" min="0" step="0.1" inputmode="decimal"
                     value="${rec && rec.km_recorridos != null ? Math.round(rec.km_recorridos * 10) / 10 : ''}" placeholder="0"
                     oninput="markDirty(${b.id})" /></td>
         <td data-label="Conductor">${conductorCell}</td>
