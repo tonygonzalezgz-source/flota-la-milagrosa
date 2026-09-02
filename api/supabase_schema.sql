@@ -5,15 +5,16 @@
 
 -- Usuarios del sistema
 CREATE TABLE IF NOT EXISTS usuarios (
-    id         SERIAL PRIMARY KEY,
-    username   TEXT    UNIQUE NOT NULL,
-    password   TEXT    NOT NULL,
-    nombre     TEXT    NOT NULL,
-    rol        TEXT    NOT NULL,
-    iniciales  TEXT    NOT NULL,
-    color      TEXT    NOT NULL DEFAULT '#6366f1',
-    activo     INTEGER NOT NULL DEFAULT 1,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    id                       SERIAL PRIMARY KEY,
+    username                 TEXT    UNIQUE NOT NULL,
+    password                 TEXT    NOT NULL,
+    nombre                   TEXT    NOT NULL,
+    rol                      TEXT    NOT NULL,
+    iniciales                TEXT    NOT NULL,
+    color                    TEXT    NOT NULL DEFAULT '#6366f1',
+    activo                   INTEGER NOT NULL DEFAULT 1,
+    tratamiento_aceptado_at  TIMESTAMP,
+    created_at               TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Flota de buses

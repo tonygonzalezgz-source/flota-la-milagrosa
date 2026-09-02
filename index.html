@@ -740,6 +740,124 @@
       .welcome-title { font-size: 16px; }
       .welcome-sub { font-size: 12px; max-width: 280px; }
     }
+
+    /* ═══════════════════════════════════════
+       AVISO DE TRATAMIENTO DE DATOS (Ley 1581/2012)
+    ═══════════════════════════════════════ */
+    #privacyModal {
+      display: none;
+      position: fixed; inset: 0;
+      z-index: 10000;
+      background: rgba(4, 4, 8, .82);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      align-items: center; justify-content: center;
+      padding: 20px;
+    }
+    #privacyModal.show { display: flex; }
+    .pv-box {
+      width: 100%;
+      max-width: 640px;
+      max-height: 90vh;
+      background: var(--card-d);
+      border: 1px solid var(--border-d);
+      border-radius: var(--radius);
+      display: flex; flex-direction: column;
+      box-shadow: 0 30px 60px rgba(0,0,0,.6);
+      overflow: hidden;
+    }
+    .pv-header {
+      padding: 20px 22px 14px;
+      border-bottom: 1px solid var(--border-d);
+      display: flex; align-items: center; gap: 12px;
+    }
+    .pv-icon {
+      width: 38px; height: 38px; flex-shrink: 0;
+      border-radius: 10px;
+      background: var(--blue-dim);
+      color: var(--blue);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .pv-title {
+      font-size: 16px; font-weight: 600; color: var(--txt-inv);
+      letter-spacing: -.1px;
+    }
+    .pv-subtitle {
+      font-size: 11px; color: var(--txt-muted);
+      margin-top: 2px; letter-spacing: .3px; text-transform: uppercase;
+    }
+    .pv-body {
+      padding: 18px 22px;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      font-size: 13px;
+      line-height: 1.55;
+      color: #cfcfd3;
+    }
+    .pv-body p { margin: 0 0 12px; }
+    .pv-body strong { color: var(--txt-inv); font-weight: 600; }
+    .pv-body h4 {
+      font-size: 12px; text-transform: uppercase; letter-spacing: .6px;
+      color: var(--blue); margin: 16px 0 6px; font-weight: 600;
+    }
+    .pv-body ul { margin: 4px 0 12px; padding-left: 18px; }
+    .pv-body li { margin-bottom: 4px; }
+    .pv-check {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 14px 22px;
+      background: rgba(99,102,241,.06);
+      border-top: 1px solid var(--border-d);
+      cursor: pointer;
+      user-select: none;
+    }
+    .pv-check input {
+      margin: 3px 0 0; flex-shrink: 0;
+      width: 16px; height: 16px;
+      accent-color: var(--blue);
+      cursor: pointer;
+    }
+    .pv-check-label {
+      font-size: 12.5px; color: var(--txt-inv); line-height: 1.45;
+    }
+    .pv-actions {
+      display: flex; gap: 10px;
+      padding: 14px 22px 18px;
+      border-top: 1px solid var(--border-d);
+      background: rgba(0,0,0,.15);
+    }
+    .pv-btn {
+      flex: 1;
+      padding: 11px 14px;
+      border: 1px solid var(--border-d);
+      background: transparent;
+      color: var(--txt-inv);
+      border-radius: var(--radius-sm);
+      font-size: 13px; font-weight: 500;
+      cursor: pointer;
+      transition: background .15s, border-color .15s, opacity .15s;
+      font-family: inherit;
+    }
+    .pv-btn:hover { background: rgba(255,255,255,.04); }
+    .pv-btn.primary {
+      background: var(--blue);
+      border-color: var(--blue);
+      color: #fff;
+    }
+    .pv-btn.primary:hover { background: #5457e6; }
+    .pv-btn.primary:disabled {
+      opacity: .45; cursor: not-allowed;
+      background: var(--blue);
+    }
+    .pv-btn.ghost { color: var(--txt-muted); }
+
+    @media (max-width: 480px) {
+      #privacyModal { padding: 12px; align-items: flex-end; }
+      .pv-box { max-height: 92vh; border-radius: 14px 14px 10px 10px; }
+      .pv-header { padding: 16px 16px 12px; }
+      .pv-body { padding: 14px 16px; font-size: 12.5px; }
+      .pv-check, .pv-actions { padding-left: 16px; padding-right: 16px; }
+      .pv-actions { flex-direction: column-reverse; }
+    }
   </style>
 </head>
 <body>
@@ -837,6 +955,87 @@
   <!-- Footer tagline -->
   <div class="login-footer">Gestión Vehicular Inteligente</div>
 
+</div>
+
+<!-- ════════════════════════════════════════════
+     AVISO DE TRATAMIENTO DE DATOS PERSONALES
+     (Ley 1581 de 2012 · Decreto 1377 de 2013)
+     Se muestra una sola vez al Propietario tras el login.
+════════════════════════════════════════════ -->
+<div id="privacyModal" role="dialog" aria-modal="true" aria-labelledby="pvTitle">
+  <div class="pv-box">
+    <div class="pv-header">
+      <div class="pv-icon">
+        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg>
+      </div>
+      <div>
+        <div class="pv-title" id="pvTitle">Aviso de tratamiento de datos personales</div>
+        <div class="pv-subtitle">Ley 1581 de 2012 · Habeas Data</div>
+      </div>
+    </div>
+
+    <div class="pv-body">
+      <p>En cumplimiento de la <strong>Ley Estatutaria 1581 de 2012</strong> y el
+      <strong>Decreto 1377 de 2013</strong> de la República de Colombia,
+      <strong>Flota La Milagrosa</strong>, responsable del tratamiento, le informa
+      que los datos personales que suministra a la plataforma <strong>BusControl</strong>
+      serán tratados con las finalidades, alcances y garantías que se describen a
+      continuación.</p>
+
+      <h4>Datos que se recolectan</h4>
+      <ul>
+        <li>Datos de identificación (nombre, cédula, teléfono, correo).</li>
+        <li>Información de sus vehículos (placa, número, kilometraje, vencimientos de SOAT, tecnomecánica y tarjeta de operación).</li>
+        <li>Registros operativos asociados a sus buses (despacho, movilidad, mantenimiento, alistamiento, gastos).</li>
+      </ul>
+
+      <h4>Finalidades del tratamiento</h4>
+      <ul>
+        <li>Gestión operativa y administrativa de su flota dentro de la plataforma.</li>
+        <li>Emisión de reportes de operación, movilidad, gastos y estado de vehículos.</li>
+        <li>Comunicaciones sobre novedades operativas de sus buses.</li>
+        <li>Cumplimiento de obligaciones contractuales, legales y regulatorias.</li>
+      </ul>
+
+      <h4>Sus derechos como titular</h4>
+      <ul>
+        <li>Conocer, actualizar y rectificar sus datos personales.</li>
+        <li>Solicitar prueba de esta autorización.</li>
+        <li>Ser informado sobre el uso dado a sus datos.</li>
+        <li>Presentar quejas ante la Superintendencia de Industria y Comercio (SIC).</li>
+        <li>Revocar la autorización y/o solicitar la supresión del dato, cuando no exista un deber legal o contractual que lo impida.</li>
+      </ul>
+
+      <h4>Canales de atención</h4>
+      <p>Para consultas, reclamos o para ejercer sus derechos como titular, puede
+      contactarnos a través de los canales oficiales de <strong>Flota La Milagrosa</strong>.
+      Su solicitud será atendida en los términos de la Ley 1581 de 2012.</p>
+
+      <p style="color: var(--txt-muted); font-size: 12px; margin-top: 14px;">
+        Al aceptar, usted declara que ha leído y comprendido este aviso y autoriza
+        expresamente a Flota La Milagrosa para el tratamiento de sus datos
+        personales conforme a lo aquí descrito. Su autorización queda registrada
+        con fecha y hora en el sistema.
+      </p>
+    </div>
+
+    <label class="pv-check" for="pvAccept">
+      <input type="checkbox" id="pvAccept" onchange="onPrivacyToggle()" />
+      <span class="pv-check-label">
+        He leído y acepto el aviso de tratamiento de datos personales y autorizo
+        el tratamiento de mi información conforme a lo aquí descrito.
+      </span>
+    </label>
+
+    <div class="pv-actions">
+      <button class="pv-btn ghost" type="button" onclick="rejectPrivacy()">No acepto</button>
+      <button class="pv-btn primary" type="button" id="pvAcceptBtn" onclick="acceptPrivacy()" disabled>
+        Acepto y continúo
+      </button>
+    </div>
+  </div>
 </div>
 
 <!-- ════════════════════════════════════════════
@@ -1466,7 +1665,7 @@
         setTimeout(() => {
           apiFetch(`${API_URL}/me`)
             .then(res => { if (!res.ok) throw new Error('sesion-vencida'); return res.json(); })
-            .then(me => refreshSessionData(me))
+            .then(me => { refreshSessionData(me); maybeShowPrivacyNotice(); })
             .catch(() => {
               localStorage.removeItem('authToken');
               localStorage.removeItem('currentUser');
@@ -1490,7 +1689,8 @@
       const sinCambios =
         JSON.stringify(me.allowedViews) === JSON.stringify(currentUser.allowedViews) &&
         me.rol === currentUser.rol && me.nombre === currentUser.nombre &&
-        me.iniciales === currentUser.iniciales && me.color === currentUser.color;
+        me.iniciales === currentUser.iniciales && me.color === currentUser.color &&
+        !!me.tratamiento_aceptado === !!currentUser.tratamiento_aceptado;
       if (sinCambios) return;
 
       currentUser = {
@@ -1505,6 +1705,7 @@
         nombre:       me.nombre,
         rol:          me.rol,
         iniciales:    me.iniciales,
+        tratamiento_aceptado: !!me.tratamiento_aceptado,
       };
       localStorage.setItem('currentUser', JSON.stringify(currentUser));
 
@@ -1591,6 +1792,8 @@
         nombre:       data.nombre,
         rol:          data.rol,
         iniciales:    data.iniciales,
+        // Aviso de tratamiento de datos (Ley 1581/2012)
+        tratamiento_aceptado: !!data.tratamiento_aceptado,
       };
       localStorage.setItem('currentUser', JSON.stringify(currentUser));
       startSession();
@@ -1640,6 +1843,75 @@
     }
 
     showToast('success', `¡Bienvenido, ${currentUser.name}!`);
+    // Aviso de tratamiento de datos: solo Propietarios que aún no aceptaron.
+    maybeShowPrivacyNotice();
+  }
+
+  /* ═══════════════════════════════════════
+     4.1 AVISO DE TRATAMIENTO DE DATOS (Ley 1581/2012)
+     Solo se muestra a Propietarios que aún no lo han aceptado.
+     La aceptación queda registrada en el servidor y no se vuelve a pedir.
+  ═══════════════════════════════════════ */
+  function maybeShowPrivacyNotice() {
+    if (!currentUser || currentUser.rol !== 'Propietario') return;
+    if (currentUser.tratamiento_aceptado) return;
+    // Un pequeño delay deja que la vista principal cargue por debajo del modal.
+    setTimeout(showPrivacyNotice, 600);
+  }
+
+  function showPrivacyNotice() {
+    const modal = document.getElementById('privacyModal');
+    if (!modal) return;
+    const chk   = document.getElementById('pvAccept');
+    const btn   = document.getElementById('pvAcceptBtn');
+    if (chk) chk.checked = false;
+    if (btn) btn.disabled = true;
+    modal.classList.add('show');
+    // Bloquear scroll del fondo para forzar la interacción con el modal.
+    document.body.style.overflow = 'hidden';
+  }
+
+  function hidePrivacyNotice() {
+    const modal = document.getElementById('privacyModal');
+    if (modal) modal.classList.remove('show');
+    document.body.style.overflow = '';
+  }
+
+  function onPrivacyToggle() {
+    const chk = document.getElementById('pvAccept');
+    const btn = document.getElementById('pvAcceptBtn');
+    if (btn) btn.disabled = !(chk && chk.checked);
+  }
+
+  async function acceptPrivacy() {
+    const btn = document.getElementById('pvAcceptBtn');
+    if (!btn || btn.disabled) return;
+    btn.disabled = true;
+    const labelOriginal = btn.textContent;
+    btn.textContent = 'Registrando…';
+    try {
+      const res  = await apiFetch(`${API_URL}/tratamiento-datos/aceptar`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'No se pudo registrar la aceptación');
+      // Persistir en sesión local para no volver a mostrarlo.
+      if (currentUser) {
+        currentUser.tratamiento_aceptado = true;
+        localStorage.setItem('currentUser', JSON.stringify(currentUser));
+      }
+      hidePrivacyNotice();
+      showToast('success', 'Autorización registrada. Gracias.');
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = labelOriginal;
+      showToast('error', e.message || 'No se pudo registrar la aceptación. Intenta de nuevo.');
+    }
+  }
+
+  function rejectPrivacy() {
+    // Sin autorización no se puede operar la plataforma: cerrar sesión.
+    hidePrivacyNotice();
+    showToast('info', 'Sin la autorización no es posible acceder. Se cerró la sesión.');
+    setTimeout(doLogout, 400);
   }
 
   /* ═══════════════════════════════════════
