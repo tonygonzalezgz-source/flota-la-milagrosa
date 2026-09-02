@@ -112,7 +112,7 @@ PG_SCHEMA    = os.path.join(os.path.dirname(__file__), "supabase_schema.sql")
 # Versión del esquema. IMPORTANTE: incrementar en 1 cada vez que se agregue
 # una migración (ALTER/CREATE) a migrate_db(); si no se incrementa, la
 # migración nueva NO corre en las BD ya versionadas.
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 ROLE_VIEWS = {
     "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho", "historial-despacho", "gastos", "tecnologia", "chequeo", "eds", "lavada", "mapa", "relojes"],
@@ -311,6 +311,8 @@ def migrate_db():
             "ALTER TABLE buses ADD COLUMN IF NOT EXISTS tarjeta_op_vencimiento DATE",
             # Vínculo Propietario (usuario ↔ catálogo propietarios) — SCHEMA_VERSION 6
             "ALTER TABLE propietarios ADD COLUMN IF NOT EXISTS usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL",
+            # Aviso de tratamiento de datos (Ley 1581/2012) — SCHEMA_VERSION 8
+            "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS tratamiento_aceptado_at TIMESTAMP",
         ]:
             # Commit/rollback por sentencia: en Postgres un fallo (p.ej. ALTER
             # sobre una tabla que aún no existe) aborta la transacción y haría
@@ -906,6 +908,8 @@ def migrate_db():
             "ALTER TABLE buses ADD COLUMN tarjeta_op_vencimiento DATE",
             # Vínculo Propietario (usuario ↔ catálogo propietarios) — SCHEMA_VERSION 6
             "ALTER TABLE propietarios ADD COLUMN usuario_id INTEGER REFERENCES usuarios(id)",
+            # Aviso de tratamiento de datos (Ley 1581/2012) — SCHEMA_VERSION 8
+            "ALTER TABLE usuarios ADD COLUMN tratamiento_aceptado_at TIMESTAMP",
         ]:
             try:
                 db.execute(col_sql)
@@ -1084,6 +1088,13 @@ def login():
     }
     token = _jwt.encode(payload, SECRET_KEY, algorithm="HS256")
 
+    # Estado del aviso de tratamiento de datos (Ley 1581/2012):
+    # el frontend usa este bool para decidir si mostrar el modal de aceptación.
+    try:
+        tratamiento_aceptado = bool(user["tratamiento_aceptado_at"])
+    except (KeyError, IndexError):
+        tratamiento_aceptado = False
+
     return jsonify({
         "token":        token,
         "id":           user["id"],
@@ -1094,6 +1105,7 @@ def login():
         "color":        user["color"],
         "allowedViews": ROLE_VIEWS.get(rol, []),
         "bus_ids":      bus_ids,
+        "tratamiento_aceptado": tratamiento_aceptado,
     })
 
 
@@ -1106,7 +1118,8 @@ def login():
 def get_current_user():
     db = get_db()
     user = db.execute(
-        "SELECT id, username, nombre, rol, iniciales, color FROM usuarios WHERE id = ? AND activo = 1",
+        "SELECT id, username, nombre, rol, iniciales, color, tratamiento_aceptado_at "
+        "FROM usuarios WHERE id = ? AND activo = 1",
         (request.jwt_user_id,),
     ).fetchone()
     db.close()
@@ -1117,6 +1130,11 @@ def get_current_user():
     rol = user["rol"]
     allowed_views = ROLE_VIEWS.get(rol, [])
 
+    try:
+        tratamiento_aceptado = bool(user["tratamiento_aceptado_at"])
+    except (KeyError, IndexError):
+        tratamiento_aceptado = False
+
     return jsonify({
         "id": user["id"],
         "username": user["username"],
@@ -1125,9 +1143,51 @@ def get_current_user():
         "iniciales": user["iniciales"],
         "color": user["color"],
         "allowedViews": allowed_views,
+        "tratamiento_aceptado": tratamiento_aceptado,
         # Feature flag del chatbot (Fase 1): off salvo que FEATURE_CHATBOT sea true.
         "chatbot_enabled": _feature_chatbot_enabled(),
     })
+
+
+# ──────────────────────────────────────────
+#  Aviso de tratamiento de datos (Ley 1581/2012)
+# ──────────────────────────────────────────
+
+@app.route("/api/tratamiento-datos/aceptar", methods=["POST"])
+@require_auth
+def aceptar_tratamiento_datos():
+    """Marca al usuario autenticado como habiendo aceptado el aviso de
+    tratamiento de datos. Idempotente: si ya estaba aceptado, no lo reescribe."""
+    db = get_db()
+    try:
+        row = db.execute(
+            "SELECT tratamiento_aceptado_at FROM usuarios WHERE id = ? AND activo = 1",
+            (request.jwt_user_id,),
+        ).fetchone()
+        if not row:
+            db.close()
+            return jsonify({"error": "Usuario no encontrado"}), 404
+
+        try:
+            ya_aceptado = bool(row["tratamiento_aceptado_at"])
+        except (KeyError, IndexError):
+            ya_aceptado = False
+
+        if not ya_aceptado:
+            db.execute(
+                "UPDATE usuarios SET tratamiento_aceptado_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (request.jwt_user_id,),
+            )
+            db.commit()
+        db.close()
+        return jsonify({"ok": True, "tratamiento_aceptado": True})
+    except Exception as e:
+        try:
+            db.rollback()
+            db.close()
+        except Exception:
+            pass
+        return jsonify({"error": f"No se pudo registrar la aceptación: {e}"}), 500
 
 
 def _feature_chatbot_enabled():
