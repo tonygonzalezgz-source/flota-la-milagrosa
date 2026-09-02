@@ -59,26 +59,17 @@
       z-index: 100;
     }
 
-    .navbar-logo {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-right: 40px;
+    .navbar-home {
+      display: inline-flex; align-items: center;
+      margin-right: 20px;
+      padding: 7px 16px;
+      border-radius: 20px;
+      background: rgba(255,255,255,.08);
+      color: #fff; font-size: 14px; font-weight: 500;
       text-decoration: none;
+      transition: background .18s;
     }
-
-    .logo-icon {
-      width: 34px; height: 34px;
-      background: #fff;
-      border-radius: 8px;
-      display: flex; align-items: center; justify-content: center;
-    }
-
-    .logo-icon svg { width: 20px; height: 20px; }
-
-    .navbar-logo span {
-      color: #fff; font-size: 15px; font-weight: 600; letter-spacing: -0.3px;
-    }
+    .navbar-home:hover { background: rgba(255,255,255,.16); }
 
     .navbar-nav { display: flex; gap: 4px; flex: 1; }
 
@@ -89,6 +80,14 @@
 
     .navbar-nav a:hover { color: #fff; }
     .navbar-nav a.active { background: #fff; color: #111; font-weight: 500; }
+    /* Alistamientos: acción principal, destacada en verde */
+    .navbar-nav a.nav-cta {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: linear-gradient(135deg, #22c55e, #16a34a);
+      color: #fff; font-weight: 600; padding: 7px 18px;
+      box-shadow: 0 2px 8px rgba(34,197,94,.35);
+    }
+    .navbar-nav a.nav-cta:hover { filter: brightness(1.08); box-shadow: 0 3px 12px rgba(34,197,94,.5); }
 
     .navbar-right { display: flex; align-items: center; gap: 14px; }
 
@@ -564,8 +563,7 @@
     @media (max-width: 768px) {
       /* padding-left deja libre el botón de menú flotante de la shell */
       .navbar { padding: 0 14px 0 60px; height: 56px; gap: 10px; }
-      .navbar-logo { margin-right: 10px; }
-      .navbar-logo span { display: none; }
+      .navbar-home { margin-right: 10px; padding: 6px 12px; font-size: 13px; }
       /* Nav links con scroll horizontal */
       .navbar-nav {
         overflow-x: auto;
@@ -719,27 +717,22 @@
 
   <!-- NAVBAR -->
   <nav class="navbar">
-    <a class="navbar-logo" href="#">
-      <div class="logo-icon">
-        <!-- Bus icon -->
-        <svg viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="1" y="4" width="22" height="14" rx="3"/>
-          <path d="M1 10h22"/>
-          <circle cx="6.5" cy="19.5" r="1.5"/>
-          <circle cx="17.5" cy="19.5" r="1.5"/>
-          <path d="M6.5 18V14M17.5 18V14"/>
-        </svg>
-      </div>
-      <span>La Milagrosa</span>
+    <a class="navbar-home" href="#" onclick="event.preventDefault(); cargarDashboard(); cargarAlertas();">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24" style="vertical-align:-2px;margin-right:4px">
+        <path d="M3 12l9-9 9 9"/>
+        <path d="M5 10v10a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V10"/>
+      </svg>
+      Inicio
     </a>
 
     <nav class="navbar-nav">
-      <a href="#" id="navResumen" class="active">Resumen</a>
-      <a href="historial.html" id="navHistorial">Historial</a>
-      <a href="mantenimiento.html" id="navMant">Mantenimiento</a>
-      <a href="reporte-alistamiento.html" id="navAlist">Alistamientos</a>
-      <a href="catalogo.html" id="navCatalogo">Catálogo</a>
-      <a href="usuarios.html" id="navUsuarios">Usuarios</a>
+      <a href="reporte-alistamiento.html" id="navAlist" class="nav-cta">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24" style="margin-right:2px;vertical-align:-2px">
+          <path d="M9 11l3 3 8-8"/>
+          <path d="M20 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/>
+        </svg>
+        Alistamientos
+      </a>
     </nav>
 
     <div class="navbar-right">
@@ -1111,12 +1104,6 @@
           `linear-gradient(135deg,${currentUser.color||'#6366f1'},${currentUser.color||'#8b5cf6'})`;
         document.getElementById('navName').textContent = currentUser.nombre || 'Administrador';
         document.getElementById('navRole').textContent = currentUser.rol || 'Administrador';
-        if (currentUser.rol !== 'Administrador') {
-          ['navHistorial', 'navMant', 'navCatalogo', 'navUsuarios'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.style.display = 'none';
-          });
-        }
         const nombre = (currentUser.nombre || '').split(' ')[0];
         document.getElementById('greetingSmall').textContent = `Hola ${nombre},`;
       }
