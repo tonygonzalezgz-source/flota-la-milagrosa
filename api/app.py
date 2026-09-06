@@ -2088,6 +2088,12 @@ def batch_upsert_despacho():
         estado = r.get("estado") or "trabajando"
         if estado not in estados_validos:
             estado = "trabajando"
+        conductor_id = r.get("conductor_id") or None
+        ruta_id      = r.get("ruta_id") or None
+        # Un bus en descanso no puede tener conductor asignado: el despachador
+        # a veces cambia el estado sin limpiar el conductor.
+        if estado == "descanso":
+            conductor_id = None
         db.execute(
             """INSERT INTO despacho_diario
                    (bus_id, fecha, estado, conductor_id, ruta_id, despachador_id, updated_at)
@@ -2098,8 +2104,7 @@ def batch_upsert_despacho():
                    ruta_id        = excluded.ruta_id,
                    despachador_id = excluded.despachador_id,
                    updated_at     = CURRENT_TIMESTAMP""",
-            (bus_id, fecha, estado, r.get("conductor_id") or None,
-             r.get("ruta_id") or None, uid),
+            (bus_id, fecha, estado, conductor_id, ruta_id, uid),
         )
         saved += 1
 
