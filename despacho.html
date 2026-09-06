@@ -703,7 +703,8 @@
       }
     }
 
-    const estadoPrevio = bus.estado;
+    const estadoPrevio    = bus.estado;
+    const conductorPrevio = bus.conductor_id;
     // Marcar como trabajando por defecto si todavía no tenía estado al asignar algo
     if (campo === 'estado') {
       bus.estado = valor;
@@ -712,12 +713,23 @@
       if (!bus.estado) bus.estado = 'trabajando';
     }
 
+    // Un bus en descanso no lleva conductor: limpiarlo apenas se elige el estado
+    // para que el despachador vea el cambio de inmediato.
+    const limpioConductorPorDescanso = campo === 'estado' && valor === 'descanso' && bus.conductor_id;
+    if (limpioConductorPorDescanso) {
+      bus.conductor_id = null;
+    }
+
     // refrescar color del selector de estado, la celda de alistamiento y el resumen
     if (campo === 'estado') {
       const sel = event.target;
       sel.className = 'estado-sel ' + valor;
       const cell = document.getElementById(`alist-cell-${busId}`);
       if (cell) cell.innerHTML = alistCellHtml(bus);
+      if (limpioConductorPorDescanso) {
+        const inp = document.querySelector(`#combo-${busId} .cond-input`);
+        if (inp) inp.value = '';
+      }
     }
     renderSummary();
 
@@ -740,6 +752,9 @@
       // El backend también rechaza 'trabajando' con docs vencidos: revertir.
       if (campo === 'estado') {
         bus.estado = estadoPrevio || null;
+        if (limpioConductorPorDescanso) {
+          bus.conductor_id = conductorPrevio;
+        }
       }
       showToast(e.message, 'error');
       render();
