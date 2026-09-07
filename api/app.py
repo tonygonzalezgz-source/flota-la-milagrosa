@@ -1541,17 +1541,33 @@ def delete_ruta(ruta_id):
         db.close()
         return jsonify({"error": "Ruta no encontrada"}), 404
 
-    has_records = db.execute(
-        "SELECT 1 FROM registros_pasajeros WHERE ruta_id = ? LIMIT 1", (ruta_id,)
-    ).fetchone()
-    if has_records:
+    # Cualquier tabla que referencie la ruta bloquea el borrado físico
+    # (Postgres lanza IntegrityError). En vez de eso, la desactivamos: la ruta
+    # deja de aparecer en los selectores pero conserva su historial.
+    for tabla in ("registros_pasajeros", "despacho_diario", "registros_movilidad"):
+        try:
+            usada = db.execute(
+                f"SELECT 1 FROM {tabla} WHERE ruta_id = ? LIMIT 1", (ruta_id,)
+            ).fetchone()
+        except Exception:
+            usada = None  # tabla o columna aún no existe (SQLite viejo)
+        if usada:
+            db.execute("UPDATE rutas SET activa = 0 WHERE id = ?", (ruta_id,))
+            db.commit()
+            db.close()
+            return jsonify({"ok": True, "warning": "Ruta desactivada (tiene historial asociado)"})
+
+    try:
+        db.execute("DELETE FROM rutas WHERE id = ?", (ruta_id,))
+        db.commit()
+    except Exception:
+        # Cinturón y tirantes: si alguna otra tabla referencia la ruta y no
+        # la tenemos listada arriba, caemos a desactivación en vez de 500.
+        db.rollback()
         db.execute("UPDATE rutas SET activa = 0 WHERE id = ?", (ruta_id,))
         db.commit()
         db.close()
-        return jsonify({"ok": True, "warning": "Ruta desactivada (tiene registros de pasajeros)"})
-
-    db.execute("DELETE FROM rutas WHERE id = ?", (ruta_id,))
-    db.commit()
+        return jsonify({"ok": True, "warning": "Ruta desactivada (tiene historial asociado)"})
     db.close()
     return jsonify({"ok": True})
 
