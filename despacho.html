@@ -772,28 +772,6 @@
     const estadoPrevio    = bus.estado;
     const conductorPrevio = bus.conductor_id;
     const viajesPrevios   = bus.viajes_realizados;
-    // Marcar como trabajando por defecto si todavía no tenía estado al asignar algo
-    if (campo === 'estado') {
-      bus.estado = valor;
-    } else {
-      bus[campo] = valor ? parseInt(valor) : null;
-      if (!bus.estado) bus.estado = 'trabajando';
-    }
-
-    // Un bus en descanso no lleva conductor: limpiarlo apenas se elige el estado
-    // para que el despachador vea el cambio de inmediato.
-    const limpioConductorPorDescanso = campo === 'estado' && valor === 'descanso' && bus.conductor_id;
-    if (limpioConductorPorDescanso) {
-      bus.conductor_id = null;
-    }
-
-    // Un bus que no trabaja tampoco acumula viajes: se borran cuando pasa a
-    // descanso o taller y la celda queda deshabilitada.
-    const limpioViajesPorNoTrabaja = campo === 'estado' && valor !== 'trabajando' && bus.viajes_realizados != null;
-    if (limpioViajesPorNoTrabaja) {
-      bus.viajes_realizados = null;
-    }
-
     // refrescar color del selector de estado, la celda de alistamiento y el resumen
     if (campo === 'estado') {
       const sel = event.target;
@@ -802,39 +780,6 @@
       if (cell) cell.innerHTML = alistCellHtml(bus);
       const cellViajes = document.getElementById(`viajes-cell-${busId}`);
       if (cellViajes) cellViajes.innerHTML = viajesCellHtml(bus);
-      if (limpioConductorPorDescanso) {
-        const inp = document.querySelector(`#combo-${busId} .cond-input`);
-        if (inp) inp.value = '';
-      }
-    }
-    renderSummary();
-
-    try {
-      await apiFetch('/api/despacho/batch', {
-        method: 'PUT',
-        body: JSON.stringify({
-          fecha: HOY,
-          registros: [{
-            bus_id:            bus.id,
-            estado:            bus.estado,
-            conductor_id:      bus.conductor_id || null,
-            ruta_id:           bus.ruta_id || null,
-            viajes_realizados: bus.viajes_realizados,
-          }],
-        }),
-      });
-      if (bus._sugerido) { bus._sugerido = false; render(); }
-      showToast(`Bus ${bus.numero} actualizado`);
-    } catch (e) {
-      // El backend también rechaza 'trabajando' con docs vencidos: revertir.
-      if (campo === 'estado') {
-        bus.estado = estadoPrevio || null;
-        if (limpioConductorPorDescanso) {
-          bus.conductor_id = conductorPrevio;
-        }
-        if (limpioViajesPorNoTrabaja) {
-          bus.viajes_realizados = viajesPrevios;
-        }
       }
       showToast(e.message, 'error');
       render();
