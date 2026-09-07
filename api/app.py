@@ -112,7 +112,7 @@ PG_SCHEMA    = os.path.join(os.path.dirname(__file__), "supabase_schema.sql")
 # Versión del esquema. IMPORTANTE: incrementar en 1 cada vez que se agregue
 # una migración (ALTER/CREATE) a migrate_db(); si no se incrementa, la
 # migración nueva NO corre en las BD ya versionadas.
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 ROLE_VIEWS = {
     "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho", "historial-despacho", "gastos", "tecnologia", "chequeo", "eds", "lavada", "mapa", "relojes"],
@@ -313,6 +313,8 @@ def migrate_db():
             "ALTER TABLE propietarios ADD COLUMN IF NOT EXISTS usuario_id INTEGER REFERENCES usuarios(id) ON DELETE SET NULL",
             # Aviso de tratamiento de datos (Ley 1581/2012) — SCHEMA_VERSION 8
             "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS tratamiento_aceptado_at TIMESTAMP",
+            # Viajes realizados por bus/día (lo apunta el despachador al cerrar turno) — SCHEMA_VERSION 9
+            "ALTER TABLE despacho_diario ADD COLUMN IF NOT EXISTS viajes_realizados INTEGER",
         ]:
             # Commit/rollback por sentencia: en Postgres un fallo (p.ej. ALTER
             # sobre una tabla que aún no existe) aborta la transacción y haría
@@ -386,17 +388,18 @@ def migrate_db():
                 PRIMARY KEY (usuario_id, ruta_id)
             )""",
             """CREATE TABLE IF NOT EXISTS despacho_diario (
-                id             SERIAL PRIMARY KEY,
-                fecha          DATE    NOT NULL,
-                bus_id         INTEGER NOT NULL REFERENCES buses(id),
-                ruta_id        INTEGER REFERENCES rutas(id),
-                conductor_id   INTEGER REFERENCES conductores(id),
-                despachador_id INTEGER REFERENCES usuarios(id),
-                estado         TEXT    NOT NULL DEFAULT 'trabajando'
-                                       CHECK(estado IN ('trabajando','taller','descanso')),
-                cerrado        INTEGER NOT NULL DEFAULT 0,
-                created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                id                SERIAL PRIMARY KEY,
+                fecha             DATE    NOT NULL,
+                bus_id            INTEGER NOT NULL REFERENCES buses(id),
+                ruta_id           INTEGER REFERENCES rutas(id),
+                conductor_id      INTEGER REFERENCES conductores(id),
+                despachador_id    INTEGER REFERENCES usuarios(id),
+                estado            TEXT    NOT NULL DEFAULT 'trabajando'
+                                          CHECK(estado IN ('trabajando','taller','descanso')),
+                viajes_realizados INTEGER,
+                cerrado           INTEGER NOT NULL DEFAULT 0,
+                created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(bus_id, fecha)
             )""",
             """CREATE TABLE IF NOT EXISTS alistamiento_vehicular (
@@ -679,17 +682,18 @@ def migrate_db():
         """)
         db.execute("""
             CREATE TABLE IF NOT EXISTS despacho_diario (
-                id             INTEGER PRIMARY KEY AUTOINCREMENT,
-                fecha          DATE    NOT NULL,
-                bus_id         INTEGER NOT NULL REFERENCES buses(id),
-                ruta_id        INTEGER REFERENCES rutas(id),
-                conductor_id   INTEGER REFERENCES conductores(id),
-                despachador_id INTEGER REFERENCES usuarios(id),
-                estado         TEXT    NOT NULL DEFAULT 'trabajando'
-                                       CHECK(estado IN ('trabajando','taller','descanso')),
-                cerrado        INTEGER NOT NULL DEFAULT 0,
-                created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                fecha             DATE    NOT NULL,
+                bus_id            INTEGER NOT NULL REFERENCES buses(id),
+                ruta_id           INTEGER REFERENCES rutas(id),
+                conductor_id      INTEGER REFERENCES conductores(id),
+                despachador_id    INTEGER REFERENCES usuarios(id),
+                estado            TEXT    NOT NULL DEFAULT 'trabajando'
+                                          CHECK(estado IN ('trabajando','taller','descanso')),
+                viajes_realizados INTEGER,
+                cerrado           INTEGER NOT NULL DEFAULT 0,
+                created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(bus_id, fecha)
             )
         """)
@@ -910,6 +914,8 @@ def migrate_db():
             "ALTER TABLE propietarios ADD COLUMN usuario_id INTEGER REFERENCES usuarios(id)",
             # Aviso de tratamiento de datos (Ley 1581/2012) — SCHEMA_VERSION 8
             "ALTER TABLE usuarios ADD COLUMN tratamiento_aceptado_at TIMESTAMP",
+            # Viajes realizados por bus/día (lo apunta el despachador al cerrar turno) — SCHEMA_VERSION 9
+            "ALTER TABLE despacho_diario ADD COLUMN viajes_realizados INTEGER",
         ]:
             try:
                 db.execute(col_sql)
@@ -1945,7 +1951,7 @@ def get_despacho():
         buses = db.execute(
             f"""SELECT b.id, b.numero, b.placa, b.modelo, b.grupo,
                        b.soat_vencimiento, b.tecno_vencimiento, b.tarjeta_op_vencimiento,
-                       d.estado, d.conductor_id, d.ruta_id, d.cerrado,
+                       d.estado, d.conductor_id, d.ruta_id, d.viajes_realizados, d.cerrado,
                        CASE WHEN a.bus_id IS NOT NULL THEN 1 ELSE 0 END AS tiene_alistamiento
                 FROM buses b
                 LEFT JOIN despacho_diario d ON d.bus_id = b.id AND d.fecha = ?
@@ -1960,7 +1966,7 @@ def get_despacho():
         buses = db.execute(
             """SELECT b.id, b.numero, b.placa, b.modelo, b.grupo,
                       b.soat_vencimiento, b.tecno_vencimiento, b.tarjeta_op_vencimiento,
-                      d.estado, d.conductor_id, d.ruta_id, d.cerrado,
+                      d.estado, d.conductor_id, d.ruta_id, d.viajes_realizados, d.cerrado,
                       CASE WHEN a.bus_id IS NOT NULL THEN 1 ELSE 0 END AS tiene_alistamiento
                FROM buses b
                LEFT JOIN despacho_diario d ON d.bus_id = b.id AND d.fecha = ?
@@ -2094,17 +2100,36 @@ def batch_upsert_despacho():
         # a veces cambia el estado sin limpiar el conductor.
         if estado == "descanso":
             conductor_id = None
+
+        # Viajes realizados: entero >= 0, o None. Los buses que no están
+        # trabajando no acumulan viajes.
+        viajes_raw = r.get("viajes_realizados")
+        if viajes_raw in (None, "", "null"):
+            viajes = None
+        else:
+            try:
+                viajes = int(viajes_raw)
+            except (TypeError, ValueError):
+                db.close()
+                return jsonify({"error": "viajes_realizados debe ser un número entero"}), 400
+            if viajes < 0:
+                db.close()
+                return jsonify({"error": "viajes_realizados no puede ser negativo"}), 400
+        if estado != "trabajando":
+            viajes = None
+
         db.execute(
             """INSERT INTO despacho_diario
-                   (bus_id, fecha, estado, conductor_id, ruta_id, despachador_id, updated_at)
-               VALUES (?,?,?,?,?,?,CURRENT_TIMESTAMP)
+                   (bus_id, fecha, estado, conductor_id, ruta_id, viajes_realizados, despachador_id, updated_at)
+               VALUES (?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
                ON CONFLICT(bus_id, fecha) DO UPDATE SET
-                   estado         = excluded.estado,
-                   conductor_id   = excluded.conductor_id,
-                   ruta_id        = excluded.ruta_id,
-                   despachador_id = excluded.despachador_id,
-                   updated_at     = CURRENT_TIMESTAMP""",
-            (bus_id, fecha, estado, conductor_id, ruta_id, uid),
+                   estado            = excluded.estado,
+                   conductor_id      = excluded.conductor_id,
+                   ruta_id           = excluded.ruta_id,
+                   viajes_realizados = excluded.viajes_realizados,
+                   despachador_id    = excluded.despachador_id,
+                   updated_at        = CURRENT_TIMESTAMP""",
+            (bus_id, fecha, estado, conductor_id, ruta_id, viajes, uid),
         )
         saved += 1
 
