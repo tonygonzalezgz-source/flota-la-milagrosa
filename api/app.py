@@ -1936,12 +1936,13 @@ def chequeo_historial():
 # ──────────────────────────────────────────
 
 def _rutas_de_despachador(db, uid):
-    """Rutas asignadas a un despachador (lista de dicts id/nombre/grupo/color)."""
+    """Rutas ACTIVAS asignadas a un despachador (id/nombre/grupo/color).
+    Las inactivas se filtran acá para que no aparezcan en los selectores."""
     return db.execute(
         """SELECT r.id, r.nombre, r.grupo, r.color
            FROM despachador_rutas dr
            JOIN rutas r ON r.id = dr.ruta_id
-           WHERE dr.usuario_id = ?
+           WHERE dr.usuario_id = ? AND r.activa = 1
            ORDER BY r.grupo, r.nombre""",
         (uid,),
     ).fetchall()
@@ -1977,7 +1978,7 @@ def get_despacho():
             [fecha, fecha] + grupos,
         ).fetchall()
     else:
-        rutas = db.execute("SELECT id, nombre, grupo, color FROM rutas ORDER BY grupo, nombre").fetchall()
+        rutas = db.execute("SELECT id, nombre, grupo, color FROM rutas WHERE activa = 1 ORDER BY grupo, nombre").fetchall()
         rutas = [dict(r) for r in rutas]
         buses = db.execute(
             """SELECT b.id, b.numero, b.placa, b.modelo, b.grupo,
