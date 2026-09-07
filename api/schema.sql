@@ -117,17 +117,18 @@ CREATE TABLE IF NOT EXISTS despachador_rutas (
 
 -- Despacho diario: estado operativo de cada bus por día
 CREATE TABLE IF NOT EXISTS despacho_diario (
-    id             INTEGER PRIMARY KEY AUTOINCREMENT,
-    fecha          DATE    NOT NULL,
-    bus_id         INTEGER NOT NULL REFERENCES buses(id),
-    ruta_id        INTEGER REFERENCES rutas(id),
-    conductor_id   INTEGER REFERENCES conductores(id),
-    despachador_id INTEGER REFERENCES usuarios(id),
-    estado         TEXT    NOT NULL DEFAULT 'trabajando'
-                           CHECK(estado IN ('trabajando','taller','descanso')),
-    cerrado        INTEGER NOT NULL DEFAULT 0,
-    created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    fecha             DATE    NOT NULL,
+    bus_id            INTEGER NOT NULL REFERENCES buses(id),
+    ruta_id           INTEGER REFERENCES rutas(id),
+    conductor_id      INTEGER REFERENCES conductores(id),
+    despachador_id    INTEGER REFERENCES usuarios(id),
+    estado            TEXT    NOT NULL DEFAULT 'trabajando'
+                              CHECK(estado IN ('trabajando','taller','descanso')),
+    viajes_realizados INTEGER,
+    cerrado           INTEGER NOT NULL DEFAULT 0,
+    created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(bus_id, fecha)
 );
 
