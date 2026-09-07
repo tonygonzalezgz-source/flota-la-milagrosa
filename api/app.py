@@ -1951,46 +1951,28 @@ def _rutas_de_despachador(db, uid):
 @app.route("/api/despacho", methods=["GET"])
 @require_auth
 def get_despacho():
-    """Devuelve las rutas y los buses (con su estado del día) que administra el usuario.
-    Despachador → solo buses de los grupos de sus rutas asignadas. Admin → toda la flota."""
+    """Devuelve las rutas activas y todos los buses (con su estado del día).
+    Administrador y Despachador ven la misma flota completa y el mismo catálogo
+    de rutas: en la operación real el despachador necesita poder asignar
+    cualquier ruta dada de alta, no solo un subconjunto."""
     fecha = request.args.get("fecha", date.today().isoformat())
     db    = get_db()
-    rol   = getattr(request, "jwt_user_rol", None)
-    uid   = getattr(request, "jwt_user_id", None)
 
-    if rol == "Despachador":
-        rutas  = [dict(r) for r in _rutas_de_despachador(db, uid)]
-        grupos = sorted({r["grupo"] for r in rutas})
-        if not grupos:
-            db.close()
-            return jsonify({"fecha": fecha, "rutas": rutas, "buses": []})
-        ph    = ",".join("?" * len(grupos))
-        buses = db.execute(
-            f"""SELECT b.id, b.numero, b.placa, b.modelo, b.grupo,
-                       b.soat_vencimiento, b.tecno_vencimiento, b.tarjeta_op_vencimiento,
-                       d.estado, d.conductor_id, d.ruta_id, d.viajes_realizados, d.cerrado,
-                       CASE WHEN a.bus_id IS NOT NULL THEN 1 ELSE 0 END AS tiene_alistamiento
-                FROM buses b
-                LEFT JOIN despacho_diario d ON d.bus_id = b.id AND d.fecha = ?
-                LEFT JOIN alistamiento_vehicular a ON a.bus_id = b.id AND a.fecha = ?
-                WHERE b.grupo IN ({ph})
-                ORDER BY b.numero""",
-            [fecha, fecha] + grupos,
-        ).fetchall()
-    else:
-        rutas = db.execute("SELECT id, nombre, grupo, color FROM rutas WHERE activa = 1 ORDER BY grupo, nombre").fetchall()
-        rutas = [dict(r) for r in rutas]
-        buses = db.execute(
-            """SELECT b.id, b.numero, b.placa, b.modelo, b.grupo,
-                      b.soat_vencimiento, b.tecno_vencimiento, b.tarjeta_op_vencimiento,
-                      d.estado, d.conductor_id, d.ruta_id, d.viajes_realizados, d.cerrado,
-                      CASE WHEN a.bus_id IS NOT NULL THEN 1 ELSE 0 END AS tiene_alistamiento
-               FROM buses b
-               LEFT JOIN despacho_diario d ON d.bus_id = b.id AND d.fecha = ?
-               LEFT JOIN alistamiento_vehicular a ON a.bus_id = b.id AND a.fecha = ?
-               ORDER BY b.numero""",
-            (fecha, fecha),
-        ).fetchall()
+    rutas = db.execute(
+        "SELECT id, nombre, grupo, color FROM rutas WHERE activa = 1 ORDER BY grupo, nombre"
+    ).fetchall()
+    rutas = [dict(r) for r in rutas]
+    buses = db.execute(
+        """SELECT b.id, b.numero, b.placa, b.modelo, b.grupo,
+                  b.soat_vencimiento, b.tecno_vencimiento, b.tarjeta_op_vencimiento,
+                  d.estado, d.conductor_id, d.ruta_id, d.viajes_realizados, d.cerrado,
+                  CASE WHEN a.bus_id IS NOT NULL THEN 1 ELSE 0 END AS tiene_alistamiento
+           FROM buses b
+           LEFT JOIN despacho_diario d ON d.bus_id = b.id AND d.fecha = ?
+           LEFT JOIN alistamiento_vehicular a ON a.bus_id = b.id AND a.fecha = ?
+           ORDER BY b.numero""",
+        (fecha, fecha),
+    ).fetchall()
 
     db.close()
     return jsonify({"fecha": fecha, "rutas": rutas, "buses": [dict(b) for b in buses]})
@@ -2003,8 +1985,6 @@ def get_historial_despacho():
     desde = request.args.get("desde", (date.today() - timedelta(days=30)).isoformat())
     hasta = request.args.get("hasta", date.today().isoformat())
     db    = get_db()
-    rol   = getattr(request, "jwt_user_rol", None)
-    uid   = getattr(request, "jwt_user_id", None)
 
     # Para cada fecha que tenga al menos un registro, muestra TODOS los vehículos
     # (LEFT JOIN desde buses hacia despacho_diario para no omitir los no editados)
@@ -2026,21 +2006,10 @@ def get_historial_despacho():
         ORDER BY f.fecha DESC, b.numero
     """
 
-    if rol == "Despachador":
-        rutas_d = _rutas_de_despachador(db, uid)
-        grupos  = list({r["grupo"] for r in rutas_d})
-        if not grupos:
-            db.close()
-            return jsonify([])
-        ph = ",".join("?" * len(grupos))
-        query = base_query.format(
-            grupo_filter=f" AND bus_id IN (SELECT id FROM buses WHERE grupo IN ({ph}))",
-            bus_filter=f"WHERE b.grupo IN ({ph})",
-        )
-        rows = db.execute(query, [desde, hasta] + grupos + grupos).fetchall()
-    else:
-        query = base_query.format(grupo_filter="", bus_filter="")
-        rows  = db.execute(query, (desde, hasta)).fetchall()
+    # Administrador y Despachador ven todo el historial: la restricción por
+    # grupo/rutas ya no aplica (ver comentario en get_despacho).
+    query = base_query.format(grupo_filter="", bus_filter="")
+    rows  = db.execute(query, (desde, hasta)).fetchall()
 
     db.close()
     return jsonify([dict(r) for r in rows])
