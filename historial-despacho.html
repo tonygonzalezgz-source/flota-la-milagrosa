@@ -267,6 +267,11 @@
     .badge-taller     { background: rgba(245,158,11,.12); color: var(--yellow); }
     .badge-descanso   { background: rgba(85,85,85,.15);   color: var(--txt3); }
 
+    .viajes-cell {
+      text-align: right; font-weight: 700; font-variant-numeric: tabular-nums;
+      color: var(--txt); font-size: 13px;
+    }
+
     /* ── EMPTY STATE ── */
     .empty-state {
       text-align: center;
@@ -516,6 +521,7 @@
                   <th>Conductor</th>
                   <th>Ruta</th>
                   <th>Estado</th>
+                  <th style="text-align:right">Viajes</th>
                 </tr>
               </thead>
               <tbody>`;
@@ -523,6 +529,7 @@
       for (const b of buses) {
         const grupoCls = b.grupo === 'A' ? 'badge-a' : 'badge-b';
         const grupoLbl = b.grupo === 'A' ? 'Bus' : 'Micro';
+        const viajes   = (b.viajes_realizados == null) ? '—' : b.viajes_realizados;
         html += `
                 <tr>
                   <td data-label="Unidad">
@@ -543,6 +550,7 @@
                       : `<span class="ruta-vacia">Sin ruta</span>`}
                   </td>
                   <td data-label="Estado">${estadoBadge(b.estado)}</td>
+                  <td data-label="Viajes" class="viajes-cell">${viajes}</td>
                 </tr>`;
       }
 
