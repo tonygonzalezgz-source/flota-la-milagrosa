@@ -1996,7 +1996,7 @@ def get_historial_despacho():
         SELECT f.fecha, b.numero, b.placa, b.modelo, b.grupo,
                c.nombre AS conductor_nombre,
                r.nombre AS ruta_nombre,
-               d.estado, d.cerrado
+               d.estado, d.viajes_realizados, d.cerrado
         FROM fechas f
         CROSS JOIN buses b
         LEFT JOIN despacho_diario d ON d.bus_id = b.id AND d.fecha = f.fecha
