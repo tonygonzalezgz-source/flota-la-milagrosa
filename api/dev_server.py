@@ -10,6 +10,7 @@ os.environ["DATABASE_URL"] = ""
 
 import app  # noqa: E402
 
+port = int(os.environ.get("PORT", "8001"))
 app.init_db()
-print("[API dev] SQLite local — http://localhost:8001")
-app.app.run(debug=os.environ.get("FLASK_DEBUG", "0") == "1", host="0.0.0.0", port=8001)
+print(f"[API dev] SQLite local — http://localhost:{port}")
+app.app.run(debug=os.environ.get("FLASK_DEBUG", "0") == "1", host="0.0.0.0", port=port)

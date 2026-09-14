@@ -123,7 +123,7 @@ ROLE_VIEWS = {
     "Operador EDS":   ["eds"],
     "Operador Lavada": ["lavada"],
     "Propietario":    ["propietario", "gastos", "tecnologia", "lavada"],
-    "Despachador":    ["despacho", "historial-despacho", "chequeo"],
+    "Despachador":    ["despacho", "historial-despacho", "chequeo", "mapa", "relojes"],
     "Jefe de Ruta":   ["dashboard", "despacho", "historial-despacho", "chequeo", "alistamiento", "relojes"],
     "Conductor":      ["alistamiento"],
 }
@@ -4126,7 +4126,7 @@ def _hora_bogota(iso_utc):
 
 
 @app.route("/api/gps/traccar/devices", methods=["GET"])
-@require_role("Administrador")
+@require_role("Administrador", "Despachador")
 def gps_traccar_devices():
     """Dispositivos vistos por el servidor Traccar (para el mapeo device↔bus)."""
     try:
@@ -4136,7 +4136,7 @@ def gps_traccar_devices():
 
 
 @app.route("/api/gps/localizables", methods=["GET"])
-@require_role("Administrador", "Jefe de Ruta", "Propietario")
+@require_role("Administrador", "Jefe de Ruta", "Propietario", "Despachador")
 def gps_localizables():
     """Buses con dispositivo GPS asignado, para el selector 'Localiza tu bus'.
     El propietario solo ve los suyos (usuario_buses); admin/jefe ven todos."""
@@ -4246,7 +4246,7 @@ def gps_localizar():
 
 
 @app.route("/api/gps/relojes/reporte", methods=["GET"])
-@require_role("Administrador", "Jefe de Ruta")
+@require_role("Administrador", "Jefe de Ruta", "Despachador")
 def gps_relojes_reporte():
     """Reporte de pasos por los puntos de control ('Reloj'): a qué hora cruzó cada
     bus cada geocerca de Traccar en un rango de fechas. Consulta en vivo el histórico
@@ -4343,7 +4343,7 @@ def gps_relojes_reporte():
 
 
 @app.route("/api/gps/dispositivos", methods=["GET"])
-@require_role("Administrador")
+@require_role("Administrador", "Despachador")
 def gps_dispositivos():
     """Mapeos device↔bus guardados en BusControl."""
     db = get_db()
@@ -4385,7 +4385,7 @@ def gps_asignar_dispositivo(device_id):
 
 
 @app.route("/api/gps/geocercas", methods=["GET"])
-@require_role("Administrador")
+@require_role("Administrador", "Despachador")
 def gps_geocercas():
     """Geocercas 'Reloj' definidas en Traccar (para asignarlas manualmente a buses)."""
     if not (TRACCAR_URL and TRACCAR_TOKEN):
@@ -4404,7 +4404,7 @@ def gps_geocercas():
 
 
 @app.route("/api/gps/bus-relojes", methods=["GET"])
-@require_role("Administrador")
+@require_role("Administrador", "Despachador")
 def gps_bus_relojes():
     """Asignaciones manuales reloj↔bus. Devuelve un mapa por bus con sus relojes."""
     db = get_db()
@@ -4421,7 +4421,7 @@ def gps_bus_relojes():
 
 
 @app.route("/api/gps/bus-relojes/<int:bus_id>", methods=["PUT"])
-@require_role("Administrador")
+@require_role("Administrador", "Despachador")
 def gps_asignar_relojes(bus_id):
     """Reemplaza la lista de geocercas 'Reloj' asignadas a un bus.
     Body: {"geocercas": [{"id": 12, "nombre": "Reloj Milagrosa"}, ...]}.
