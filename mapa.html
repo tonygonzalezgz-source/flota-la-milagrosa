@@ -140,7 +140,20 @@
 
   let buses = [];
 
-  document.addEventListener('DOMContentLoaded', cargar);
+  // Rol actual: Despachador → vista solo lectura (no puede modificar la asignación bus↔device).
+  const currentRole = (() => {
+    try { return (JSON.parse(localStorage.getItem('currentUser') || '{}').rol) || ''; }
+    catch { return ''; }
+  })();
+  const READ_ONLY = currentRole === 'Despachador';
+
+  document.addEventListener('DOMContentLoaded', () => {
+    if (READ_ONLY) {
+      document.querySelector('.page-sub').textContent =
+        'Vista de dispositivos Traccar vinculados a los buses. Solo lectura para tu rol.';
+    }
+    cargar();
+  });
   window.addEventListener('message', e => { if (e.data?.type === 'VIEW_SHOWN') cargar(); });
 
   function fmtFecha(iso) {
@@ -193,17 +206,27 @@
 
     tbody.innerHTML = devices.map(d => {
       const busId = mapaPorDevice[d.uniqueId] ?? '';
-      const opciones = ['<option value="">— Sin asignar —</option>']
-        .concat(buses.map(b => `<option value="${b.id}" ${b.id === busId ? 'selected' : ''}>Bus ${b.numero} · ${b.placa}</option>`))
-        .join('');
       const online = d.status === 'online';
+      let colBus, colAccion;
+      if (READ_ONLY) {
+        const bus = buses.find(b => b.id === busId);
+        const etiqueta = bus ? `Bus ${bus.numero} · ${bus.placa}` : '<span style="color:var(--txt3);">— Sin asignar —</span>';
+        colBus = `<td>${etiqueta}</td>`;
+        colAccion = '<td></td>';
+      } else {
+        const opciones = ['<option value="">— Sin asignar —</option>']
+          .concat(buses.map(b => `<option value="${b.id}" ${b.id === busId ? 'selected' : ''}>Bus ${b.numero} · ${b.placa}</option>`))
+          .join('');
+        colBus = `<td><select id="sel-${cssId(d.uniqueId)}">${opciones}</select></td>`;
+        colAccion = `<td><button class="btn-save" onclick="guardar('${jsEsc(d.uniqueId)}')">Guardar</button></td>`;
+      }
       return `<tr>
         <td><b>${d.name || '(sin nombre)'}</b></td>
         <td class="mono">${d.uniqueId}</td>
         <td><span class="pill ${online ? 'on' : 'off'}"><span class="dot"></span>${online ? 'En línea' : 'Sin señal'}</span></td>
         <td>${fmtFecha(d.lastUpdate)}</td>
-        <td><select id="sel-${cssId(d.uniqueId)}">${opciones}</select></td>
-        <td><button class="btn-save" onclick="guardar('${jsEsc(d.uniqueId)}')">Guardar</button></td>
+        ${colBus}
+        ${colAccion}
       </tr>`;
     }).join('');
   }
