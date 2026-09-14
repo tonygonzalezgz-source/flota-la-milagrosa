@@ -64,7 +64,10 @@
       padding:3px 10px; font-size:11.5px; font-weight:700; }
     .pill.on  { background:rgba(34,197,94,.12); color:#16a34a; }
     .pill.off { background:rgba(136,136,136,.15); color:var(--txt3); }
+    .pill.warn { background:rgba(239,68,68,.12); color:#dc2626; }
     .pill .dot { width:6px; height:6px; border-radius:50%; background:currentColor; }
+    .stale { color:var(--red); font-weight:700; }
+    .stale-hint { font-size:11px; color:var(--txt3); margin-top:2px; }
     .mono { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12.5px; color:var(--txt2); }
     select {
       padding:8px 10px; border:1.5px solid var(--border2); border-radius:var(--radius-s);
@@ -109,7 +112,7 @@
     <div style="overflow-x:auto;">
       <table>
         <thead>
-          <tr><th>Dispositivo</th><th>ID (uniqueId)</th><th>Estado</th><th>Último reporte</th><th>Bus asignado</th><th></th></tr>
+          <tr><th>Dispositivo</th><th>ID (uniqueId)</th><th>Estado</th><th>Último GPS</th><th>Bus asignado</th><th></th></tr>
         </thead>
         <tbody id="tbody">
           <tr><td colspan="6"><div class="empty">Cargando…</div></td></tr>
@@ -164,6 +167,21 @@
       day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
   }
 
+  // Aviso cuando la tablet lleva más de 30 min sin enviar un fix GPS nuevo,
+  // aunque siga conectada al servidor (heartbeat OK, GPS caído).
+  const UMBRAL_STALE_MIN = 30;
+  function edadFix(fixIso) {
+    if (!fixIso) return null;
+    const t = new Date(fixIso);
+    if (isNaN(t.getTime())) return null;
+    return Math.floor((Date.now() - t.getTime()) / 60000);  // en minutos
+  }
+  function fmtDelta(min) {
+    if (min < 60) return `${min} min`;
+    const h = Math.floor(min / 60), m = min % 60;
+    return m ? `${h}h ${m}m` : `${h}h`;
+  }
+
   async function cargar() {
     const bar = document.getElementById('statusBar');
     const txt = document.getElementById('statusText');
@@ -191,7 +209,15 @@
 
     dot.className = 'status-dot ok';
     const online = devices.filter(d => d.status === 'online').length;
-    txt.innerHTML = `Conectado — <b>${devices.length}</b> dispositivo(s), ${online} en línea.`;
+    const stale  = devices.filter(d => {
+      const e = edadFix(d.fixTime);
+      return e !== null && e >= UMBRAL_STALE_MIN;
+    }).length;
+    const alerta = stale
+      ? ` — <span class="stale">⚠ ${stale} sin fix GPS ≥ ${UMBRAL_STALE_MIN} min</span>`
+      : '';
+    txt.innerHTML = `Conectado — <b>${devices.length}</b> dispositivo(s), ${online} en línea${alerta}.`;
+    if (stale) dot.className = 'status-dot wait';
 
     const mapaPorDevice = {};
     mapeos.forEach(m => { mapaPorDevice[m.device_id] = m.bus_id; });
@@ -207,6 +233,8 @@
     tbody.innerHTML = devices.map(d => {
       const busId = mapaPorDevice[d.uniqueId] ?? '';
       const online = d.status === 'online';
+      const edad = edadFix(d.fixTime);
+      const staleGPS = edad !== null && edad >= UMBRAL_STALE_MIN;
       let colBus, colAccion;
       if (READ_ONLY) {
         const bus = buses.find(b => b.id === busId);
@@ -220,11 +248,18 @@
         colBus = `<td><select id="sel-${cssId(d.uniqueId)}">${opciones}</select></td>`;
         colAccion = `<td><button class="btn-save" onclick="guardar('${jsEsc(d.uniqueId)}')">Guardar</button></td>`;
       }
+      const estadoPills = [
+        `<span class="pill ${online ? 'on' : 'off'}"><span class="dot"></span>${online ? 'En línea' : 'Sin señal'}</span>`,
+        staleGPS ? `<span class="pill warn" title="La tablet sigue conectada pero no envía posición GPS nueva. Suele ser battery optimization, permisos de ubicación o app en background." style="margin-left:6px;"><span class="dot"></span>Sin fix</span>` : '',
+      ].filter(Boolean).join('');
+      const colFix = d.fixTime
+        ? `<td><span class="${staleGPS ? 'stale' : ''}">${fmtFecha(d.fixTime)}</span>${staleGPS ? `<div class="stale-hint">hace ${fmtDelta(edad)}</div>` : ''}</td>`
+        : `<td><span class="stale">Sin fix</span></td>`;
       return `<tr>
         <td><b>${d.name || '(sin nombre)'}</b></td>
         <td class="mono">${d.uniqueId}</td>
-        <td><span class="pill ${online ? 'on' : 'off'}"><span class="dot"></span>${online ? 'En línea' : 'Sin señal'}</span></td>
-        <td>${fmtFecha(d.lastUpdate)}</td>
+        <td>${estadoPills}</td>
+        ${colFix}
         ${colBus}
         ${colAccion}
       </tr>`;

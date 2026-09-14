@@ -4093,12 +4093,22 @@ def _traccar_get(path, params=None):
 
 
 def _traccar_devices():
-    """Lista normalizada de dispositivos de Traccar."""
+    """Lista normalizada de dispositivos de Traccar, con la hora del último fix GPS.
+    'lastUpdate' es el heartbeat (la tablet sigue en línea aunque no envíe posición);
+    'fixTime' es la última posición GPS real — si diverge mucho, la app cliente perdió
+    el GPS o el SO la mató en background."""
+    devs = _traccar_get("devices")
+    try:
+        positions = _traccar_get("positions")
+        fix_por_dev = {p.get("deviceId"): p.get("fixTime") for p in positions}
+    except RuntimeError:
+        fix_por_dev = {}
     return [
         {"id": d.get("id"), "uniqueId": str(d.get("uniqueId")),
          "name": d.get("name"), "status": d.get("status"),
-         "lastUpdate": d.get("lastUpdate")}
-        for d in _traccar_get("devices")
+         "lastUpdate": d.get("lastUpdate"),
+         "fixTime": fix_por_dev.get(d.get("id"))}
+        for d in devs
     ]
 
 
