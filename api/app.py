@@ -116,7 +116,7 @@ SCHEMA_VERSION = 9
 
 ROLE_VIEWS = {
     "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho", "historial-despacho", "gastos", "tecnologia", "chequeo", "eds", "lavada", "mapa", "relojes"],
-    "Analista":       ["historial"],
+    "Analista":       ["historial", "dashboard", "tecnologia", "despacho", "historial-despacho", "chequeo", "alistamiento"],
     "Técnico Mant.":  ["mant"],
     "Técnico Cámaras":       ["tecnologia"],
     "Jefe Op. Tecnológicas": ["tecnologia"],
