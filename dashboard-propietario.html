@@ -904,6 +904,9 @@
          hace el scroll. Cualquier overflow aquí rompe el táctil en iOS. */
       .buses-grid { grid-template-columns: 1fr; }
       .navbar {
+        /* iOS: 'position: sticky' dentro del iframe desactiva el scroll táctil
+           por inercia. En móvil la navbar fluye con el contenido (como despacho). */
+        position: static;
         padding: 0 14px 0 60px;   /* deja libre el botón de menú flotante de la shell */
         height: 56px;
         gap: 10px;
