@@ -125,7 +125,9 @@ CREATE TABLE IF NOT EXISTS despacho_diario (
     despachador_id    INTEGER REFERENCES usuarios(id),
     estado            TEXT    NOT NULL DEFAULT 'trabajando'
                               CHECK(estado IN ('trabajando','taller','descanso')),
-    viajes_realizados INTEGER,
+    viajes_realizados  INTEGER,
+    registradora_inicio INTEGER,
+    registradora_fin    INTEGER,
     cerrado           INTEGER NOT NULL DEFAULT 0,
     created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

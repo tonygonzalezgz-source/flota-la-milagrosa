@@ -294,7 +294,7 @@
     .toast.error { background: var(--red); }
     .toast.hidden { opacity: 0; transform: translateX(-50%) translateY(8px); pointer-events: none; }
 
-    /* Input compacto de viajes realizados en cada fila */
+    /* Input compacto de viajes realizados y registradora en cada fila */
     input.viajes-inp {
       width: 72px; padding: 7px 8px; text-align: right;
       border: 1px solid var(--border2); border-radius: 8px;
@@ -305,6 +305,20 @@
     input.viajes-inp::-webkit-outer-spin-button,
     input.viajes-inp::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
     input.viajes-inp[type=number] { -moz-appearance: textfield; }
+    /* REG Inicio propuesto (viene del REG Fin del día anterior — modificable) */
+    input.viajes-inp.sugerida {
+      border-color: var(--primary); border-style: dashed;
+      background: rgba(99,102,241,.06); color: var(--primary);
+    }
+    input.viajes-inp.sugerida:focus { background: var(--white); color: var(--txt); }
+
+    /* Pasajeros calculados (fin - inicio) bajo el input REG Fin */
+    .reg-pax {
+      font-size: 11px; color: var(--txt3); margin-top: 3px;
+      text-align: right; font-variant-numeric: tabular-nums;
+    }
+    .reg-pax strong { color: var(--primary); font-weight: 700; }
+    .reg-pax.err    { color: var(--red); }
 
     /* Botones de exportación (verde Excel, rojo PDF) — mismo patrón que en el resto de módulos */
     .btn-excel, .btn-pdf {
@@ -479,6 +493,16 @@
       rutas       = despacho.rutas || [];
       buses       = despacho.buses || [];
       conductores = conds || [];
+      // Secuencia del torniquete: si el bus no tiene REG Inicio de hoy pero
+      // sí quedó una lectura final de un día anterior, sugerimos ese valor
+      // como punto de partida (el despachador puede sobrescribirlo). El
+      // save del primer campo del día persiste la sugerencia.
+      buses.forEach(b => {
+        if (b.registradora_inicio == null && b.ultima_reg_fin != null) {
+          b.registradora_inicio  = b.ultima_reg_fin;
+          b._reg_ini_sugerida    = true;
+        }
+      });
       render();
     } catch (e) {
       document.getElementById('content').innerHTML =
@@ -510,10 +534,12 @@
               <thead>
                 <tr>
                   <th style="width:90px">Unidad</th>
-                  <th>Ruta</th>
-                  <th>Conductor</th>
-                  <th style="width:170px">Estado</th>
-                  <th style="width:96px; text-align:right">Viajes</th>
+                  <th style="width:170px">Ruta</th>
+                  <th style="width:180px">Conductor</th>
+                  <th style="width:92px; text-align:right">REG Inicio</th>
+                  <th style="width:92px; text-align:right">REG Fin</th>
+                  <th style="width:88px; text-align:right">Viajes</th>
+                  <th style="width:160px">Estado</th>
                   <th style="width:130px">Alistamiento</th>
                 </tr>
               </thead>
@@ -612,6 +638,9 @@
           <div class="cond-drop" id="cdrop-${b.id}">${condOpts}</div>
         </div>
       </td>
+      <td class="cell-reg-ini" data-label="REG Inicio" id="reg-ini-cell-${b.id}" style="text-align:right">${regCellHtml(b, 'inicio')}</td>
+      <td class="cell-reg-fin" data-label="REG Fin"    id="reg-fin-cell-${b.id}" style="text-align:right">${regCellHtml(b, 'fin')}</td>
+      <td class="cell-viajes"  data-label="Viajes"     id="viajes-cell-${b.id}"  style="text-align:right">${viajesCellHtml(b)}</td>
       <td data-label="Estado">
         <select class="estado-sel ${sugerida ? 'sin-confirmar' : estado}" onchange="onChange(${b.id}, 'estado', this.value)">
           ${sugerida ? '<option value="" selected disabled>— Confirmar —</option>' : ''}
@@ -620,7 +649,6 @@
           <option value="descanso"   ${!sugerida && estado === 'descanso'   ? 'selected' : ''}>Descanso</option>
         </select>
       </td>
-      <td class="cell-viajes" data-label="Viajes" id="viajes-cell-${b.id}" style="text-align:right">${viajesCellHtml(b)}</td>
       <td class="cell-alist" data-label="Alistamiento" id="alist-cell-${b.id}">${alistCellHtml(b)}</td>
     </tr>`;
   }
@@ -635,6 +663,34 @@
                    ${activo ? '' : 'disabled'}
                    placeholder="${activo ? '0' : '—'}"
                    onchange="onChangeViajes(${b.id}, this)">`;
+  }
+
+  // Lectura del torniquete: entero opcional; la celda 'fin' además muestra el
+  // cálculo de pasajeros (= fin - inicio) debajo del input cuando ambos existen.
+  function regCellHtml(b, tipo) {
+    const estado = b.estado || (b._sugerido ? '' : 'trabajando');
+    const activo = estado === 'trabajando';
+    const campo  = tipo === 'inicio' ? 'registradora_inicio' : 'registradora_fin';
+    const val    = (b[campo] == null) ? '' : b[campo];
+    // El REG Inicio se marca como sugerido cuando viene del día anterior y aún
+    // no se ha guardado en la BD de hoy: borde punteado azul + tooltip.
+    const sug    = tipo === 'inicio' && !!b._reg_ini_sugerida && activo;
+    const cls    = 'viajes-inp' + (sug ? ' sugerida' : '');
+    const title  = sug ? 'Continúa del día anterior — puedes modificarlo' : '';
+    const input  = `<input type="number" min="0" step="1" inputmode="numeric"
+                   class="${cls}" value="${val}"
+                   ${activo ? '' : 'disabled'}
+                   placeholder="${activo ? '0' : '—'}"
+                   title="${title}"
+                   onchange="onChangeReg(${b.id}, '${tipo}', this)">`;
+    if (tipo !== 'fin') return input;
+    // Bajo REG Fin: mostrar pasajeros = fin - inicio si tenemos ambos números.
+    const ini = b.registradora_inicio, fin = b.registradora_fin;
+    if (!activo || ini == null || fin == null) return input;
+    if (fin < ini) {
+      return input + `<div class="reg-pax err" title="Fin no puede ser menor que inicio">= —</div>`;
+    }
+    return input + `<div class="reg-pax">= <strong>${(fin - ini).toLocaleString('es-CO')}</strong> pax</div>`;
   }
 
   // Solo los buses que trabajarán ese día requieren alistamiento.
@@ -772,6 +828,8 @@
     const estadoPrevio    = bus.estado;
     const conductorPrevio = bus.conductor_id;
     const viajesPrevios   = bus.viajes_realizados;
+    const regIniPrevio    = bus.registradora_inicio;
+    const regFinPrevio    = bus.registradora_fin;
     // Marcar como trabajando por defecto si todavía no tenía estado al asignar algo
     if (campo === 'estado') {
       bus.estado = valor;
@@ -787,11 +845,17 @@
       bus.conductor_id = null;
     }
 
-    // Un bus que no trabaja tampoco acumula viajes: se borran cuando pasa a
-    // descanso o taller y la celda queda deshabilitada.
+    // Un bus que no trabaja tampoco acumula viajes ni lecturas de registradora:
+    // se borran cuando pasa a descanso o taller y las celdas quedan deshabilitadas.
     const limpioViajesPorNoTrabaja = campo === 'estado' && valor !== 'trabajando' && bus.viajes_realizados != null;
     if (limpioViajesPorNoTrabaja) {
       bus.viajes_realizados = null;
+    }
+    const limpioRegPorNoTrabaja = campo === 'estado' && valor !== 'trabajando'
+      && (bus.registradora_inicio != null || bus.registradora_fin != null);
+    if (limpioRegPorNoTrabaja) {
+      bus.registradora_inicio = null;
+      bus.registradora_fin    = null;
     }
 
     // refrescar color del selector de estado, la celda de alistamiento y el resumen
@@ -802,6 +866,10 @@
       if (cell) cell.innerHTML = alistCellHtml(bus);
       const cellViajes = document.getElementById(`viajes-cell-${busId}`);
       if (cellViajes) cellViajes.innerHTML = viajesCellHtml(bus);
+      const cellIni = document.getElementById(`reg-ini-cell-${busId}`);
+      if (cellIni) cellIni.innerHTML = regCellHtml(bus, 'inicio');
+      const cellFin = document.getElementById(`reg-fin-cell-${busId}`);
+      if (cellFin) cellFin.innerHTML = regCellHtml(bus, 'fin');
       if (limpioConductorPorDescanso) {
         const inp = document.querySelector(`#combo-${busId} .cond-input`);
         if (inp) inp.value = '';
@@ -815,15 +883,22 @@
         body: JSON.stringify({
           fecha: HOY,
           registros: [{
-            bus_id:            bus.id,
-            estado:            bus.estado,
-            conductor_id:      bus.conductor_id || null,
-            ruta_id:           bus.ruta_id || null,
-            viajes_realizados: bus.viajes_realizados,
+            bus_id:              bus.id,
+            estado:              bus.estado,
+            conductor_id:        bus.conductor_id || null,
+            ruta_id:             bus.ruta_id || null,
+            viajes_realizados:   bus.viajes_realizados,
+            registradora_inicio: bus.registradora_inicio,
+            registradora_fin:    bus.registradora_fin,
           }],
         }),
       });
       if (bus._sugerido) { bus._sugerido = false; render(); }
+      if (bus._reg_ini_sugerida) {
+        bus._reg_ini_sugerida = false;
+        const cellIni = document.getElementById(`reg-ini-cell-${busId}`);
+        if (cellIni) cellIni.innerHTML = regCellHtml(bus, 'inicio');
+      }
       showToast(`Bus ${bus.numero} actualizado`);
     } catch (e) {
       // El backend también rechaza 'trabajando' con docs vencidos: revertir.
@@ -834,6 +909,10 @@
         }
         if (limpioViajesPorNoTrabaja) {
           bus.viajes_realizados = viajesPrevios;
+        }
+        if (limpioRegPorNoTrabaja) {
+          bus.registradora_inicio = regIniPrevio;
+          bus.registradora_fin    = regFinPrevio;
         }
       }
       showToast(e.message, 'error');
@@ -864,18 +943,83 @@
         body: JSON.stringify({
           fecha: HOY,
           registros: [{
-            bus_id:            bus.id,
-            estado:            bus.estado || 'trabajando',
-            conductor_id:      bus.conductor_id || null,
-            ruta_id:           bus.ruta_id || null,
-            viajes_realizados: val,
+            bus_id:              bus.id,
+            estado:              bus.estado || 'trabajando',
+            conductor_id:        bus.conductor_id || null,
+            ruta_id:             bus.ruta_id || null,
+            viajes_realizados:   val,
+            registradora_inicio: bus.registradora_inicio,
+            registradora_fin:    bus.registradora_fin,
           }],
         }),
       });
+      if (bus._reg_ini_sugerida) {
+        bus._reg_ini_sugerida = false;
+        const cellIni = document.getElementById(`reg-ini-cell-${busId}`);
+        if (cellIni) cellIni.innerHTML = regCellHtml(bus, 'inicio');
+      }
       showToast(`Bus ${bus.numero}: ${val == null ? 'viajes borrados' : val + ' viaje' + (val === 1 ? '' : 's')}`);
     } catch (e) {
       bus.viajes_realizados = previo;
       inp.value = (previo == null) ? '' : previo;
+      showToast(e.message, 'error');
+    }
+  }
+
+  // Lectura del torniquete (registradora): inicio o fin. Refresca el "pax"
+  // bajo REG Fin cada vez que cambia cualquiera de los dos valores.
+  async function onChangeReg(busId, tipo, inp) {
+    const bus = buses.find(b => b.id === busId);
+    if (!bus) return;
+    const campo = tipo === 'inicio' ? 'registradora_inicio' : 'registradora_fin';
+    const raw   = inp.value.trim();
+    let val     = null;
+    if (raw !== '') {
+      const n = Number(raw);
+      if (!Number.isFinite(n) || n < 0 || !Number.isInteger(n)) {
+        showToast('La lectura debe ser un número entero mayor o igual a cero', 'error');
+        inp.value = (bus[campo] == null) ? '' : bus[campo];
+        return;
+      }
+      val = n;
+    }
+    const previo = bus[campo];
+    bus[campo]   = val;
+
+    // Refrescar solo la celda de FIN para actualizar "= N pax" en caliente.
+    const cellFin = document.getElementById(`reg-fin-cell-${busId}`);
+    if (cellFin) cellFin.innerHTML = regCellHtml(bus, 'fin');
+
+    try {
+      await apiFetch('/api/despacho/batch', {
+        method: 'PUT',
+        body: JSON.stringify({
+          fecha: HOY,
+          registros: [{
+            bus_id:              bus.id,
+            estado:              bus.estado || 'trabajando',
+            conductor_id:        bus.conductor_id || null,
+            ruta_id:             bus.ruta_id || null,
+            viajes_realizados:   bus.viajes_realizados,
+            registradora_inicio: bus.registradora_inicio,
+            registradora_fin:    bus.registradora_fin,
+          }],
+        }),
+      });
+      if (bus._reg_ini_sugerida) {
+        bus._reg_ini_sugerida = false;
+        // Vuelve a pintar la celda de INICIO para quitar el estilo sugerido.
+        // El input activo puede haber perdido el foco por el change, así que
+        // reemplazar el HTML no interrumpe la interacción.
+        const cellIni = document.getElementById(`reg-ini-cell-${busId}`);
+        if (cellIni) cellIni.innerHTML = regCellHtml(bus, 'inicio');
+      }
+      const etiq = tipo === 'inicio' ? 'REG inicio' : 'REG fin';
+      showToast(`Bus ${bus.numero}: ${etiq} ${val == null ? 'borrado' : val}`);
+    } catch (e) {
+      bus[campo] = previo;
+      inp.value  = (previo == null) ? '' : previo;
+      if (cellFin) cellFin.innerHTML = regCellHtml(bus, 'fin');
       showToast(e.message, 'error');
     }
   }

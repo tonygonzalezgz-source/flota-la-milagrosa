@@ -35,17 +35,18 @@
     img, svg, video { max-width: 100%; }
 
     :root {
-      --bg:      #0f0f11;
-      --surface: #17171a;
-      --card:    #1e1e22;
-      --border:  #2a2a30;
+      --bg:      #f4f4f6;
+      --surface: #ffffff;
+      --card:    #fafafb;
+      --border:  #e5e5eb;
+      --border2: #d0d0d8;
       --accent:  #6366f1;
       --green:   #22c55e;
       --yellow:  #f59e0b;
       --red:     #ef4444;
-      --txt:     #f0f0f3;
-      --txt2:    #aaaaaa;
-      --txt3:    #555;
+      --txt:     #111;
+      --txt2:    #555;
+      --txt3:    #888;
       --radius:  10px;
     }
 
@@ -99,7 +100,7 @@
       cursor: pointer;
       outline: none;
       transition: border-color .15s;
-      color-scheme: dark;
+      color-scheme: light;
     }
     .date-input:focus { border-color: var(--accent); }
 
@@ -128,7 +129,7 @@
       transition: all .13s;
     }
     .gf-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-    .gf-btn:hover:not(.active) { border-color: #444; color: var(--txt); }
+    .gf-btn:hover:not(.active) { border-color: var(--border2); color: var(--txt); }
 
     .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
 
@@ -173,8 +174,8 @@
     .stat-lbl { font-size: 10px; color: var(--txt2); text-transform: uppercase; letter-spacing: .5px; font-weight: 600; }
     .stat-val.green  { color: var(--green); }
     .stat-val.yellow { color: var(--yellow); }
-    .stat-val.blue   { color: #818cf8; }
-    .stat-val.sky    { color: #38bdf8; }
+    .stat-val.blue   { color: #4f46e5; }
+    .stat-val.sky    { color: #0284c7; }
 
     /* ── PROGRESS ── */
     .progress-row {
@@ -236,9 +237,9 @@
       transition: background .1s;
     }
     tbody tr:last-child { border-bottom: none; }
-    tbody tr:hover { background: rgba(255,255,255,.02); }
-    tbody tr.has-data { background: rgba(99,102,241,.04); }
-    tbody tr.has-data:hover { background: rgba(99,102,241,.08); }
+    tbody tr:hover { background: #fafafb; }
+    tbody tr.has-data { background: rgba(99,102,241,.05); }
+    tbody tr.has-data:hover { background: rgba(99,102,241,.1); }
 
     tbody td { padding: 8px 14px; font-size: 13px; vertical-align: middle; }
 
@@ -257,8 +258,8 @@
       font-size: 10px;
       font-weight: 700;
     }
-    .badge-a { background: rgba(99,102,241,.15); color: #818cf8; }
-    .badge-b { background: rgba(236,72,153,.12); color: #f472b6; }
+    .badge-a { background: rgba(99,102,241,.12); color: #4338ca; }
+    .badge-b { background: rgba(236,72,153,.12); color: #be185d; }
 
     /* Inputs */
     .num-input {
@@ -273,7 +274,7 @@
       outline: none;
       transition: border-color .13s;
     }
-    .num-input:focus { border-color: var(--accent); background: #1a1a20; }
+    .num-input:focus { border-color: var(--accent); background: #ffffff; }
     .num-input.touched { border-color: var(--yellow); }
     /* Oculta las flechitas del spinner para que el ingreso sea solo por teclado */
     .num-input::-webkit-outer-spin-button,
@@ -297,9 +298,9 @@
       background-position: right 10px center;
       padding-right: 28px;
     }
-    .ruta-select:focus  { border-color: var(--accent); background-color: #1a1a20; }
+    .ruta-select:focus  { border-color: var(--accent); background-color: #ffffff; }
     .ruta-select.touched { border-color: var(--yellow); }
-    .ruta-select option { background: #1e1e22; color: var(--txt); }
+    .ruta-select option { background: #ffffff; color: var(--txt); }
 
     .nov-input {
       width: 180px;
@@ -312,7 +313,7 @@
       outline: none;
       transition: border-color .13s;
     }
-    .nov-input:focus  { border-color: var(--accent); background: #1a1a20; }
+    .nov-input:focus  { border-color: var(--accent); background: #ffffff; }
     .nov-input.touched { border-color: var(--yellow); }
 
     /* Estado badge */
@@ -506,10 +507,10 @@
       background: none; color: var(--txt2); font-size: 13px; cursor: pointer;
       transition: all .13s;
     }
-    .btn-cancel-imp:hover { border-color: #555; color: var(--txt); }
+    .btn-cancel-imp:hover { border-color: var(--border2); color: var(--txt); }
     .btn-confirm-imp {
       padding: 8px 22px; border: none; border-radius: var(--radius);
-      background: var(--green); color: #000; font-size: 13px; font-weight: 700;
+      background: var(--green); color: #fff; font-size: 13px; font-weight: 700;
       cursor: pointer; transition: background .15s;
     }
     .btn-confirm-imp:hover { background: #16a34a; }
@@ -1574,7 +1575,7 @@
       <span class="imp-stat">Buses: <b>${nBuses}</b></span>
       <span class="imp-stat">Días: <b>${nDias}</b></span>
       <span class="imp-stat">Vueltas: <b style="color:var(--yellow)">${totV.toLocaleString()}</b></span>
-      <span class="imp-stat">Pasajeros: <b style="color:#818cf8">${totP.toLocaleString()}</b></span>
+      <span class="imp-stat">Pasajeros: <b style="color:#4f46e5">${totP.toLocaleString()}</b></span>
       <span class="imp-stat">Km: <b style="color:var(--green)">${totK.toLocaleString(undefined,{maximumFractionDigits:1})}</b></span>
     `;
 
