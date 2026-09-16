@@ -413,19 +413,21 @@
     return r.json();
   }
 
-  // ── Fechas por defecto: últimos 30 días hasta hoy ──
+  // ── Fechas por defecto: mes en curso hasta hoy ──
+  // Se usa el primer día del mes (no "hace 30 días") para que el date-picker
+  // nativo abra el calendario en el mes actual y el despachador no tenga que
+  // desplazarse hacia atrás cada vez que elige otra fecha de inicio.
   function hoy() {
     return new Date().toISOString().slice(0, 10);
   }
-  function hace30() {
+  function primerDelMes() {
     const d = new Date();
-    d.setDate(d.getDate() - 30);
-    return d.toISOString().slice(0, 10);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
   }
 
   const inputDesde = document.getElementById('inputDesde');
   const inputHasta = document.getElementById('inputHasta');
-  inputDesde.value  = hace30();
+  inputDesde.value  = primerDelMes();
   inputHasta.value  = hoy();
   inputDesde.max    = hoy();
   inputHasta.max    = hoy();
