@@ -112,7 +112,7 @@ PG_SCHEMA    = os.path.join(os.path.dirname(__file__), "supabase_schema.sql")
 # Versión del esquema. IMPORTANTE: incrementar en 1 cada vez que se agregue
 # una migración (ALTER/CREATE) a migrate_db(); si no se incrementa, la
 # migración nueva NO corre en las BD ya versionadas.
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 ROLE_VIEWS = {
     "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho", "historial-despacho", "gastos", "tecnologia", "chequeo", "eds", "lavada", "mapa", "relojes"],
@@ -315,6 +315,9 @@ def migrate_db():
             "ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS tratamiento_aceptado_at TIMESTAMP",
             # Viajes realizados por bus/día (lo apunta el despachador al cerrar turno) — SCHEMA_VERSION 9
             "ALTER TABLE despacho_diario ADD COLUMN IF NOT EXISTS viajes_realizados INTEGER",
+            # Registradora del torniquete (inicio/fin del turno) — pasajeros = fin - inicio — SCHEMA_VERSION 10
+            "ALTER TABLE despacho_diario ADD COLUMN IF NOT EXISTS registradora_inicio INTEGER",
+            "ALTER TABLE despacho_diario ADD COLUMN IF NOT EXISTS registradora_fin INTEGER",
         ]:
             # Commit/rollback por sentencia: en Postgres un fallo (p.ej. ALTER
             # sobre una tabla que aún no existe) aborta la transacción y haría
@@ -916,6 +919,9 @@ def migrate_db():
             "ALTER TABLE usuarios ADD COLUMN tratamiento_aceptado_at TIMESTAMP",
             # Viajes realizados por bus/día (lo apunta el despachador al cerrar turno) — SCHEMA_VERSION 9
             "ALTER TABLE despacho_diario ADD COLUMN viajes_realizados INTEGER",
+            # Registradora del torniquete (inicio/fin del turno) — pasajeros = fin - inicio — SCHEMA_VERSION 10
+            "ALTER TABLE despacho_diario ADD COLUMN registradora_inicio INTEGER",
+            "ALTER TABLE despacho_diario ADD COLUMN registradora_fin INTEGER",
         ]:
             try:
                 db.execute(col_sql)
@@ -1962,16 +1968,28 @@ def get_despacho():
         "SELECT id, nombre, grupo, color FROM rutas WHERE activa = 1 ORDER BY grupo, nombre"
     ).fetchall()
     rutas = [dict(r) for r in rutas]
+    # ultima_reg_fin: lectura final de la registradora en la última fecha
+    # con datos previa a `fecha`. Permite pre-poblar REG Inicio en el frontend
+    # con la lectura donde quedó el torniquete al cerrar el día anterior, para
+    # que el torniquete lleve secuencia (el despachador puede sobrescribir).
     buses = db.execute(
         """SELECT b.id, b.numero, b.placa, b.modelo, b.grupo,
                   b.soat_vencimiento, b.tecno_vencimiento, b.tarjeta_op_vencimiento,
-                  d.estado, d.conductor_id, d.ruta_id, d.viajes_realizados, d.cerrado,
-                  CASE WHEN a.bus_id IS NOT NULL THEN 1 ELSE 0 END AS tiene_alistamiento
+                  d.estado, d.conductor_id, d.ruta_id, d.viajes_realizados,
+                  d.registradora_inicio, d.registradora_fin, d.cerrado,
+                  CASE WHEN a.bus_id IS NOT NULL THEN 1 ELSE 0 END AS tiene_alistamiento,
+                  (SELECT dp.registradora_fin
+                     FROM despacho_diario dp
+                    WHERE dp.bus_id = b.id
+                      AND dp.fecha  < ?
+                      AND dp.registradora_fin IS NOT NULL
+                    ORDER BY dp.fecha DESC
+                    LIMIT 1) AS ultima_reg_fin
            FROM buses b
            LEFT JOIN despacho_diario d ON d.bus_id = b.id AND d.fecha = ?
            LEFT JOIN alistamiento_vehicular a ON a.bus_id = b.id AND a.fecha = ?
            ORDER BY b.numero""",
-        (fecha, fecha),
+        (fecha, fecha, fecha),
     ).fetchall()
 
     db.close()
@@ -1996,7 +2014,8 @@ def get_historial_despacho():
         SELECT f.fecha, b.numero, b.placa, b.modelo, b.grupo,
                c.nombre AS conductor_nombre,
                r.nombre AS ruta_nombre,
-               d.estado, d.viajes_realizados, d.cerrado
+               d.estado, d.viajes_realizados,
+               d.registradora_inicio, d.registradora_fin, d.cerrado
         FROM fechas f
         CROSS JOIN buses b
         LEFT JOIN despacho_diario d ON d.bus_id = b.id AND d.fecha = f.fecha
@@ -2087,35 +2106,48 @@ def batch_upsert_despacho():
         if estado == "descanso":
             conductor_id = None
 
-        # Viajes realizados: entero >= 0, o None. Los buses que no están
-        # trabajando no acumulan viajes.
-        viajes_raw = r.get("viajes_realizados")
-        if viajes_raw in (None, "", "null"):
-            viajes = None
-        else:
+        # Viajes realizados y registradora del torniquete: entero >= 0, o None.
+        # Los buses que no están trabajando no acumulan viajes ni lecturas.
+        def _parse_int_field(raw, label):
+            if raw in (None, "", "null"):
+                return (None, None)
             try:
-                viajes = int(viajes_raw)
+                n = int(raw)
             except (TypeError, ValueError):
-                db.close()
-                return jsonify({"error": "viajes_realizados debe ser un número entero"}), 400
-            if viajes < 0:
-                db.close()
-                return jsonify({"error": "viajes_realizados no puede ser negativo"}), 400
+                return (None, f"{label} debe ser un número entero")
+            if n < 0:
+                return (None, f"{label} no puede ser negativo")
+            return (n, None)
+
+        viajes,      err = _parse_int_field(r.get("viajes_realizados"),   "viajes_realizados")
+        if err: db.close(); return jsonify({"error": err}), 400
+        reg_inicio,  err = _parse_int_field(r.get("registradora_inicio"), "registradora_inicio")
+        if err: db.close(); return jsonify({"error": err}), 400
+        reg_fin,     err = _parse_int_field(r.get("registradora_fin"),    "registradora_fin")
+        if err: db.close(); return jsonify({"error": err}), 400
+
         if estado != "trabajando":
             viajes = None
+            reg_inicio = None
+            reg_fin = None
 
         db.execute(
             """INSERT INTO despacho_diario
-                   (bus_id, fecha, estado, conductor_id, ruta_id, viajes_realizados, despachador_id, updated_at)
-               VALUES (?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+                   (bus_id, fecha, estado, conductor_id, ruta_id,
+                    viajes_realizados, registradora_inicio, registradora_fin,
+                    despachador_id, updated_at)
+               VALUES (?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
                ON CONFLICT(bus_id, fecha) DO UPDATE SET
-                   estado            = excluded.estado,
-                   conductor_id      = excluded.conductor_id,
-                   ruta_id           = excluded.ruta_id,
-                   viajes_realizados = excluded.viajes_realizados,
-                   despachador_id    = excluded.despachador_id,
-                   updated_at        = CURRENT_TIMESTAMP""",
-            (bus_id, fecha, estado, conductor_id, ruta_id, viajes, uid),
+                   estado              = excluded.estado,
+                   conductor_id        = excluded.conductor_id,
+                   ruta_id             = excluded.ruta_id,
+                   viajes_realizados   = excluded.viajes_realizados,
+                   registradora_inicio = excluded.registradora_inicio,
+                   registradora_fin    = excluded.registradora_fin,
+                   despachador_id      = excluded.despachador_id,
+                   updated_at          = CURRENT_TIMESTAMP""",
+            (bus_id, fecha, estado, conductor_id, ruta_id,
+             viajes, reg_inicio, reg_fin, uid),
         )
         saved += 1
 
