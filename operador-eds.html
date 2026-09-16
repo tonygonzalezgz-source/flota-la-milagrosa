@@ -191,7 +191,11 @@
     .tipo-pill.aseo_estacion{background:rgba(6,182,212,.1);color:#0891b2;}
     .tipo-pill.trampa_grasa{background:rgba(245,158,11,.12);color:#b45309;}
     .tipo-pill.novedad{background:rgba(239,68,68,.1);color:#dc2626;}
-    .desc-cell{max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#374151;}
+    /* inline-block hace que el max-width sea efectivo (en <span> inline no lo era):
+       sin esto, una observación larga estiraba la columna a todo su ancho y las
+       demás filas quedaban con enormes espacios en blanco. El texto completo se
+       sigue viendo en el tooltip del title. */
+    .desc-cell{display:inline-block;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#374151;vertical-align:middle;}
     .btn-sm{font-size:.8rem;font-weight:600;padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:#fff;cursor:pointer;transition:all .15s;}
     .btn-sm.ver{color:var(--blue);border-color:rgba(99,102,241,.3);}
     .btn-sm.ver:hover{background:rgba(99,102,241,.08);}
