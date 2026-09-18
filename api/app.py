@@ -2742,7 +2742,12 @@ def batch_upsert_movilidad():
         "SELECT bus_id, conductor_id, ruta_id FROM despacho_diario WHERE fecha = ?",
         (fecha,),
     ).fetchall()
-    despacho = {d["bus_id"]: d for d in desp_rows}
+    despacho = {d["bus_id"]: dict(d) for d in desp_rows}
+
+    # Administrador y Analista pueden corregir el conductor/ruta del despacho
+    # cuando el despachador se equivocó. La corrección se propaga al despacho
+    # del día para que reportes y demás vistas reflejen la realidad.
+    puede_corregir_despacho = getattr(request, "jwt_user_rol", None) in ("Administrador", "Analista")
 
     for r in registros:
         bus_id = r.get("bus_id")
@@ -2769,8 +2774,27 @@ def batch_upsert_movilidad():
             buses_afectados.add(bus_id)
             saved += 1
             continue
-        conductor_id = (d["conductor_id"] if d and d["conductor_id"] else None) or r.get("conductor_id") or None
-        ruta_id      = (d["ruta_id"]      if d and d["ruta_id"]      else None) or r.get("ruta_id") or None
+
+        cli_cond = r.get("conductor_id") or None
+        cli_ruta = r.get("ruta_id")      or None
+
+        # Corrección de despacho: si el analista/admin envía un valor distinto
+        # al del despacho para conductor o ruta, se actualiza el despacho.
+        if puede_corregir_despacho and d and (
+            (cli_cond and cli_cond != d.get("conductor_id")) or
+            (cli_ruta and cli_ruta != d.get("ruta_id"))
+        ):
+            nuevo_cond = cli_cond if cli_cond else d.get("conductor_id")
+            nuevo_ruta = cli_ruta if cli_ruta else d.get("ruta_id")
+            db.execute(
+                "UPDATE despacho_diario SET conductor_id = ?, ruta_id = ? WHERE bus_id = ? AND fecha = ?",
+                (nuevo_cond, nuevo_ruta, bus_id, fecha),
+            )
+            d["conductor_id"] = nuevo_cond
+            d["ruta_id"]      = nuevo_ruta
+
+        conductor_id = (d["conductor_id"] if d and d["conductor_id"] else None) or cli_cond
+        ruta_id      = (d["ruta_id"]      if d and d["ruta_id"]      else None) or cli_ruta
         db.execute(
             """INSERT INTO registros_movilidad
                    (bus_id, fecha, vueltas, pasajeros, km_recorridos, novedades, ruta_id, conductor_id, usuario_id, updated_at)
