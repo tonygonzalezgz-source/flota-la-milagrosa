@@ -2871,6 +2871,168 @@ def get_movilidad_fechas():
 
 
 # ──────────────────────────────────────────
+#  Envío automático de liquidación por WhatsApp (Green API)
+# ──────────────────────────────────────────
+
+def _normalizar_telefono_co(raw):
+    """Devuelve el teléfono en formato E.164 sin '+' listo para chatId de Green API.
+    Colombia: 10 dígitos → '57' + los 10; 12+ dígitos empezando por 57 → tal cual."""
+    if not raw:
+        return ""
+    digitos = "".join(ch for ch in str(raw) if ch.isdigit())
+    if not digitos:
+        return ""
+    if digitos.startswith("57") and len(digitos) >= 12:
+        return digitos
+    if len(digitos) == 10:
+        return "57" + digitos
+    return digitos
+
+
+def _green_api_send_file(chat_id, caption, filename, file_bytes):
+    """Envía un archivo por WhatsApp usando Green API sendFileByUpload.
+    Devuelve (ok:bool, detalle:str|dict). Requiere GREEN_API_ID_INSTANCE y GREEN_API_TOKEN."""
+    id_instance = os.environ.get("GREEN_API_ID_INSTANCE", "").strip()
+    token       = os.environ.get("GREEN_API_TOKEN", "").strip()
+    if not id_instance or not token:
+        return False, "El servidor no tiene configurado Green API (GREEN_API_ID_INSTANCE / GREEN_API_TOKEN)."
+
+    # Green API a veces asigna un host personal (p.ej. 7103.api.greenapi.com);
+    # si el usuario lo tiene, lo declara en GREEN_API_HOST. Default: api.green-api.com.
+    host   = os.environ.get("GREEN_API_HOST", "api.green-api.com").strip().rstrip("/")
+    scheme = "https"
+    url    = f"{scheme}://{host}/waInstance{id_instance}/sendFileByUpload/{token}"
+
+    # Multipart/form-data armado a mano (sin dependencias extra)
+    boundary = "----GreenAPIBoundary" + os.urandom(8).hex()
+    def _b(s):
+        return s.encode("utf-8") if isinstance(s, str) else s
+    parts = []
+    def _add_field(name, value):
+        parts.append(_b(f"--{boundary}\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n{value}\r\n"))
+    def _add_file(name, fname, content, ctype="application/octet-stream"):
+        parts.append(_b(f"--{boundary}\r\nContent-Disposition: form-data; name=\"{name}\"; filename=\"{fname}\"\r\nContent-Type: {ctype}\r\n\r\n"))
+        parts.append(content)
+        parts.append(_b("\r\n"))
+
+    _add_field("chatId", f"{chat_id}@c.us")
+    _add_field("fileName", filename)
+    if caption:
+        _add_field("caption", caption)
+    _add_file("file", filename, file_bytes,
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    parts.append(_b(f"--{boundary}--\r\n"))
+    body = b"".join(parts)
+
+    req = urllib.request.Request(
+        url,
+        data=body,
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            raw = resp.read().decode("utf-8", errors="replace")
+            try:
+                data = json.loads(raw)
+            except Exception:
+                data = {"raw": raw}
+            return True, data
+    except urllib.error.HTTPError as e:
+        try:
+            detalle = e.read().decode("utf-8", errors="replace")
+        except Exception:
+            detalle = str(e)
+        return False, f"HTTP {e.code}: {detalle[:500]}"
+    except Exception as e:
+        return False, f"No se pudo conectar con Green API: {e}"
+
+
+@app.route("/api/movilidad/enviar-whatsapp", methods=["POST"])
+@require_role("Administrador", "Analista")
+def enviar_liquidacion_whatsapp():
+    """Envía por WhatsApp el Excel de la liquidación al propietario.
+
+    Multipart form (exactamente uno de bus_id / propietario_id):
+      - file:            Excel (.xlsx) generado en el cliente
+      - bus_id:          id del bus → propietario derivado del bus (modo 1 bus)
+      - propietario_id:  id del propietario → un solo mensaje consolidado
+      - mensaje:         texto que va como caption del archivo
+      - filename (opc):  nombre del archivo mostrado en WhatsApp
+    """
+    bus_id_raw  = request.form.get("bus_id")
+    prop_id_raw = request.form.get("propietario_id")
+    mensaje     = (request.form.get("mensaje") or "").strip()
+    filename    = (request.form.get("filename") or "liquidacion.xlsx").strip()
+    up          = request.files.get("file")
+
+    if not up:
+        return jsonify({"error": "Falta el archivo Excel"}), 400
+    if not mensaje:
+        return jsonify({"error": "Falta el mensaje"}), 400
+    if not bus_id_raw and not prop_id_raw:
+        return jsonify({"error": "Falta bus_id o propietario_id"}), 400
+
+    db = get_db()
+    prop_nombre = None
+    prop_tel    = None
+
+    if prop_id_raw:
+        try:
+            prop_id = int(prop_id_raw)
+        except (TypeError, ValueError):
+            db.close(); return jsonify({"error": "propietario_id inválido"}), 400
+        row = db.execute(
+            "SELECT id, nombre, telefono FROM propietarios WHERE id = ? AND activo = 1",
+            (prop_id,),
+        ).fetchone()
+        if not row:
+            db.close(); return jsonify({"error": "Propietario no encontrado"}), 404
+        prop_nombre = row["nombre"]
+        prop_tel    = row["telefono"]
+    else:
+        try:
+            bus_id = int(bus_id_raw)
+        except (TypeError, ValueError):
+            db.close(); return jsonify({"error": "bus_id inválido"}), 400
+        row = db.execute(
+            """SELECT b.numero AS bus_numero, b.placa,
+                      p.id AS prop_id, p.nombre AS prop_nombre, p.telefono AS prop_tel
+                 FROM buses b
+                 LEFT JOIN propietarios p ON p.id = b.propietario_id
+                WHERE b.id = ?""",
+            (bus_id,),
+        ).fetchone()
+        if not row:
+            db.close(); return jsonify({"error": "Bus no encontrado"}), 404
+        if not row["prop_id"]:
+            db.close(); return jsonify({"error": f"El bus {row['bus_numero']} no tiene propietario asignado."}), 400
+        prop_nombre = row["prop_nombre"]
+        prop_tel    = row["prop_tel"]
+
+    db.close()
+    tel = _normalizar_telefono_co(prop_tel)
+    if not tel:
+        return jsonify({"error": f"El propietario \"{prop_nombre}\" no tiene teléfono registrado."}), 400
+
+    file_bytes = up.read()
+    if not file_bytes:
+        return jsonify({"error": "El archivo Excel está vacío"}), 400
+
+    ok, detalle = _green_api_send_file(tel, mensaje, filename, file_bytes)
+    if not ok:
+        return jsonify({"error": f"No se pudo enviar por WhatsApp. {detalle}"}), 502
+
+    id_mensaje = detalle.get("idMessage") if isinstance(detalle, dict) else None
+    return jsonify({
+        "ok": True,
+        "telefono": tel,
+        "propietario": prop_nombre,
+        "idMessage": id_mensaje,
+    })
+
+
+# ──────────────────────────────────────────
 #  Gastos / Facturas de mantenimiento
 # ──────────────────────────────────────────
 
@@ -3465,13 +3627,14 @@ def admin_get_usuarios():
     return jsonify([dict(r) for r in rows])
 
 
-def _sync_propietario_from_usuario(db, usuario_id, nombre, rol, activo=1):
+def _sync_propietario_from_usuario(db, usuario_id, nombre, rol, activo=1, telefono=None):
     """Mantiene coherencia entre `usuarios` (cuentas) y `propietarios` (catálogo).
 
     - Si el rol es Propietario y no existe una fila en `propietarios` ligada a
-      este usuario, la crea con el mismo nombre.
+      este usuario, la crea con el mismo nombre (y teléfono si se pasa).
     - Si ya existe una fila ligada, actualiza nombre y activo (para reflejar
-      cambios hechos desde la pantalla de usuarios).
+      cambios hechos desde la pantalla de usuarios); si `telefono` no es None,
+      también lo actualiza (usar '' para borrarlo, None para no tocarlo).
     - Si el rol dejó de ser Propietario, desactiva (no borra) el catálogo
       ligado para preservar las asignaciones históricas del bus.
     """
@@ -3481,14 +3644,20 @@ def _sync_propietario_from_usuario(db, usuario_id, nombre, rol, activo=1):
         ).fetchone()
         if rol == "Propietario":
             if row:
-                db.execute(
-                    "UPDATE propietarios SET nombre = ?, activo = ? WHERE usuario_id = ?",
-                    (nombre, 1 if activo else 0, usuario_id),
-                )
+                if telefono is not None:
+                    db.execute(
+                        "UPDATE propietarios SET nombre = ?, activo = ?, telefono = ? WHERE usuario_id = ?",
+                        (nombre, 1 if activo else 0, telefono, usuario_id),
+                    )
+                else:
+                    db.execute(
+                        "UPDATE propietarios SET nombre = ?, activo = ? WHERE usuario_id = ?",
+                        (nombre, 1 if activo else 0, usuario_id),
+                    )
             else:
                 db.execute(
-                    "INSERT INTO propietarios (nombre, activo, usuario_id) VALUES (?, ?, ?)",
-                    (nombre, 1 if activo else 0, usuario_id),
+                    "INSERT INTO propietarios (nombre, activo, usuario_id, telefono) VALUES (?, ?, ?, ?)",
+                    (nombre, 1 if activo else 0, usuario_id, telefono or None),
                 )
         elif row:
             db.execute(
@@ -3520,7 +3689,9 @@ def admin_create_usuario():
             (username, hashed_pw, nombre, rol, iniciales, color, data.get("puesto_id") or None),
         )
         new_id = cursor.lastrowid
-        _sync_propietario_from_usuario(db, new_id, nombre, rol, activo=1)
+        tel_raw = data.get("telefono")
+        tel = None if tel_raw is None else (str(tel_raw).strip() or None)
+        _sync_propietario_from_usuario(db, new_id, nombre, rol, activo=1, telefono=tel)
         db.commit()
     except Exception as e:
         db.close()
@@ -3557,7 +3728,11 @@ def admin_update_usuario(uid):
     ).fetchone()
     if fresh:
         f = dict(fresh)
-        _sync_propietario_from_usuario(db, uid, f["nombre"], f["rol"], f.get("activo", 1))
+        tel = None
+        if "telefono" in data:
+            tel_raw = data.get("telefono")
+            tel = None if tel_raw is None else (str(tel_raw).strip() or "")
+        _sync_propietario_from_usuario(db, uid, f["nombre"], f["rol"], f.get("activo", 1), telefono=tel)
     db.commit()
     db.close()
     return jsonify({"ok": True})
