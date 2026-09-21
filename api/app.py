@@ -112,7 +112,7 @@ PG_SCHEMA    = os.path.join(os.path.dirname(__file__), "supabase_schema.sql")
 # Versión del esquema. IMPORTANTE: incrementar en 1 cada vez que se agregue
 # una migración (ALTER/CREATE) a migrate_db(); si no se incrementa, la
 # migración nueva NO corre en las BD ya versionadas.
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 ROLE_VIEWS = {
     "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho", "historial-despacho", "gastos", "tecnologia", "chequeo", "eds", "lavada", "mapa", "relojes"],
@@ -1014,6 +1014,30 @@ def migrate_db():
                 db.execute("UPDATE buses SET placa = ? WHERE numero = ?", (placa_real, numero))
     except Exception as e:
         print(f"[migrate_db] sync placas: {e}")
+
+    # Backfill: buses asignados a un usuario Propietario vía `usuario_buses`
+    # deben quedar también reflejados en `buses.propietario_id`. Sin esto,
+    # las liquidaciones por propietario no encuentran su flota. Idempotente:
+    # solo llena `propietario_id` donde está NULL.
+    try:
+        db.execute(
+            """
+            UPDATE buses
+               SET propietario_id = (
+                   SELECT p.id
+                     FROM propietarios p
+                     JOIN usuario_buses ub ON ub.usuario_id = p.usuario_id
+                    WHERE ub.bus_id = buses.id
+                    LIMIT 1
+               )
+             WHERE propietario_id IS NULL
+               AND id IN (SELECT ub.bus_id
+                            FROM usuario_buses ub
+                            JOIN propietarios p ON p.usuario_id = ub.usuario_id)
+            """
+        )
+    except Exception as e:
+        print(f"[migrate_db] backfill propietario_id desde usuario_buses: {e}")
 
     # Registrar la versión migrada: mientras coincida con SCHEMA_VERSION,
     # los próximos init_db() retornan con una sola consulta.
@@ -3802,6 +3826,35 @@ def admin_set_usuario_buses(uid):
             db.execute("INSERT INTO usuario_buses (usuario_id, bus_id) VALUES (?,?)", (uid, bid))
         except Exception:
             pass
+
+    # Si el usuario es Propietario, mantener sincronizada la relación de propiedad
+    # `buses.propietario_id` para que reflejen los mismos buses. Sin este sync, la
+    # asignación quedaría solo como "visibilidad" y el envío de liquidaciones por
+    # WhatsApp (que se apoya en propietario_id) no encontraría los buses.
+    try:
+        usr = db.execute("SELECT rol FROM usuarios WHERE id = ?", (uid,)).fetchone()
+        if usr and usr["rol"] == "Propietario":
+            prop = db.execute(
+                "SELECT id FROM propietarios WHERE usuario_id = ?", (uid,)
+            ).fetchone()
+            if prop:
+                prop_id = prop["id"]
+                # Suelta los buses que ya no están en la asignación (solo si eran de este propietario)
+                db.execute(
+                    "UPDATE buses SET propietario_id = NULL WHERE propietario_id = ?",
+                    (prop_id,),
+                )
+                for bid in bus_ids:
+                    try:
+                        db.execute(
+                            "UPDATE buses SET propietario_id = ? WHERE id = ?",
+                            (prop_id, bid),
+                        )
+                    except Exception:
+                        pass
+    except Exception as e:
+        print(f"[usuario_buses sync propietario_id] {e}")
+
     db.commit()
     db.close()
     return jsonify({"ok": True})
