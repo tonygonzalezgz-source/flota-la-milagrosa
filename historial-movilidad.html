@@ -771,6 +771,9 @@
         <button class="gf-btn" onclick="setRepMes(0)">Este mes</button>
         <button class="gf-btn" onclick="setRepMes(-1)">Mes anterior</button>
       </div>
+      <div class="rf-item"><span class="lbl">Propietario</span>
+        <select class="ruta-select" id="repPropietario" onchange="onPropietarioChange()"><option value="">— Todos —</option></select>
+      </div>
       <div class="rf-item"><span class="lbl">Bus</span>
         <select class="ruta-select" id="repBus"><option value="">— Todos —</option></select>
       </div>
@@ -805,6 +808,14 @@
     </div>
     <div class="import-modal-foot">
       <button class="btn-cancel-imp" onclick="closeReportModal()">Cerrar</button>
+      <button class="btn-confirm-imp" id="btnEnviarWa" onclick="enviarLiquidacionWhatsApp()" disabled
+              style="background:#25D366"
+              title="Envía la liquidación (mensaje + Excel adjunto) al WhatsApp del propietario">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-3px;margin-right:6px">
+          <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347M12.05 22c-1.62 0-3.135-.44-4.44-1.204L3 22l1.263-4.484A8.9 8.9 0 0 1 3.05 12.05C3.05 7.045 7.055 3.04 12.06 3.04c2.427 0 4.7.943 6.418 2.661a9 9 0 0 1 2.659 6.415C21.132 17.121 17.126 22 12.05 22"/>
+        </svg>
+        Enviar por WhatsApp
+      </button>
       <button class="btn-confirm-imp" id="btnExportReport" onclick="exportReporte()" disabled>Descargar Excel</button>
     </div>
   </div>
@@ -820,6 +831,7 @@
   let allBuses       = [];
   let allRutas       = [];
   let allConductores = [];
+  let allPropietarios = [];
   let records        = {};   // bus_id → record
   let despachoMap    = {};   // bus_id → {estado, conductor_id, ruta_id} del despacho de la fecha
   let grupoFiltro    = 'todos';
@@ -834,7 +846,7 @@
     document.getElementById('btnPrevDay').onclick = () => shiftDay(-1);
     document.getElementById('btnNextDay').onclick = () => shiftDay(1);
 
-    await Promise.all([loadBuses(), loadRutas(), loadConductores()]);
+    await Promise.all([loadBuses(), loadRutas(), loadConductores(), loadPropietarios()]);
     await loadFecha();
   });
 
@@ -901,6 +913,14 @@
       const res = await apiFetch(`${API}/conductores`);
       allConductores = await res.json();
     } catch (_) { allConductores = []; }
+  }
+
+  /* ── CARGAR PROPIETARIOS ── (para enviar la liquidación por WhatsApp) */
+  async function loadPropietarios() {
+    try {
+      const res = await apiFetch(`${API}/propietarios`);
+      allPropietarios = await res.json();
+    } catch (_) { allPropietarios = []; }
   }
 
   function conductorNombre(id) {
@@ -1507,9 +1527,33 @@
         allConductores.map(c => `<option value="${c.id}">${escHtml(c.nombre)}</option>`).join('');
       document.getElementById('repRuta').innerHTML = '<option value="">— Todas —</option>' +
         allRutas.map(r => `<option value="${r.id}">${escHtml(r.nombre)}</option>`).join('');
+      /* Propietarios activos con al menos un bus asignado (para no llenar el select con propietarios sin flota) */
+      const propsConBuses = allPropietarios.filter(p =>
+        allBuses.some(b => b.propietario_id === p.id));
+      document.getElementById('repPropietario').innerHTML = '<option value="">— Todos —</option>' +
+        propsConBuses.map(p => `<option value="${p.id}">${escHtml(p.nombre)}</option>`).join('');
     }
     if (!document.getElementById('repDesde').value) setRepMes(0);
     document.getElementById('reportOverlay').classList.remove('hidden');
+  }
+
+  /* Cuando el usuario elige un propietario, filtramos el select de Bus
+     para mostrar solo los buses de ese propietario. Así puede optar por
+     "todos los buses del propietario" (Bus = Todos) o un bus específico. */
+  function onPropietarioChange() {
+    const selProp = document.getElementById('repPropietario');
+    const selBus  = document.getElementById('repBus');
+    const propId  = parseInt(selProp.value) || null;
+    const busesDelProp = propId
+      ? allBuses.filter(b => b.propietario_id === propId)
+      : allBuses;
+    const prevBus = selBus.value;
+    selBus.innerHTML = '<option value="">— Todos —</option>' + busesDelProp.map(b =>
+      `<option value="${b.id}">Bus ${b.numero}${b.placa ? ' · ' + b.placa : ''}</option>`).join('');
+    /* Conserva el bus previo solo si sigue perteneciendo al propietario elegido */
+    if (prevBus && busesDelProp.some(b => String(b.id) === prevBus)) {
+      selBus.value = prevBus;
+    }
   }
 
   function closeReportModal() {
@@ -1538,6 +1582,10 @@
     const busId  = parseInt(document.getElementById('repBus').value) || null;
     const condId = parseInt(document.getElementById('repConductor').value) || null;
     const rutaId = parseInt(document.getElementById('repRuta').value) || null;
+    const propId = parseInt(document.getElementById('repPropietario').value) || null;
+    const busIdsDelProp = propId
+      ? new Set(allBuses.filter(b => b.propietario_id === propId).map(b => b.id))
+      : null;
 
     const btn = document.getElementById('btnGenReport');
     btn.disabled = true; btn.textContent = 'Generando…';
@@ -1551,7 +1599,8 @@
         const ridEf = r.despacho_ruta_id      || r.ruta_id;
         return (!busId || r.bus_id === busId)
             && (!condId || cidEf === condId)
-            && (!rutaId || ridEf === rutaId);
+            && (!rutaId || ridEf === rutaId)
+            && (!busIdsDelProp || busIdsDelProp.has(r.bus_id));
       }).map(r => ({
         fecha    : normFechaISO(r.fecha),
         bus      : r.numero,
@@ -1579,10 +1628,12 @@
     const summary = document.getElementById('reportSummary');
     const btnExp  = document.getElementById('btnExportReport');
 
+    const btnWa   = document.getElementById('btnEnviarWa');
     if (!_reportRows.length) {
       tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--txt3);padding:32px">Sin registros de movilidad para esos filtros</td></tr>`;
       summary.style.display = 'none';
       btnExp.disabled = true;
+      if (btnWa) { btnWa.disabled = true; btnWa.title = 'Genera primero un reporte con un bus específico'; }
       return;
     }
 
@@ -1667,6 +1718,183 @@
 
     btnExp.disabled = false;
     btnExp.textContent = `Descargar Excel (${_reportRows.length})`;
+
+    /* El botón de WhatsApp se habilita si podemos resolver un destinatario único:
+       (a) un bus específico → propietario derivado del bus, o
+       (b) un propietario específico → un solo mensaje consolidado con TODOS sus buses. */
+    if (btnWa) {
+      const busId  = parseInt(document.getElementById('repBus').value) || null;
+      const propId = parseInt(document.getElementById('repPropietario').value) || null;
+      if (!busId && !propId) {
+        btnWa.disabled = true;
+        btnWa.title = 'Selecciona un Propietario (envía todos sus buses en un mensaje) o un Bus específico';
+      } else {
+        btnWa.disabled = false;
+        btnWa.title = propId && !busId
+          ? 'Envía UNA sola liquidación al propietario con TODOS sus buses'
+          : 'Envía la liquidación de este bus al propietario';
+      }
+    }
+  }
+
+  /* ═══════════════════════════════════════
+     ENVIAR LIQUIDACIÓN POR WHATSAPP (automático vía Green API)
+     El backend usa GREEN_API_ID_INSTANCE / GREEN_API_TOKEN para enviar
+     el Excel con el mensaje directo al WhatsApp del propietario.
+  ═══════════════════════════════════════ */
+  /* Construye el mensaje según el modo:
+     - modo 'bus':          liquidación de UN bus (con totales por ruta).
+     - modo 'propietario':  liquidación consolidada de VARIOS buses del propietario
+       (con desglose "por bus" para que el propietario vea qué aportó cada uno). */
+  function _armarMensajeLiquidacion({ modo, bus, prop }) {
+    const desde = document.getElementById('repDesde').value;
+    const hasta = document.getElementById('repHasta').value;
+    const totV  = _reportRows.reduce((s, r) => s + r.vueltas, 0);
+    const totP  = _reportRows.reduce((s, r) => s + r.pasajeros, 0);
+    const totK  = Math.round(_reportRows.reduce((s, r) => s + r.km, 0) * 10) / 10;
+    const nDias = new Set(_reportRows.map(r => r.fecha)).size;
+    const saludo = (prop.nombre || '').trim().split(/\s+/)[0] || 'propietario';
+
+    if (modo === 'bus') {
+      const porRuta = new Map();
+      _reportRows.forEach(r => {
+        const key = r.ruta || 'Sin ruta';
+        const acc = porRuta.get(key) || { vueltas: 0, pasajeros: 0 };
+        acc.vueltas   += r.vueltas;
+        acc.pasajeros += r.pasajeros;
+        porRuta.set(key, acc);
+      });
+      const rutasLinea = [...porRuta.entries()]
+        .sort((a, b) => b[1].pasajeros - a[1].pasajeros)
+        .map(([n, a]) => `• ${n}: ${a.vueltas} vlts · ${a.pasajeros.toLocaleString()} pas`)
+        .join('\n');
+
+      const busLabel = `Bus ${bus.numero}${bus.placa ? ' · ' + bus.placa : ''}`;
+      return [
+        `Hola ${saludo}, te comparto la liquidación de movilidad:`,
+        ``,
+        `🚌 ${busLabel}`,
+        `🗓️ Periodo: ${desde} a ${hasta} (${nDias} día${nDias===1?'':'s'})`,
+        ``,
+        `Totales:`,
+        `• Vueltas: ${totV.toLocaleString()}`,
+        `• Pasajeros: ${totP.toLocaleString()}`,
+        `• Km: ${totK.toLocaleString(undefined,{maximumFractionDigits:1})}`,
+        ``,
+        `Por ruta:`,
+        rutasLinea,
+        ``,
+        `— Flota La Milagrosa`,
+      ].join('\n');
+    }
+
+    /* modo === 'propietario': agrupamos por bus para el desglose */
+    const porBus = new Map();
+    _reportRows.forEach(r => {
+      const key = r.bus;
+      const acc = porBus.get(key) || { placa: r.placa, vueltas: 0, pasajeros: 0, km: 0 };
+      acc.vueltas   += r.vueltas;
+      acc.pasajeros += r.pasajeros;
+      acc.km        += r.km;
+      porBus.set(key, acc);
+    });
+    const busesOrden = [...porBus.entries()].sort((a, b) => a[0] - b[0]);
+    const busesLineas = busesOrden.map(([n, a]) => {
+      const rk = Math.round(a.km * 10) / 10;
+      return `🚌 Bus ${n}${a.placa ? ' · ' + a.placa : ''}\n   Vueltas: ${a.vueltas.toLocaleString()} · Pasajeros: ${a.pasajeros.toLocaleString()} · Km: ${rk.toLocaleString(undefined,{maximumFractionDigits:1})}`;
+    }).join('\n\n');
+
+    return [
+      `Hola ${saludo}, te comparto la liquidación consolidada de tus buses:`,
+      ``,
+      `🗓️ Periodo: ${desde} a ${hasta} (${nDias} día${nDias===1?'':'s'})`,
+      `🚍 Buses: ${porBus.size}`,
+      ``,
+      busesLineas,
+      ``,
+      `Total general de tus buses:`,
+      `• Vueltas: ${totV.toLocaleString()}`,
+      `• Pasajeros: ${totP.toLocaleString()}`,
+      `• Km: ${totK.toLocaleString(undefined,{maximumFractionDigits:1})}`,
+      ``,
+      `Te adjunto el Excel con el detalle día a día.`,
+      `— Flota La Milagrosa`,
+    ].join('\n');
+  }
+
+  async function enviarLiquidacionWhatsApp() {
+    if (!_reportRows.length) return;
+    const busId  = parseInt(document.getElementById('repBus').value) || null;
+    const propId = parseInt(document.getElementById('repPropietario').value) || null;
+
+    /* Modo: bus si hay bus específico (aunque haya propietario), propietario si solo hay propietario */
+    let modo, bus = null, prop = null;
+    if (busId) {
+      modo = 'bus';
+      bus  = allBuses.find(b => b.id === busId);
+      prop = bus && bus.propietario_id
+        ? allPropietarios.find(p => p.id === bus.propietario_id) : null;
+      if (!prop) {
+        alert(`El bus ${bus ? bus.numero : ''} no tiene propietario asignado. Asígnalo en Configuración → Propietarios.`);
+        return;
+      }
+    } else if (propId) {
+      modo = 'propietario';
+      prop = allPropietarios.find(p => p.id === propId);
+      if (!prop) { alert('Propietario no encontrado.'); return; }
+    } else {
+      alert('Selecciona un Propietario (todos sus buses en un mensaje) o un Bus específico.');
+      return;
+    }
+
+    if (!prop.telefono) {
+      alert(`El propietario "${prop.nombre}" no tiene teléfono registrado. Agrégalo en Configuración → Propietarios.`);
+      return;
+    }
+
+    const btnWa = document.getElementById('btnEnviarWa');
+    const originalHtml = btnWa.innerHTML;
+    btnWa.disabled = true;
+    btnWa.innerHTML = 'Enviando…';
+
+    try {
+      const built = await _buildLiquidacionExcel();
+      if (!built) throw new Error('No se pudo generar el Excel.');
+
+      const mensaje = _armarMensajeLiquidacion({ modo, bus, prop });
+
+      const fd = new FormData();
+      if (modo === 'bus') fd.append('bus_id', String(busId));
+      else                fd.append('propietario_id', String(prop.id));
+      fd.append('mensaje', mensaje);
+      fd.append('filename', built.filename);
+      fd.append('file', built.blob, built.filename);
+
+      const token = localStorage.getItem('authToken');
+      const res = await fetch(`${API}/movilidad/enviar-whatsapp`, {
+        method: 'POST',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+        body: fd,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+
+      btnWa.innerHTML = '✔ Enviado';
+      setTimeout(() => {
+        btnWa.disabled = false;
+        btnWa.innerHTML = originalHtml;
+      }, 2500);
+      const nBuses = new Set(_reportRows.map(r => r.bus)).size;
+      const detalle = modo === 'propietario' ? ` (${nBuses} buses)` : '';
+      alert(`Liquidación enviada a ${data.propietario}${detalle} — ${data.telefono}.`);
+    } catch (e) {
+      console.error(e);
+      btnWa.disabled = false;
+      btnWa.innerHTML = originalHtml;
+      alert('No se pudo enviar la liquidación: ' + e.message);
+    }
   }
 
   /* Logo Flota la Milagrosa (JPEG base64) — igual que en los otros exportados */
@@ -1677,7 +1905,17 @@
   }
 
   async function exportReporte() {
-    if (!_reportRows.length) return;
+    const built = await _buildLiquidacionExcel();
+    if (!built) return;
+    const a = document.createElement('a');
+    a.href     = URL.createObjectURL(built.blob);
+    a.download = built.filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  async function _buildLiquidacionExcel() {
+    if (!_reportRows.length) return null;
     await cargarLibreria(LIB_EXCELJS);
     const desde = document.getElementById('repDesde').value;
     const hasta = document.getElementById('repHasta').value;
@@ -1848,6 +2086,62 @@
     totRuta.getCell(7).numFmt = '#,##0';
     totRuta.getCell(8).numFmt = '0.0';
 
+    /* ── Bloque "Totales por bus" (solo tiene sentido si hay más de un bus) ── */
+    const porBus = new Map();
+    _reportRows.forEach(r => {
+      const key = r.bus;
+      const acc = porBus.get(key) || { placa: r.placa, vueltas: 0, pasajeros: 0, km: 0, dias: new Set() };
+      acc.vueltas   += r.vueltas;
+      acc.pasajeros += r.pasajeros;
+      acc.km        += r.km;
+      acc.dias.add(r.fecha);
+      porBus.set(key, acc);
+    });
+    if (porBus.size > 1) {
+      ws.addRow([]);
+      const busHead = ws.addRow(['Totales por bus', '', '', '', '', 'Vueltas', 'Pasajeros', 'Km', 'Días', '']);
+      busHead.height = 22;
+      busHead.eachCell({ includeEmpty: true }, (c, col) => {
+        c.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: INDIGO } };
+        c.font      = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
+        c.alignment = { horizontal: (col >= 6 && col <= 8) ? 'right' : (col === 9 ? 'center' : 'left'), vertical: 'middle' };
+        c.border    = bordes;
+      });
+      ws.mergeCells(`A${busHead.number}:E${busHead.number}`);
+
+      [...porBus.entries()].sort((a, b) => a[0] - b[0]).forEach(([n, a], i) => {
+        const rk    = Math.round(a.km * 10) / 10;
+        const label = `Bus ${n}${a.placa ? ' · ' + a.placa : ''}`;
+        const row   = ws.addRow([label, '', '', '', '', a.vueltas, a.pasajeros, rk, a.dias.size, '']);
+        ws.mergeCells(`A${row.number}:E${row.number}`);
+        row.height = 18;
+        row.eachCell({ includeEmpty: true }, (c, col) => {
+          c.border = bordes;
+          c.font   = { size: 10, color: { argb: 'FF333340' } };
+          if (i % 2 === 1) c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF7F7FC' } };
+          if (col === 1) { c.font = { size: 10, bold: true, color: { argb: 'FF17171A' } }; c.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 }; }
+          if (col >= 6 && col <= 8) c.alignment = { horizontal: 'right', vertical: 'middle' };
+          if (col === 9) { c.alignment = { horizontal: 'center', vertical: 'middle' }; c.font = { size: 10, color: { argb: 'FF666680' } }; }
+        });
+        row.getCell(7).numFmt = '#,##0';
+        row.getCell(8).numFmt = '0.0';
+        row.getCell(7).font = { size: 10, bold: true, color: { argb: 'FF4F46E5' } };
+      });
+
+      const totBus = ws.addRow(['TOTAL', '', '', '', '', totV, totP, totK, '', '']);
+      ws.mergeCells(`A${totBus.number}:E${totBus.number}`);
+      totBus.height = 22;
+      totBus.eachCell({ includeEmpty: true }, (c, col) => {
+        c.fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEDEDFB' } };
+        c.font   = { size: 11, bold: true, color: { argb: 'FF17171A' } };
+        c.border = { ...bordes, top: { style: 'medium', color: { argb: INDIGO } } };
+        if (col === 1) c.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 };
+        if (col >= 6 && col <= 8) c.alignment = { horizontal: 'right', vertical: 'middle' };
+      });
+      totBus.getCell(7).numFmt = '#,##0';
+      totBus.getCell(8).numFmt = '0.0';
+    }
+
     ws.autoFilter = 'A5:J5';
 
     /* ── Descargar ── */
@@ -1859,11 +2153,7 @@
 
     const buf  = await wb.xlsx.writeBuffer();
     const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const a    = document.createElement('a');
-    a.href     = URL.createObjectURL(blob);
-    a.download = parts.join('_') + '.xlsx';
-    a.click();
-    URL.revokeObjectURL(a.href);
+    return { blob, filename: parts.join('_') + '.xlsx' };
   }
 </script>
 </body>
