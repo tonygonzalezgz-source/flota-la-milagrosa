@@ -1536,11 +1536,6 @@
     if (document.getElementById('repRuta').options.length <= 1) {
       document.getElementById('repRuta').innerHTML = '<option value="">— Todas —</option>' +
         allRutas.map(r => `<option value="${r.id}">${escHtml(r.nombre)}</option>`).join('');
-      /* Propietarios activos con al menos un bus asignado (para no llenar el select con propietarios sin flota) */
-      const propsConBuses = allPropietarios.filter(p =>
-        allBuses.some(b => b.propietario_id === p.id));
-      document.getElementById('repPropietario').innerHTML = '<option value="">— Todos —</option>' +
-        propsConBuses.map(p => `<option value="${p.id}">${escHtml(p.nombre)}</option>`).join('');
     }
     /* Todos los propietarios activos: si el propietario no tiene buses
        asignados el reporte saldrá vacío, pero no lo escondemos del filtro. */
