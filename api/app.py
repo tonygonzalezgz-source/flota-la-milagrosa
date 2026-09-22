@@ -2637,11 +2637,12 @@ def get_movilidad():
                        ru.nombre AS ruta_nombre,
                        cm.nombre AS conductor_nombre,
                        CASE WHEN d.id IS NOT NULL THEN 1 ELSE 0 END AS tiene_despacho,
-                       d.estado       AS despacho_estado,
-                       d.conductor_id AS despacho_conductor_id,
-                       dc.nombre      AS despacho_conductor_nombre,
-                       d.ruta_id      AS despacho_ruta_id,
-                       dr.nombre      AS despacho_ruta_nombre
+                       d.estado             AS despacho_estado,
+                       d.conductor_id       AS despacho_conductor_id,
+                       dc.nombre            AS despacho_conductor_nombre,
+                       d.ruta_id            AS despacho_ruta_id,
+                       dr.nombre            AS despacho_ruta_nombre,
+                       d.viajes_realizados  AS despacho_viajes
                 FROM registros_movilidad rm
                 JOIN buses b ON b.id = rm.bus_id
                 LEFT JOIN rutas ru ON ru.id = rm.ruta_id
@@ -2659,11 +2660,12 @@ def get_movilidad():
                       ru.nombre AS ruta_nombre,
                       cm.nombre AS conductor_nombre,
                       CASE WHEN d.id IS NOT NULL THEN 1 ELSE 0 END AS tiene_despacho,
-                      d.estado       AS despacho_estado,
-                      d.conductor_id AS despacho_conductor_id,
-                      dc.nombre      AS despacho_conductor_nombre,
-                      d.ruta_id      AS despacho_ruta_id,
-                      dr.nombre      AS despacho_ruta_nombre
+                      d.estado             AS despacho_estado,
+                      d.conductor_id       AS despacho_conductor_id,
+                      dc.nombre            AS despacho_conductor_nombre,
+                      d.ruta_id            AS despacho_ruta_id,
+                      dr.nombre            AS despacho_ruta_nombre,
+                      d.viajes_realizados  AS despacho_viajes
                FROM registros_movilidad rm
                JOIN buses b ON b.id = rm.bus_id
                LEFT JOIN rutas ru ON ru.id = rm.ruta_id
@@ -2697,11 +2699,12 @@ def get_movilidad_rango():
                        ru.nombre AS ruta_nombre,
                        cm.nombre AS conductor_nombre,
                        CASE WHEN d.id IS NOT NULL THEN 1 ELSE 0 END AS tiene_despacho,
-                       d.estado       AS despacho_estado,
-                       d.conductor_id AS despacho_conductor_id,
-                       dc.nombre      AS despacho_conductor_nombre,
-                       d.ruta_id      AS despacho_ruta_id,
-                       dr.nombre      AS despacho_ruta_nombre
+                       d.estado             AS despacho_estado,
+                       d.conductor_id       AS despacho_conductor_id,
+                       dc.nombre            AS despacho_conductor_nombre,
+                       d.ruta_id            AS despacho_ruta_id,
+                       dr.nombre            AS despacho_ruta_nombre,
+                       d.viajes_realizados  AS despacho_viajes
                 FROM registros_movilidad rm
                 JOIN buses b ON b.id = rm.bus_id
                 LEFT JOIN rutas ru ON ru.id = rm.ruta_id
@@ -2719,11 +2722,12 @@ def get_movilidad_rango():
                       ru.nombre AS ruta_nombre,
                       cm.nombre AS conductor_nombre,
                       CASE WHEN d.id IS NOT NULL THEN 1 ELSE 0 END AS tiene_despacho,
-                      d.estado       AS despacho_estado,
-                      d.conductor_id AS despacho_conductor_id,
-                      dc.nombre      AS despacho_conductor_nombre,
-                      d.ruta_id      AS despacho_ruta_id,
-                      dr.nombre      AS despacho_ruta_nombre
+                      d.estado             AS despacho_estado,
+                      d.conductor_id       AS despacho_conductor_id,
+                      dc.nombre            AS despacho_conductor_nombre,
+                      d.ruta_id            AS despacho_ruta_id,
+                      dr.nombre            AS despacho_ruta_nombre,
+                      d.viajes_realizados  AS despacho_viajes
                FROM registros_movilidad rm
                JOIN buses b ON b.id = rm.bus_id
                LEFT JOIN rutas ru ON ru.id = rm.ruta_id
