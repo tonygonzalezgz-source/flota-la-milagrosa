@@ -2324,20 +2324,27 @@
   </style>
 
   <!-- DEBUG banner temporal para diagnosticar el tamaño del viewport en móvil -->
-  <div id="cbDbg" style="position:fixed;top:0;left:0;right:0;z-index:99999;background:#ef4444;color:#fff;font:12px monospace;padding:4px 8px;text-align:center;pointer-events:none"></div>
+  <div id="cbDbg" style="position:fixed;top:60px;left:0;right:0;z-index:99999;background:#ef4444;color:#fff;font:bold 14px monospace;padding:8px;text-align:center;pointer-events:none">loading…</div>
   <script>
     (function(){
       function r(){
-        const iw = window.innerWidth, cw = document.documentElement.clientWidth;
-        const mm = window.matchMedia('(max-width: 480px)').matches;
-        const d = document.getElementById('cbDrawer');
-        const b = d ? d.getBoundingClientRect() : null;
-        const dbg = document.getElementById('cbDbg');
-        if(!dbg) return;
-        dbg.textContent = `iw=${iw} cw=${cw} mm=${mm} drawer=${b?Math.round(b.left)+'/'+Math.round(b.right)+'/'+Math.round(b.width):'?'}`;
+        try {
+          const iw = window.innerWidth, cw = document.documentElement.clientWidth;
+          const mm = window.matchMedia('(max-width: 480px)').matches;
+          const d = document.getElementById('cbDrawer');
+          const b = d ? d.getBoundingClientRect() : null;
+          const dbg = document.getElementById('cbDbg');
+          if(!dbg) return;
+          dbg.textContent = `iw=${iw} cw=${cw} mm=${mm?'Y':'N'} drw=${b?Math.round(b.left)+'..'+Math.round(b.right)+' w='+Math.round(b.width):'?'}`;
+        } catch(e) {
+          const dbg = document.getElementById('cbDbg');
+          if(dbg) dbg.textContent = 'ERR: ' + e.message;
+        }
       }
+      r();
       window.addEventListener('load', () => { r(); setTimeout(r, 1500); });
       window.addEventListener('resize', r);
+      setInterval(r, 500);
     })();
   </script>
   <button id="cbLauncher" title="Asistente BusControl" aria-label="Abrir asistente">💬</button>
