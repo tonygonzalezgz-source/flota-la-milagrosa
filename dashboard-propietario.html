@@ -2285,15 +2285,40 @@
     .cb-msg.err{ align-self:flex-start; background:rgba(239,68,68,.12); color:#ef4444; }
     #cbForm{ display:flex; gap:8px; padding:12px; border-top:1px solid #1e1e22; }
     #cbInput{
-      flex:1; background:#0f0f11; border:1px solid #1e1e22; border-radius:10px;
+      flex:1; min-width:0;                                    /* min-width:0 evita que el input empuje al botón fuera del drawer */
+      background:#0f0f11; border:1px solid #1e1e22; border-radius:10px;
       padding:9px 12px; color:#fff; font-size:13.5px; outline:none;
     }
     #cbInput:focus{ border-color:#6366f1; }
     #cbSend{
+      flex-shrink:0;                                          /* el botón mantiene su ancho intrínseco */
       border:none; border-radius:10px; padding:0 14px; cursor:pointer;
       background:#6366f1; color:#fff; font-size:14px; font-weight:600;
     }
     #cbSend:disabled{ opacity:.5; cursor:default; }
+
+    /* ── Móvil (≤480px): drawer casi a pantalla completa, respetando la barra
+       de estado del sistema y el "notch" (safe-area-inset-top). ── */
+    @media (max-width: 480px){
+      #cbLauncher{
+        right:14px; bottom:14px; width:52px; height:52px; font-size:22px;
+      }
+      #cbDrawer{
+        left:8px; right:8px; width:auto;
+        top:calc(env(safe-area-inset-top, 0px) + 10px);
+        bottom:76px;                                          /* deja espacio para el launcher flotante */
+        height:auto; max-height:none;
+        border-radius:14px;
+      }
+      #cbHead{ padding:11px 14px; }
+      #cbHead .cb-title{ font-size:14px; }
+      #cbHead .cb-sub{ font-size:10.5px; margin-top:1px; }
+      #cbMsgs{ padding:12px; gap:9px; }
+      .cb-msg{ font-size:13px; padding:8px 11px; max-width:88%; }
+      #cbForm{ padding:10px; gap:6px; }
+      #cbInput{ padding:8px 10px; font-size:13px; }
+      #cbSend{ padding:0 12px; font-size:13px; }
+    }
   </style>
 
   <button id="cbLauncher" title="Asistente BusControl" aria-label="Abrir asistente">💬</button>
