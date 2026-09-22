@@ -2287,7 +2287,7 @@
     #cbInput{
       flex:1; min-width:0;                                    /* min-width:0 evita que el input empuje al botón fuera del drawer */
       background:#0f0f11; border:1px solid #1e1e22; border-radius:10px;
-      padding:9px 12px; color:#fff; font-size:13.5px; outline:none;
+      padding:9px 12px; color:#fff; font-size:16px; outline:none;   /* 16px: evita el auto-zoom de iOS Safari al enfocar */
     }
     #cbInput:focus{ border-color:#6366f1; }
     #cbSend{
@@ -2304,12 +2304,10 @@
         right:14px; bottom:14px; width:52px; height:52px; font-size:22px;
       }
       #cbDrawer{
-        left:8px !important;
-        width:calc(100vw - 16px) !important;                  /* ancla el ancho explícito para que 'right' no pelee */
-        right:auto !important;
-        top:calc(env(safe-area-inset-top, 0px) + 10px) !important;
-        bottom:76px !important;
-        height:auto !important; max-height:none !important;
+        left:8px; right:8px; width:auto;
+        top:calc(env(safe-area-inset-top, 0px) + 10px);
+        bottom:76px;                                          /* deja espacio para el launcher flotante */
+        height:auto; max-height:none;
         border-radius:14px;
       }
       #cbHead{ padding:11px 14px; }
@@ -2318,35 +2316,11 @@
       #cbMsgs{ padding:12px; gap:9px; }
       .cb-msg{ font-size:13px; padding:8px 11px; max-width:88%; }
       #cbForm{ padding:10px; gap:6px; }
-      #cbInput{ padding:8px 10px; font-size:13px; }
-      #cbSend{ padding:0 12px; font-size:13px; }
+      #cbInput{ padding:8px 10px; font-size:16px; }             /* 16px: evita el auto-zoom de iOS al enfocar */
+      #cbSend{ padding:0 12px; font-size:14px; }
     }
   </style>
 
-  <!-- DEBUG banner temporal para diagnosticar el tamaño del viewport en móvil -->
-  <div id="cbDbg" style="position:fixed;bottom:0;left:0;right:0;z-index:2147483647;background:#ef4444;color:#fff;font:bold 14px monospace;padding:8px;text-align:center;pointer-events:none">loading…</div>
-  <script>
-    (function(){
-      function r(){
-        try {
-          const iw = window.innerWidth, cw = document.documentElement.clientWidth;
-          const mm = window.matchMedia('(max-width: 480px)').matches;
-          const d = document.getElementById('cbDrawer');
-          const b = d ? d.getBoundingClientRect() : null;
-          const dbg = document.getElementById('cbDbg');
-          if(!dbg) return;
-          dbg.textContent = `iw=${iw} cw=${cw} mm=${mm?'Y':'N'} drw=${b?Math.round(b.left)+'..'+Math.round(b.right)+' w='+Math.round(b.width):'?'}`;
-        } catch(e) {
-          const dbg = document.getElementById('cbDbg');
-          if(dbg) dbg.textContent = 'ERR: ' + e.message;
-        }
-      }
-      r();
-      window.addEventListener('load', () => { r(); setTimeout(r, 1500); });
-      window.addEventListener('resize', r);
-      setInterval(r, 500);
-    })();
-  </script>
   <button id="cbLauncher" title="Asistente BusControl" aria-label="Abrir asistente">💬</button>
   <div id="cbDrawer" role="dialog" aria-label="Asistente BusControl">
     <div id="cbHead">
