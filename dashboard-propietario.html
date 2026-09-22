@@ -2321,6 +2321,25 @@
     }
   </style>
 
+  <!-- DEBUG temporal: banner con innerWidth / matchMedia / bounds del drawer.
+       Se quita cuando confirmemos el fix en el iPhone real. -->
+  <div id="cbDbg" style="position:fixed;bottom:0;left:0;right:0;z-index:2147483647;background:#ef4444;color:#fff;font:bold 13px monospace;padding:6px 8px;text-align:center;pointer-events:none">loading…</div>
+  <script>
+    (function(){
+      function upd(){
+        try{
+          const iw = window.innerWidth, cw = document.documentElement.clientWidth;
+          const mm = window.matchMedia('(max-width: 480px)').matches;
+          const d = document.getElementById('cbDrawer');
+          const b = d ? d.getBoundingClientRect() : null;
+          const dbg = document.getElementById('cbDbg');
+          if(!dbg) return;
+          dbg.textContent = `iw=${iw} cw=${cw} mm=${mm?'Y':'N'} drw=${b?Math.round(b.left)+'..'+Math.round(b.right)+' w='+Math.round(b.width):'?'}`;
+        }catch(e){}
+      }
+      upd(); setInterval(upd, 400);
+    })();
+  </script>
   <button id="cbLauncher" title="Asistente BusControl" aria-label="Abrir asistente">💬</button>
   <div id="cbDrawer" role="dialog" aria-label="Asistente BusControl">
     <div id="cbHead">
