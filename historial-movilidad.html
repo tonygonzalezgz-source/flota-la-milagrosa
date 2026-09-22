@@ -161,6 +161,42 @@
     }
     .saved-toast.show { opacity: 1; }
 
+    /* ── Auto-refresh en vivo ── */
+    .live-pill {
+      font-size: 12px;
+      color: var(--txt3);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+    .live-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse 1.6s infinite;
+    }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+    @keyframes flashRow { 0% { background: #fef9c3; } 100% { background: transparent; } }
+    tbody tr.flash td { animation: flashRow 2.2s ease-out; }
+
+    .btn-refresh {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 12px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--txt2);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .13s;
+    }
+    .btn-refresh:hover { border-color: var(--border2); color: var(--txt); }
+
+    /* Marca visual sutil cuando el input de vueltas fue prellenado desde despacho */
+    .num-input.from-despacho { background: rgba(99, 102, 241, .06); border-style: dashed; }
+
     /* ── STATS BAR ── */
     .stats-bar {
       background: var(--surface);
@@ -607,6 +643,14 @@
     </div>
 
     <div class="topbar-right">
+      <span class="live-pill" id="livePill" title="Auto-refresh cada 60 segundos (solo en el día de hoy)"></span>
+      <button class="btn-refresh" id="btnRefresh" onclick="refrescar(true)" title="Traer los últimos cambios ahora">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+        </svg>
+        Actualizar
+      </button>
       <span class="saved-toast" id="savedToast">
         <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
         Guardado
@@ -833,22 +877,74 @@
   let allConductores = [];
   let allPropietarios = [];
   let records        = {};   // bus_id → record
-  let despachoMap    = {};   // bus_id → {estado, conductor_id, ruta_id} del despacho de la fecha
+  let despachoMap    = {};   // bus_id → {estado, conductor_id, ruta_id, viajes_realizados} del despacho de la fecha
   let grupoFiltro    = 'todos';
   let dirty          = new Set();
+
+  /* ── Estado del auto-refresh en vivo ── */
+  let pollTimer     = null;
+  let tickTimer     = null;
+  let lastLoad      = null;
+  let prevUpdated   = {};      // bus_id → updated_at del ciclo anterior (para el flash)
+  let modalAbierto  = false;   // pausa el polling mientras un modal está abierto
 
   /* ── INIT ── */
   document.addEventListener('DOMContentLoaded', async () => {
     currentUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
 
     document.getElementById('datePicker').value = shiftIso(hoyBogota(), -1);
-    document.getElementById('datePicker').addEventListener('change', () => loadFecha());
+    document.getElementById('datePicker').addEventListener('change', () => { loadFecha().then(() => { lastLoad = new Date(); reiniciarPolling(); actualizarLivePill(); }); });
     document.getElementById('btnPrevDay').onclick = () => shiftDay(-1);
     document.getElementById('btnNextDay').onclick = () => shiftDay(1);
 
     await Promise.all([loadBuses(), loadRutas(), loadConductores(), loadPropietarios()]);
     await loadFecha();
+    lastLoad = new Date();
+    reiniciarPolling();
+    actualizarLivePill();
+    tickTimer = setInterval(actualizarLivePill, 1000);
   });
+
+  /* ── Auto-refresh en vivo (60s + botón manual) ──
+     Solo hace polling automático cuando la fecha del picker es hoy Bogotá.
+     El refresh se salta si otra persona (o esta misma) está editando: hay
+     filas en `dirty`, el foco está en un input de la tabla, o un modal
+     (import/reporte) está abierto. El botón "Actualizar" ignora esas guardas
+     porque es un acto explícito del usuario. */
+  function esHoyPicker() {
+    return document.getElementById('datePicker').value === hoyBogota();
+  }
+
+  function reiniciarPolling() {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    if (esHoyPicker()) {
+      pollTimer = setInterval(() => refrescar(false), 60000);
+    }
+  }
+
+  async function refrescar(manual) {
+    if (!manual) {
+      if (modalAbierto) return;
+      if (dirty.size > 0) return;
+      const foco = document.activeElement;
+      if (foco && foco.closest && foco.closest('#tbody')) return;
+    }
+    try {
+      await loadFecha({ silencioso: !manual });
+      lastLoad = new Date();
+      actualizarLivePill();
+    } catch (e) { console.error('refrescar:', e); }
+  }
+
+  function actualizarLivePill() {
+    const el = document.getElementById('livePill');
+    if (!el) return;
+    if (!esHoyPicker()) { el.innerHTML = `<span class="muted">Vista histórica</span>`; return; }
+    if (!lastLoad) { el.innerHTML = ''; return; }
+    const s = Math.max(0, Math.round((Date.now() - lastLoad.getTime()) / 1000));
+    const txt = s < 60 ? `hace ${s}s` : `hace ${Math.round(s / 60)} min`;
+    el.innerHTML = `<span class="live-dot"></span> En vivo · actualizado ${txt}`;
+  }
 
   /* ── HELPERS ── */
   /* Librerías pesadas (xlsx/exceljs) bajo demanda: no bloquean la carga de la vista */
@@ -882,7 +978,7 @@
   function shiftDay(delta) {
     const picker = document.getElementById('datePicker');
     picker.value = shiftIso(picker.value, delta);
-    loadFecha();
+    loadFecha().then(() => { lastLoad = new Date(); reiniciarPolling(); actualizarLivePill(); });
   }
 
   function escHtml(s) { return (s || '').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
@@ -933,19 +1029,37 @@
     return r ? r.nombre : '—';
   }
 
-  /* ── CARGAR REGISTROS + DESPACHO DE LA MISMA FECHA ── */
-  async function loadFecha() {
+  /* ── CARGAR REGISTROS + DESPACHO DE LA MISMA FECHA ──
+     opts.silencioso=true: refresh en vivo, no borra `dirty` ni pisa las filas
+     que otra persona (o esta misma) está editando en este mismo instante. */
+  async function loadFecha(opts = {}) {
     const fecha = document.getElementById('datePicker').value;
     if (!fecha) return;
-    dirty.clear();
+    if (!opts.silencioso) dirty.clear();
 
     const [res, despRes] = await Promise.all([
       apiFetch(`${API}/movilidad?fecha=${fecha}`),
       apiFetch(`${API}/despacho?fecha=${fecha}`),
     ]);
     const data = await res.json();
+
+    /* Detectar filas cuyo updated_at cambió desde el último ciclo:
+       se usa para el flash amarillo en refresh silencioso. */
+    const cambiadas = new Set();
+    if (opts.silencioso) {
+      data.forEach(r => {
+        const prev = prevUpdated[r.bus_id];
+        const now  = r.updated_at || null;
+        if (prev !== undefined && prev !== now) cambiadas.add(r.bus_id);
+      });
+    }
+
     records = {};
     data.forEach(r => { records[r.bus_id] = r; });
+
+    /* Snapshot para el próximo ciclo (incluye buses ya cargados en records). */
+    prevUpdated = {};
+    data.forEach(r => { prevUpdated[r.bus_id] = r.updated_at || null; });
 
     /* estado === null ⇔ el bus no tiene despacho para esta fecha */
     despachoMap = {};
@@ -953,12 +1067,17 @@
       const despJson = await despRes.json();
       (despJson.buses || []).forEach(b => {
         if (b.estado != null) {
-          despachoMap[b.id] = { estado: b.estado, conductor_id: b.conductor_id, ruta_id: b.ruta_id };
+          despachoMap[b.id] = {
+            estado:            b.estado,
+            conductor_id:      b.conductor_id,
+            ruta_id:           b.ruta_id,
+            viajes_realizados: b.viajes_realizados,
+          };
         }
       });
     } catch (_) { despachoMap = {}; }
 
-    renderTable();
+    renderTable(cambiadas);
     updateStats();
   }
 
@@ -969,8 +1088,11 @@
     renderTable();
   }
 
-  /* ── RENDER ── */
-  function renderTable() {
+  /* ── RENDER ──
+     cambiadas: Set<bus_id> con filas que se actualizaron desde el último ciclo
+     (se usa en refresh silencioso para animarlas con flash). */
+  function renderTable(cambiadas) {
+    cambiadas = cambiadas || new Set();
     const buses = grupoFiltro === 'todos' ? allBuses : allBuses.filter(b => b.grupo === grupoFiltro);
     const tbody = document.getElementById('tbody');
 
@@ -979,7 +1101,17 @@
       return;
     }
 
-    tbody.innerHTML = buses.map(b => {
+    /* Filas con edición pendiente no se re-renderizan en refresh silencioso:
+       preservan el foco, los valores que se están tecleando y el estado
+       "modificado". Sí se re-renderizan cuando el usuario guarda o cambia
+       explícitamente (dirty se limpia). */
+    const preservar = new Set();
+    dirty.forEach(id => { if (document.getElementById(`row-${id}`)) preservar.add(id); });
+
+    const nuevoHtml = buses.map(b => {
+      if (preservar.has(b.id)) {
+        return document.getElementById(`row-${b.id}`).outerHTML;
+      }
       const rec      = records[b.id];
       const desp     = despachoMap[b.id];
       const cls      = rec ? 'has-data' : '';
@@ -1036,17 +1168,33 @@
         rutaCell = `<span class="no-rutas-tip">Sin rutas Gr.${b.grupo}</span>`;
       }
 
+      /* Vueltas: prellenar con el valor del despacho cuando movilidad todavía
+         no tiene un valor > 0 guardado. El analista puede sobrescribirlo; al
+         escribir, markDirty() borra el atributo data-from-despacho y en el
+         próximo refresh silencioso esa fila queda protegida por `dirty`. */
+      const vueltasSaved     = rec && rec.vueltas != null ? Number(rec.vueltas) : null;
+      const vueltasDespacho  = desp && desp.viajes_realizados != null ? Number(desp.viajes_realizados) : null;
+      const vueltasFromDesp  = (vueltasSaved == null || vueltasSaved === 0) && vueltasDespacho != null && vueltasDespacho > 0;
+      const vueltasValue     = vueltasFromDesp ? vueltasDespacho
+                              : (vueltasSaved != null ? vueltasSaved : '');
+      const vueltasTitle     = vueltasFromDesp
+        ? 'Sincronizado del despacho — puedes corregirlo si es necesario'
+        : '';
+      const vueltasAttrs     = vueltasFromDesp ? `data-from-despacho="1" title="${vueltasTitle}"` : '';
+
+      const flashCls = cambiadas.has(b.id) ? ' flash' : '';
+
       return `
-      <tr id="row-${b.id}" class="${cls}">
+      <tr id="row-${b.id}" class="${cls}${flashCls}">
         <td class="cell-unidad">
           <div class="bus-num">${b.numero}</div>
           <div class="bus-placa">${b.placa || '—'}</div>
           ${despBadge}
         </td>
         <td data-label="Grupo"><span class="badge-grupo badge-${(b.grupo || 'A').toLowerCase()}">${b.grupo}</span></td>
-        <td data-label="Vueltas"><input  class="num-input"   id="v-${b.id}"    type="number" min="0" inputmode="numeric"
-                    value="${rec ? rec.vueltas : ''}" placeholder="0"
-                    oninput="markDirty(${b.id})" /></td>
+        <td data-label="Vueltas"><input  class="num-input${vueltasFromDesp ? ' from-despacho' : ''}"   id="v-${b.id}"    type="number" min="0" inputmode="numeric"
+                    value="${vueltasValue}" placeholder="0" ${vueltasAttrs}
+                    oninput="markDirty(${b.id}); this.classList.remove('from-despacho'); this.removeAttribute('data-from-despacho'); this.removeAttribute('title');" /></td>
         <td data-label="Pasajeros"><input  class="num-input"   id="p-${b.id}"    type="number" min="0" inputmode="numeric"
                     value="${rec ? rec.pasajeros : ''}" placeholder="0"
                     oninput="markDirty(${b.id})" /></td>
@@ -1062,6 +1210,8 @@
         <td class="cell-acciones"><button class="btn-row-save" id="brs-${b.id}" onclick="saveRow(${b.id})">Guardar</button></td>
       </tr>`;
     }).join('');
+
+    tbody.innerHTML = nuevoHtml;
   }
 
   /* ── MARCAR MODIFICADO ── */
@@ -1205,7 +1355,9 @@
   window.addEventListener('message', e => {
     if (e.data?.type === 'REFRESH_ROUTES') { loadRutas().then(() => renderTable()); }
     // El shell mantiene el iframe vivo entre navegaciones y avisa al volver
-    if (e.data?.type === 'VIEW_SHOWN') loadFecha();
+    if (e.data?.type === 'VIEW_SHOWN') {
+      loadFecha().then(() => { lastLoad = new Date(); reiniciarPolling(); actualizarLivePill(); });
+    }
   });
 
   /* ── LIMPIAR DATOS DE LA FECHA ── */
@@ -1247,6 +1399,7 @@
 
   function closeImportModal() {
     document.getElementById('importOverlay').classList.add('hidden');
+    modalAbierto = false;
     _importParsed = [];
   }
 
@@ -1444,6 +1597,7 @@
     btn.disabled    = validCount === 0;
 
     document.getElementById('importOverlay').classList.remove('hidden');
+    modalAbierto = true;
   }
 
   async function confirmImport() {
@@ -1544,6 +1698,7 @@
 
     if (!document.getElementById('repDesde').value) setRepMes(0);
     document.getElementById('reportOverlay').classList.remove('hidden');
+    modalAbierto = true;
   }
 
   /* Cuando el usuario elige un propietario, filtramos el select de Bus
@@ -1567,6 +1722,7 @@
 
   function closeReportModal() {
     document.getElementById('reportOverlay').classList.add('hidden');
+    modalAbierto = false;
   }
 
   /* offset 0 = mes actual, -1 = mes anterior (hasta nunca pasa de hoy) */
