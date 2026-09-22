@@ -2304,10 +2304,11 @@
         right:14px; bottom:14px; width:52px; height:52px; font-size:22px;
       }
       #cbDrawer{
-        left:8px; right:8px; width:auto;
-        top:calc(env(safe-area-inset-top, 0px) + 10px);
-        bottom:76px;                                          /* deja espacio para el launcher flotante */
-        height:auto; max-height:none;
+        left:8px !important; right:8px !important; width:auto !important;
+        top:calc(env(safe-area-inset-top, 0px) + 10px) !important;
+        bottom:76px !important;
+        height:auto !important; max-height:none !important;
+        border:2px solid #ef4444 !important;                  /* DEBUG: rojo si el media query está activo */
         border-radius:14px;
       }
       #cbHead{ padding:11px 14px; }
