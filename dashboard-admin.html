@@ -1932,12 +1932,15 @@
        de estado del sistema y el "notch" (safe-area-inset-top). ── */
     @media (max-width: 480px){
       #cbLauncher{
-        right:14px; bottom:14px; width:52px; height:52px; font-size:22px;
+        right:16px;
+        bottom:calc(env(safe-area-inset-bottom, 0px) + 24px);  /* subir la nube por encima de la barra inferior de Safari */
+        width:52px; height:52px; font-size:22px;
       }
       #cbDrawer{
         left:8px; right:8px; width:auto;
         top:calc(env(safe-area-inset-top, 0px) + 10px);
-        bottom:76px;                                          /* deja espacio para el launcher flotante */
+        /* bottom se calcula dinámicamente en JS cuando abre el teclado (visualViewport) */
+        bottom:calc(env(safe-area-inset-bottom, 0px) + 86px);
         height:auto; max-height:none;
         border-radius:14px;
       }
@@ -1953,6 +1956,28 @@
   </style>
 
   <button id="cbLauncher" title="Asistente BusControl" aria-label="Abrir asistente">💬</button>
+  <script>
+    /* iOS Safari no repositiona position:fixed cuando el teclado sube; usamos
+       visualViewport para pegar el drawer justo por encima del teclado y que
+       el botón "Enviar" no quede cortado. */
+    (function(){
+      const vv = window.visualViewport;
+      if (!vv) return;
+      function adjust(){
+        const drawer = document.getElementById('cbDrawer');
+        if (!drawer || !drawer.classList.contains('open')) return;
+        if (window.innerWidth > 480) { drawer.style.bottom = ''; return; }
+        const kbHeight = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+        drawer.style.bottom = kbHeight > 60
+          ? (kbHeight + 10) + 'px'                              /* teclado abierto → drawer justo encima */
+          : '';                                                 /* teclado cerrado → CSS por defecto */
+      }
+      vv.addEventListener('resize', adjust);
+      vv.addEventListener('scroll', adjust);
+      document.addEventListener('focusin', () => setTimeout(adjust, 100));
+      document.addEventListener('focusout', () => setTimeout(adjust, 100));
+    })();
+  </script>
   <div id="cbDrawer" role="dialog" aria-label="Asistente BusControl">
     <div id="cbHead">
       <div>
