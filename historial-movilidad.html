@@ -1276,6 +1276,15 @@
       records[busId] = { bus_id: busId, vueltas, pasajeros: pax, km_recorridos: km, ruta_id: rutaId, conductor_id: condId, novedades: nov };
       dirty.delete(busId);
 
+      /* El servidor propaga la corrección del analista al despacho del día
+         (conductor/ruta). Reflejarla también en el despacho local para que un
+         re-render posterior (cambio de grupo, refresco silencioso) no revierta
+         el valor recién corregido al que traía el despacho. */
+      if (despachoMap[busId]) {
+        despachoMap[busId].conductor_id = condId;
+        despachoMap[busId].ruta_id      = rutaId;
+      }
+
       const row = document.getElementById(`row-${busId}`);
       if (row) row.classList.add('has-data');
       const est = document.getElementById(`est-${busId}`);
@@ -1332,6 +1341,11 @@
       registros.forEach(r => {
         records[r.bus_id] = r;
         dirty.delete(r.bus_id);
+        /* Mantener el despacho local en sync con la corrección (ver saveRow). */
+        if (despachoMap[r.bus_id]) {
+          despachoMap[r.bus_id].conductor_id = r.conductor_id;
+          despachoMap[r.bus_id].ruta_id      = r.ruta_id;
+        }
         const row = document.getElementById(`row-${r.bus_id}`);
         if (row) row.classList.add('has-data');
         const est = document.getElementById(`est-${r.bus_id}`);
