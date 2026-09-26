@@ -1772,10 +1772,12 @@
       const res  = await apiFetch(`${API}/movilidad/rango?desde=${desde}&hasta=${hasta}`);
       const data = await res.json();
 
-      /* Conductor/ruta efectivos: el despacho manda (siempre en vivo), el registro es respaldo */
+      /* Conductor/ruta efectivos: manda lo guardado en movilidad diaria (incluye
+         las correcciones del analista); el despacho solo es respaldo si el
+         registro de movilidad quedó sin ese dato. */
       _reportRows = data.filter(r => {
-        const cidEf = r.despacho_conductor_id || r.conductor_id;
-        const ridEf = r.despacho_ruta_id      || r.ruta_id;
+        const cidEf = r.conductor_id || r.despacho_conductor_id;
+        const ridEf = r.ruta_id      || r.despacho_ruta_id;
         return (!busId || r.bus_id === busId)
             && (!condId || cidEf === condId)
             && (!rutaId || ridEf === rutaId)
@@ -1784,8 +1786,8 @@
         fecha    : normFechaISO(r.fecha),
         bus      : r.numero,
         placa    : r.placa || '',
-        conductor: r.despacho_conductor_nombre || r.conductor_nombre || '',
-        ruta     : r.despacho_ruta_nombre || r.ruta_nombre || '',
+        conductor: r.conductor_nombre || r.despacho_conductor_nombre || '',
+        ruta     : r.ruta_nombre      || r.despacho_ruta_nombre      || '',
         vueltas  : r.vueltas || 0,
         pasajeros: r.pasajeros || 0,
         km       : Math.round((r.km_recorridos || 0) * 10) / 10,
