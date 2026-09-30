@@ -430,6 +430,7 @@
     .sb-group[data-group="operacion"]     .sb-icon { color: #4ade80; }  /* verde */
     .sb-group[data-group="estacion"]      .sb-icon { color: #22d3ee; }  /* cyan  */
     .sb-group[data-group="flota"]         .sb-icon { color: #fb923c; }  /* ámbar */
+    .sb-group[data-group="monitoreo"]     .sb-icon { color: #f87171; }  /* rojo */
     .sb-group[data-group="configuracion"] .sb-icon { color: #c084fc; }  /* violeta */
     /* En el link activo (fondo blanco) el ícono conserva su color de grupo pero se oscurece un toque para legibilidad */
     .sb-link.active .sb-icon { opacity: 1; filter: brightness(.75) saturate(1.2); }
@@ -1318,6 +1319,62 @@
         </ul>
       </li>
 
+      <!-- ══ GRUPO: Monitoreo de Bus ══ -->
+      <li class="sb-group" data-group="monitoreo">
+        <button class="sb-group-toggle" onclick="toggleGroup(this)">
+          <span class="sb-icon">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+              <polygon points="3 11 22 2 13 21 11 13 3 11"/>
+            </svg>
+          </span>
+          Monitoreo de Bus
+          <span class="sb-chevron">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+          </span>
+        </button>
+        <ul class="sb-submenu">
+          <!-- Mapa en vivo -->
+          <li>
+            <button class="sb-link" id="nav-mb-mapa" data-view="mb-mapa" data-src="monitoreo-mapa.html" onclick="switchView(this)">
+              <span class="sb-icon">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                  <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/>
+                  <line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/>
+                </svg>
+              </span>
+              Mapa en vivo
+            </button>
+          </li>
+          <!-- Rutas Geográficas -->
+          <li>
+            <button class="sb-link" id="nav-mb-rutas" data-view="mb-rutas" data-src="monitoreo-rutas.html" onclick="switchView(this)">
+              <span class="sb-icon">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                  <circle cx="6" cy="19" r="3"/><circle cx="18" cy="5" r="3"/>
+                  <path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/>
+                </svg>
+              </span>
+              Rutas Geográficas
+              <span class="sb-access" style="background:rgba(248,113,113,.1);color:#f87171;" data-roles="admin">Admin</span>
+            </button>
+          </li>
+          <!-- Equipos GPS -->
+          <li>
+            <button class="sb-link" id="nav-mb-equipos" data-view="mb-equipos" data-src="monitoreo-equipos.html" onclick="switchView(this)">
+              <span class="sb-icon">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                  <rect x="2" y="14" width="20" height="7" rx="2"/>
+                  <path d="M6 17.5h.01M10 17.5h.01"/>
+                  <path d="M8.5 10.5a5 5 0 0 1 7 0M6 8a8.5 8.5 0 0 1 12 0"/>
+                </svg>
+              </span>
+              Equipos GPS
+              <span class="sb-access" style="background:rgba(248,113,113,.1);color:#f87171;" data-roles="admin">Admin</span>
+            </button>
+          </li>
+        </ul>
+      </li>
+
       <!-- ══ GRUPO: Configuración ══ -->
       <li class="sb-group" data-group="configuracion">
         <button class="sb-group-toggle" onclick="toggleGroup(this)">
@@ -1556,6 +1613,33 @@
               onload="iframeLoaded('relojes')"></iframe>
     </div>
 
+    <div class="view-panel" id="view-mb-mapa">
+      <div class="iframe-loader" id="loader-mb-mapa">
+        <div class="loader-ring"></div>
+        <div class="loader-text">Cargando Mapa en vivo…</div>
+      </div>
+      <iframe id="iframe-mb-mapa" src="" title="Mapa en vivo"
+              onload="iframeLoaded('mb-mapa')"></iframe>
+    </div>
+
+    <div class="view-panel" id="view-mb-rutas">
+      <div class="iframe-loader" id="loader-mb-rutas">
+        <div class="loader-ring"></div>
+        <div class="loader-text">Cargando Rutas Geográficas…</div>
+      </div>
+      <iframe id="iframe-mb-rutas" src="" title="Rutas Geográficas"
+              onload="iframeLoaded('mb-rutas')"></iframe>
+    </div>
+
+    <div class="view-panel" id="view-mb-equipos">
+      <div class="iframe-loader" id="loader-mb-equipos">
+        <div class="loader-ring"></div>
+        <div class="loader-text">Cargando Equipos GPS…</div>
+      </div>
+      <iframe id="iframe-mb-equipos" src="" title="Equipos GPS"
+              onload="iframeLoaded('mb-equipos')"></iframe>
+    </div>
+
   </div><!-- /mainContent -->
 
 </div><!-- /appShell -->
@@ -1605,6 +1689,9 @@
     chequeo:              { label: 'Chequeo Despachadores', icon: 'check',  src: 'chequeo.html' },
     mapa:                 { label: 'Config GPS',            icon: 'map',    src: 'mapa.html' },
     relojes:              { label: 'Puntos de Control',      icon: 'map',    src: 'relojes.html' },
+    'mb-mapa':            { label: 'Mapa en vivo',           icon: 'map',    src: 'monitoreo-mapa.html' },
+    'mb-rutas':           { label: 'Rutas Geográficas',      icon: 'map',    src: 'monitoreo-rutas.html' },
+    'mb-equipos':         { label: 'Equipos GPS',            icon: 'map',    src: 'monitoreo-equipos.html' },
   };
 
   let currentUser = null;
@@ -1965,6 +2052,9 @@
     chequeo:              { bg: '#0a2a1a', svg: `<svg width="18" height="18" fill="none" stroke="#22c55e" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>` },
     mapa:                 { bg: '#0a2a1a', svg: `<svg width="18" height="18" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>` },
     relojes:              { bg: '#0a2a1a', svg: `<svg width="18" height="18" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>` },
+    'mb-mapa':            { bg: '#2a0f0f', svg: `<svg width="18" height="18" fill="none" stroke="#f87171" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>` },
+    'mb-rutas':           { bg: '#2a0f0f', svg: `<svg width="18" height="18" fill="none" stroke="#f87171" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="6" cy="19" r="3"/><circle cx="18" cy="5" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/></svg>` },
+    'mb-equipos':         { bg: '#2a0f0f', svg: `<svg width="18" height="18" fill="none" stroke="#f87171" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="2" y="14" width="20" height="7" rx="2"/><path d="M6 17.5h.01M10 17.5h.01"/><path d="M8.5 10.5a5 5 0 0 1 7 0M6 8a8.5 8.5 0 0 1 12 0"/></svg>` },
   };
 
   function buildWelcomeCards() {

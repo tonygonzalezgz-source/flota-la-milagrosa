@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <link rel="icon" type="image/png" href="favicon.png" />
+  <link rel="apple-touch-icon" href="favicon.png" />
+  <script>
+    (function() {
+      if (window.location === window.parent.location) {
+        const token = localStorage.getItem('authToken');
+        if (!token) { window.location.href = '/index.html'; }
+      }
+    })();
+  </script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>La Milagrosa — Mapa en vivo</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg:#f4f4f6; --white:#fff; --border:#e5e5eb; --border2:#d0d0d8;
+      --txt:#111; --txt2:#555; --txt3:#888; --primary:#6366f1;
+      --radius:12px; --radius-s:8px; --shadow:0 1px 4px rgba(0,0,0,.07);
+      --c-mov:#16a34a; --c-det:#d97706; --c-sen:#6b7280; --c-fix:#9333ea; --c-ala:#dc2626; --c-enc:#92400e;
+    }
+    html, body { height:100%; }
+    body {
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+      background:var(--bg); color:var(--txt); font-size:14px;
+      display:flex; flex-direction:column; overflow:hidden;
+    }
+
+    /* ── Barra superior ── */
+    .topbar {
+      display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+      padding:12px 16px; background:var(--white); border-bottom:1px solid var(--border);
+    }
+    .titulo { font-size:18px; font-weight:800; letter-spacing:-.3px; margin-right:6px; }
+    select, input[type=search] {
+      padding:8px 10px; border:1.5px solid var(--border2); border-radius:var(--radius-s);
+      font-family:inherit; font-size:13px; background:var(--white); color:var(--txt);
+    }
+    select { cursor:pointer; min-width:200px; }
+    select:focus, input:focus { outline:none; border-color:var(--primary); }
+    .capas { display:flex; border:1.5px solid var(--border2); border-radius:var(--radius-s); overflow:hidden; }
+    .capas button { border:none; background:var(--white); padding:7px 11px; font-family:inherit; font-size:12.5px;
+      font-weight:600; color:var(--txt2); cursor:pointer; border-right:1px solid var(--border); }
+    .capas button:last-child { border-right:none; }
+    .capas button.active { background:var(--primary); color:#fff; }
+    .actualizado { margin-left:auto; font-size:12px; color:var(--txt3); display:flex; align-items:center; gap:6px; }
+    .actualizado .pulso { width:8px; height:8px; border-radius:50%; background:var(--c-mov); }
+    .actualizado.error .pulso { background:var(--c-ala); }
+    .btn-panel { display:none; }
+
+    /* ── Cuerpo ── */
+    .cuerpo { flex:1; display:flex; min-height:0; }
+    .panel {
+      width:300px; flex-shrink:0; background:var(--white); border-right:1px solid var(--border);
+      display:flex; flex-direction:column; min-height:0;
+    }
+    .panel-cab { padding:12px; border-bottom:1px solid var(--border); }
+    .panel-cab input { width:100%; }
+    .resumen { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+    .chip { display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:700;
+      padding:3px 8px; border-radius:999px; background:#f1f1f5; color:var(--txt2); cursor:pointer; border:1.5px solid transparent; }
+    .chip.on { border-color:currentColor; }
+    .chip .dot, .item .dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+    .lista { overflow-y:auto; flex:1; }
+    .item { display:flex; gap:10px; align-items:center; padding:10px 12px; border-bottom:1px solid var(--border); cursor:pointer; }
+    .item:hover { background:#f8f8fb; }
+    .item.sel { background:#eef2ff; }
+    .item-num { width:38px; height:38px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+      color:#fff; font-weight:800; font-size:13px; flex-shrink:0; }
+    .item-info { flex:1; min-width:0; }
+    .item-l1 { font-weight:700; font-size:13.5px; }
+    .item-l2, .item-l3 { font-size:12px; color:var(--txt3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .item-ruta { display:inline-block; width:8px; height:8px; border-radius:2px; margin-right:4px; vertical-align:middle; }
+    .vacio { padding:24px 16px; text-align:center; color:var(--txt3); font-size:13px; line-height:1.6; }
+
+    #mapa { flex:1; min-height:0; }
+
+    .leyenda { position:absolute; bottom:34px; right:10px; z-index:500; background:rgba(255,255,255,.95);
+      border:1px solid var(--border); border-radius:10px; padding:8px 10px; font-size:11.5px; box-shadow:var(--shadow); }
+    .leyenda div { display:flex; align-items:center; gap:6px; margin:2px 0; }
+    .leyenda .dot { width:10px; height:10px; border-radius:50%; }
+    .leyenda .linea { width:22px; height:0; border-top:3px solid #555; }
+    .leyenda .linea.dash { border-top-style:dashed; }
+    .mapa-wrap { position:relative; flex:1; display:flex; min-width:0; }
+
+    /* ── Marcador de bus ── */
+    .bus-mk { position:relative; width:34px; height:34px; }
+    .bus-mk .circ { position:absolute; inset:0; border-radius:50%; border:2.5px solid #fff; color:#fff;
+      display:flex; align-items:center; justify-content:center; font-weight:800; font-size:12px;
+      box-shadow:0 2px 6px rgba(0,0,0,.35); }
+    .bus-mk .rumbo { position:absolute; inset:-10px; pointer-events:none; }
+    .bus-mk .rumbo::before { content:''; position:absolute; left:50%; top:0; transform:translateX(-50%);
+      border-left:7px solid transparent; border-right:7px solid transparent; border-bottom:10px solid var(--flecha); }
+    .bus-mk.sel .circ { box-shadow:0 0 0 4px rgba(99,102,241,.45), 0 2px 6px rgba(0,0,0,.35); }
+
+    .leyenda hr { border:none; border-top:1px solid var(--border); margin:5px 0; }
+    .leyenda-nota { color:var(--txt3); font-size:11px; }
+    .pc-mini { width:12px; height:12px; border-radius:50%; border:2px solid var(--c); background:#fff; }
+    .pc-mini.cuadro, .pc-num.terminal { border-radius:4px; }
+    .flecha-ruta { width:14px; height:14px; position:relative; }
+    .flecha-ruta::before { content:''; position:absolute; left:2px; top:1px; border-left:5px solid transparent;
+      border-right:5px solid transparent; border-bottom:10px solid var(--c); filter:drop-shadow(0 0 1.5px #fff); }
+    .pc-num { background:#fff; border:2px solid var(--c); color:#111; border-radius:50%; width:22px; height:22px;
+      font-size:10.5px; font-weight:800; display:flex; align-items:center; justify-content:center; box-shadow:0 1px 3px rgba(0,0,0,.3); }
+
+    .pop { font-size:12.5px; line-height:1.55; min-width:210px; }
+    .pop h4 { font-size:14px; margin-bottom:4px; }
+    .pop .fila { display:flex; justify-content:space-between; gap:12px; }
+    .pop .fila span:first-child { color:var(--txt3); }
+    .pop .pend { color:var(--txt3); font-style:italic; }
+
+    @media (max-width:760px) {
+      body { padding-top:52px; }
+      select, input[type=search] { font-size:16px; }
+      select { min-width:0; flex:1; }
+      .titulo { display:none; }
+      .btn-panel { display:inline-block; border:1.5px solid var(--border2); background:var(--white); border-radius:var(--radius-s);
+        padding:7px 11px; font-family:inherit; font-weight:700; font-size:13px; }
+      .actualizado { margin-left:0; }
+      .panel { position:absolute; z-index:800; left:0; right:0; bottom:0; width:auto; height:55%;
+        border-right:none; border-top:1px solid var(--border); border-radius:14px 14px 0 0;
+        box-shadow:0 -4px 20px rgba(0,0,0,.15); transform:translateY(105%); transition:transform .25s; }
+      .panel.abierto { transform:none; }
+      .cuerpo { position:relative; }
+      .leyenda { bottom:auto; top:10px; right:10px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="titulo">Mapa en vivo</div>
+    <select id="selRuta" onchange="cambiarRuta()"><option value="todas">Todas las rutas</option></select>
+    <div class="capas" id="capas"></div>
+    <button class="btn-panel" onclick="togglePanel()">Buses</button>
+    <div class="actualizado" id="actualizado"><span class="pulso"></span><span id="actTxt">Cargando…</span></div>
+  </div>
+
+  <div class="cuerpo">
+    <div class="panel" id="panel">
+      <div class="panel-cab">
+        <input type="search" id="buscar" placeholder="Buscar bus o placa…" oninput="pintarLista()" autocomplete="off" />
+        <div class="resumen" id="resumen"></div>
+      </div>
+      <div class="lista" id="lista"><div class="vacio">Cargando buses…</div></div>
+    </div>
+    <div class="mapa-wrap">
+      <div id="mapa"></div>
+      <div class="leyenda" id="leyenda"></div>
+    </div>
+  </div>
+
+<script>
+  const API = (window.location.port === '3030') ? 'http://localhost:8001' : window.location.origin;
+  const REFRESCO_MS = 15000;          // el equipo reporta cada 30 s; 15 s asegura verlo a tiempo
+  const REFRESCO_GEOMETRIA_MS = 300000;
+
+  const ESTADOS = {
+    movimiento: { txt: 'En movimiento', color: 'var(--c-mov)', hex: '#16a34a' },
+    detenido:   { txt: 'Detenido',      color: 'var(--c-det)', hex: '#d97706' },
+    sin_fix:    { txt: 'Sin fix GPS',   color: 'var(--c-fix)', hex: '#9333ea' },
+    sin_senal:  { txt: 'Sin señal',     color: 'var(--c-sen)', hex: '#6b7280' },
+    encierro:   { txt: 'En encierro',   color: 'var(--c-enc)', hex: '#92400e' },
+    alarma:     { txt: 'En alarma',     color: 'var(--c-ala)', hex: '#dc2626' },
+  };
+  const PALETA = ['#e11d48', '#2563eb', '#16a34a', '#d97706', '#7c3aed', '#0891b2', '#db2777', '#65a30d'];
+
+  // Capas gratuitas sin API key (CARTO empezó a exigir key en 2026: sus mosaicos
+  // salen con "API KEY REQUIRED"). Claro/Oscuro de Esri solo tienen detalle hasta
+  // zoom 16; de ahí en adelante Leaflet amplía la imagen (maxNativeZoom).
+  const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services';
+  const MAP_STYLES = {
+    calles:   { name: 'Calles',   maxZoom: 20, maxNativeZoom: 19,
+                url: `${ESRI}/World_Street_Map/MapServer/tile/{z}/{y}/{x}`,
+                attr: '&copy; Esri, HERE, Garmin, OpenStreetMap' },
+    claro:    { name: 'Claro',    maxZoom: 20, maxNativeZoom: 16,
+                url: `${ESRI}/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}`,
+                labels: `${ESRI}/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}`,
+                attr: '&copy; Esri, HERE, Garmin, OpenStreetMap' },
+    satelite: { name: 'Satélite', maxZoom: 20, maxNativeZoom: 19,
+                url: `${ESRI}/World_Imagery/MapServer/tile/{z}/{y}/{x}`,
+                attr: '&copy; Esri, Maxar, Earthstar Geographics' },
+    oscuro:   { name: 'Oscuro',   maxZoom: 20, maxNativeZoom: 16,
+                url: `${ESRI}/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}`,
+                labels: `${ESRI}/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}`,
+                attr: '&copy; Esri, HERE, Garmin, OpenStreetMap' },
+  };
+
+  async function apiFetch(path) {
+    const token = localStorage.getItem('authToken');
+    const res = await fetch(API + path, { headers: token ? { 'Authorization': `Bearer ${token}` } : {} });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error || 'Error del servidor');
+    return json;
+  }
+  function lsGet(k, d) { try { return localStorage.getItem(k) ?? d; } catch { return d; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); } catch {} }
+  function esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+  }
+
+  // ── Estado ──
+  let mapa, capaBase, estiloActual = lsGet('locMapStyle', 'calles');
+  let rutas = [];               // [{ruta_id, nombre, color, trazados, puntos}]
+  let colorRuta = {};           // ruta_id → color efectivo
+  let buses = [];
+  let offsetReloj = 0;          // servidor - navegador (ms), para "hace X s"
+  let ultimaCarga = null, errorCarga = null;
+  const marcadores = new Map(); // bus_id → L.marker
+  let capaRutas = null;
+  let encierros = [];
+  let seleccionado = null;
+  let filtroEstado = null;
+  let primeraVista = true;
+
+  document.addEventListener('DOMContentLoaded', init);
+  window.addEventListener('message', e => {
+    if (e.data?.type === 'VIEW_SHOWN') { mapa?.invalidateSize(); cargarVivo(); }
+  });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) cargarVivo(); });
+  window.addEventListener('resize', () => mapa?.invalidateSize());
+
+  async function init() {
+    mapa = L.map('mapa', { zoomControl: true }).setView([6.25, -75.57], 12);
+    construirCapas();
+    setEstilo(MAP_STYLES[estiloActual] ? estiloActual : 'calles');
+    prepararGoogle();
+    mapa.on('click', () => seleccionar(null));
+    mapa.on('zoomend', actualizarFlechas);
+    await cargarGeometria();
+    const guardada = lsGet('mbMapaRuta', 'todas');
+    if ([...document.getElementById('selRuta').options].some(o => o.value === guardada)) {
+      document.getElementById('selRuta').value = guardada;
+    }
+    dibujarRutas();
+    await cargarVivo();
+    setInterval(() => { if (!document.hidden) cargarVivo(); }, REFRESCO_MS);
+    setInterval(() => { if (!document.hidden) cargarGeometria().then(dibujarRutas); }, REFRESCO_GEOMETRIA_MS);
+    setInterval(tic, 1000);
+  }
+
+  // ── Capas base ──
+  function construirCapas() {
+    document.getElementById('capas').innerHTML = Object.entries(MAP_STYLES).map(([k, s]) =>
+      `<button data-k="${k}" onclick="setEstilo('${k}')">${s.name}</button>`).join('');
+  }
+  // ── Mapa de Google (si hay clave) con Esri como respaldo ──
+  // Se cobra por cada mapa de Google creado, así que cada capa se crea una sola
+  // vez y se reutiliza al cambiar de estilo.
+  const GOOGLE_OSCURO = [
+    { elementType: 'geometry', stylers: [{ color: '#242f3e' }] },
+    { elementType: 'labels.text.stroke', stylers: [{ color: '#242f3e' }] },
+    { elementType: 'labels.text.fill', stylers: [{ color: '#8a8f98' }] },
+    { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#38414e' }] },
+    { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#212a37' }] },
+    { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#9ca5b3' }] },
+    { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#17263c' }] },
+    { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+  ];
+  const GOOGLE_ESTILOS = {
+    calles:   { type: 'roadmap' },
+    claro:    { type: 'roadmap', styles: [{ stylers: [{ saturation: -100 }, { lightness: 30 }] },
+                                          { featureType: 'poi', stylers: [{ visibility: 'off' }] }] },
+    satelite: { type: 'hybrid' },
+    oscuro:   { type: 'roadmap', styles: GOOGLE_OSCURO },
+  };
+  const GOOGLE_MUTANT = { src: 'https://unpkg.com/leaflet.gridlayer.googlemutant@0.16.0/dist/Leaflet.GoogleMutant.js',
+                          integrity: 'sha384-NVeApJLhFaaKalRqZ2xBNeRECGMKMkF5VMTDJtXWk2g0Tq+5Jo1N7CZjhL3gQSFW' };
+  let usarGoogle = false;
+  let capasCache = {};
+
+  function cargarScript(src, integrity) {
+    return new Promise((ok, mal) => {
+      const s = document.createElement('script');
+      s.src = src; s.async = true;
+      if (integrity) { s.integrity = integrity; s.crossOrigin = 'anonymous'; }
+      s.onload = ok; s.onerror = () => mal(new Error('No cargó ' + src));
+      document.head.appendChild(s);
+    });
+  }
+
+  async function prepararGoogle() {
+    try {
+      const cfg = await apiFetch('/api/monitoreo/mapa-config');
+      if (!cfg.google_maps_key) return;
+      // Clave rechazada por Google (sitio no autorizado, facturación, etc.): volver a Esri.
+      window.gm_authFailure = () => {
+        console.warn('Google Maps rechazó la clave; se usa el mapa alterno.');
+        usarGoogle = false; capasCache = {}; setEstilo(estiloActual);
+      };
+      await new Promise((ok, mal) => {
+        window.__gmListo = ok;
+        cargarScript(`https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(cfg.google_maps_key)}` +
+                     `&v=weekly&language=es&region=CO&loading=async&callback=__gmListo`).catch(mal);
+      });
+      if (google.maps.importLibrary) await google.maps.importLibrary('maps');
+      await cargarScript(GOOGLE_MUTANT.src, GOOGLE_MUTANT.integrity);
+      usarGoogle = true; capasCache = {};
+      setEstilo(estiloActual);
+    } catch (e) {
+      console.warn('Mapa de Google no disponible:', e.message);
+    }
+  }
+
+  function crearCapa(k) {
+    if (usarGoogle) {
+      const g = GOOGLE_ESTILOS[k];
+      return L.gridLayer.googleMutant({ type: g.type, styles: g.styles, maxZoom: 21 });
+    }
+    const s = MAP_STYLES[k];
+    const opts = { maxZoom: s.maxZoom, maxNativeZoom: s.maxNativeZoom, attribution: s.attr };
+    return s.labels
+      ? L.layerGroup([L.tileLayer(s.url, opts), L.tileLayer(s.labels, { ...opts, attribution: '' })])
+      : L.tileLayer(s.url, opts);
+  }
+
+  function setEstilo(k) {
+    estiloActual = k; lsSet('locMapStyle', k);
+    if (capaBase) mapa.removeLayer(capaBase);
+    capaBase = capasCache[k] || (capasCache[k] = crearCapa(k));
+    capaBase.addTo(mapa);
+    if (capaBase.bringToBack) capaBase.bringToBack();
+    document.querySelectorAll('#capas button').forEach(b => b.classList.toggle('active', b.dataset.k === k));
+  }
+
+  // ── Rutas ──
+  async function cargarGeometria() {
+    try {
+      const [lista, geos] = await Promise.all([apiFetch('/api/monitoreo/rutas'), apiFetch('/api/monitoreo/rutas/geometria')]);
+      const geoPorRuta = Object.fromEntries(geos.map(g => [g.ruta_id, g]));
+      rutas = lista.map(r => ({ ruta_id: r.id, nombre: r.nombre, color: r.color,
+        trazados: geoPorRuta[r.id]?.trazados || {}, puntos: geoPorRuta[r.id]?.puntos || [] }));
+      asignarColores();
+      const sel = document.getElementById('selRuta');
+      const actual = sel.value;
+      sel.innerHTML = '<option value="todas">Todas las rutas</option>' + rutas.map(r =>
+        `<option value="${r.ruta_id}">${esc(r.nombre)}${Object.keys(r.trazados).length ? '' : ' (sin trazado)'}</option>`).join('');
+      if ([...sel.options].some(o => o.value === actual)) sel.value = actual;
+      encierros = await apiFetch('/api/monitoreo/encierros');
+    } catch (e) { console.warn('geometría', e); }
+  }
+
+  // Cada ruta con su color; si varias comparten color, se toma uno de la paleta.
+  function asignarColores() {
+    colorRuta = {};
+    const usados = new Set();
+    rutas.forEach((r, i) => {
+      let c = (r.color || '').toLowerCase();
+      if (!/^#[0-9a-f]{6}$/.test(c) || usados.has(c)) c = PALETA.find(p => !usados.has(p)) || PALETA[i % PALETA.length];
+      usados.add(c); colorRuta[r.ruta_id] = c;
+    });
+  }
+
+  function rutaSeleccionada() {
+    const v = document.getElementById('selRuta').value;
+    return v === 'todas' ? null : +v;
+  }
+
+  function cambiarRuta() {
+    lsSet('mbMapaRuta', document.getElementById('selRuta').value);
+    dibujarRutas(true);
+    pintarBuses();
+  }
+
+  // Mismo código de colores que Rutas Geográficas.
+  const COLOR_SENTIDO = { ida: '#2563eb', regreso: '#ea580c', ambos: '#7c3aed' };
+  const TXT_SENTIDO = { ida: 'Ida', regreso: 'Regreso', ambos: 'Ida y regreso' };
+  const ZOOM_FLECHAS = 14;       // las flechas de sentido solo con zoom cercano
+  const PASO_FLECHAS_M = 300;
+  let capaFlechas = null;
+
+  function distM(a, b) {
+    const R = 6371008.8, rad = Math.PI / 180;
+    const dLat = (b[0] - a[0]) * rad, dLon = (b[1] - a[1]) * rad;
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[0] * rad) * Math.cos(b[0] * rad) * Math.sin(dLon / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(h));
+  }
+  function rumboGrados(a, b) {
+    const dx = (b[1] - a[1]) * Math.cos(a[0] * Math.PI / 180), dy = b[0] - a[0];
+    return (Math.atan2(dx, dy) * 180 / Math.PI + 360) % 360;
+  }
+  // Flechas cada PASO_FLECHAS_M metros indicando hacia dónde avanza el trazado.
+  function agregarFlechas(linea, color) {
+    let acumulado = 0, siguiente = PASO_FLECHAS_M / 2;
+    for (let i = 1; i < linea.length; i++) {
+      const a = linea[i - 1], b = linea[i], d = distM(a, b);
+      while (d > 0 && acumulado + d >= siguiente) {
+        const t = (siguiente - acumulado) / d;
+        const pos = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+        L.marker(pos, { interactive: false, keyboard: false, icon: L.divIcon({ className: '', iconSize: [14, 14], iconAnchor: [7, 7],
+          html: `<div class="flecha-ruta" style="transform:rotate(${rumboGrados(a, b)}deg);--c:${color}"></div>` }) }).addTo(capaFlechas);
+        siguiente += PASO_FLECHAS_M;
+      }
+      acumulado += d;
+    }
+  }
+  function actualizarFlechas() {
+    if (!capaFlechas) return;
+    const ver = mapa.getZoom() >= ZOOM_FLECHAS;
+    if (ver && !mapa.hasLayer(capaFlechas)) capaFlechas.addTo(mapa);
+    if (!ver && mapa.hasLayer(capaFlechas)) mapa.removeLayer(capaFlechas);
+  }
+
+  // Mezcla un color #rrggbb con blanco (f = 0..1).
+  function aclarar(hex, f) {
+    const n = parseInt(hex.slice(1), 16);
+    const mezcla = c => Math.round(c + (255 - c) * f);
+    return '#' + [n >> 16, (n >> 8) & 255, n & 255].map(c => mezcla(c).toString(16).padStart(2, '0')).join('');
+  }
+
+  function trazar(linea, color, regreso, tip) {
+    // Borde blanco debajo para que el trazado se lea sobre cualquier capa (satélite, oscuro).
+    L.polyline(linea, { color: '#fff', weight: regreso ? 7 : 8, opacity: .7, interactive: false }).addTo(capaRutas);
+    L.polyline(linea, { color, weight: regreso ? 4 : 5, opacity: .9, dashArray: regreso ? '9 7' : null })
+      .bindTooltip(tip, { sticky: true }).addTo(capaRutas);
+    agregarFlechas(linea, color);
+  }
+
+  function dibujarRutas(encuadrar = false) {
+    if (capaRutas) mapa.removeLayer(capaRutas);
+    if (capaFlechas) mapa.removeLayer(capaFlechas);
+    capaRutas = L.layerGroup().addTo(mapa);
+    capaFlechas = L.layerGroup();
+    const sel = rutaSeleccionada();
+    const visibles = rutas.filter(r => sel === null || r.ruta_id === sel);
+    // Con una sola ruta en pantalla: colores por sentido (igual que Rutas Geográficas).
+    // Con varias: cada ruta con su color; ida en tono fuerte y regreso en tono claro.
+    const una = visibles.filter(r => r.trazados.ida || r.trazados.regreso).length <= 1;
+    const limites = [];
+    visibles.forEach(r => {
+      const nombre = esc(r.nombre);
+      const cIda = una ? COLOR_SENTIDO.ida : colorRuta[r.ruta_id];
+      const cReg = una ? COLOR_SENTIDO.regreso : aclarar(colorRuta[r.ruta_id], .45);
+      const ida = r.trazados.ida?.puntos, reg = r.trazados.regreso?.puntos;
+      if (ida) { trazar(ida, cIda, false, `${nombre} — Ida`); limites.push(...ida); }
+      if (reg) { trazar(reg, cReg, true, `${nombre} — Regreso`); limites.push(...reg); }
+      if (una) {
+        [[ida, cIda, 'ida'], [reg, cReg, 'regreso']].forEach(([l, c, s]) => {
+          if (!l) return;
+          L.circleMarker(l[0], { radius: 6, color: '#fff', weight: 2, fillColor: c, fillOpacity: 1 })
+            .bindTooltip(`Inicio ${s}`).addTo(capaRutas);
+          L.circleMarker(l[l.length - 1], { radius: 6, color: c, weight: 3, fillColor: '#fff', fillOpacity: 1 })
+            .bindTooltip(`Fin ${s}`).addTo(capaRutas);
+        });
+      }
+      r.puntos.forEach(p => {
+        const c = una ? (COLOR_SENTIDO[p.sentido] || '#6b7280') : colorRuta[r.ruta_id];
+        const tip = `<b>${p.orden}. ${p.alias ? esc(p.alias) + ' · ' : ''}${esc(p.nombre)}</b>` +
+                    (sel !== null ? '' : `<br>${nombre}`) +
+                    `<br>${TXT_SENTIDO[p.sentido] || 'Sin sentido'} · ${p.tipo === 'terminal' ? 'Terminal' : 'Control'} · radio ${p.radio_m} m` +
+                    (p.minutos_objetivo != null ? `<br>Tiempo objetivo: ${p.minutos_objetivo} min` : '');
+        L.circle([p.lat, p.lon], { radius: p.radio_m, color: c, weight: 1.5, fillColor: c, fillOpacity: .12 })
+          .bindTooltip(tip).addTo(capaRutas);
+        L.marker([p.lat, p.lon], { zIndexOffset: 500, icon: L.divIcon({ className: '', iconSize: [22, 22], iconAnchor: [11, 11],
+          html: `<div class="pc-num ${p.tipo === 'terminal' ? 'terminal' : ''}" style="--c:${c}">${p.orden}</div>` }) })
+          .bindTooltip(tip).addTo(capaRutas);
+      });
+    });
+    encierros.filter(z => sel === null || z.ruta_id === null || z.ruta_id === sel).forEach(z => {
+      L.circle([z.lat, z.lon], { radius: z.radio_m, color: '#92400e', weight: 2, dashArray: '6 5',
+        fillColor: '#92400e', fillOpacity: .08 })
+        .bindTooltip(`<b>Encierro:</b> ${esc(z.nombre)}`).addTo(capaRutas);
+    });
+    pintarLeyenda(una);
+    actualizarFlechas();
+    if (encuadrar && limites.length) mapa.fitBounds(limites, { padding: [30, 30] });
+  }
+
+  function pintarLeyenda(una) {
+    const estados = ['movimiento', 'detenido', 'sin_fix', 'sin_senal', 'encierro']
+      .map(k => `<div><span class="dot" style="background:${ESTADOS[k].hex}"></span>${ESTADOS[k].txt}</div>`).join('');
+    const rutasTxt = una
+      ? `<div><span class="linea" style="border-color:${COLOR_SENTIDO.ida}"></span>Ida</div>
+         <div><span class="linea dash" style="border-color:${COLOR_SENTIDO.regreso}"></span>Regreso</div>
+         <div><span class="pc-mini" style="--c:${COLOR_SENTIDO.ambos}"></span>Punto en ambos sentidos</div>
+         <div><span class="pc-mini cuadro" style="--c:#555"></span>Terminal</div>`
+      : `<div><span class="linea"></span>Ida (tono fuerte)</div><div><span class="linea dash" style="opacity:.55"></span>Regreso (tono claro)</div>
+         <div class="leyenda-nota">Cada ruta con su color</div>`;
+    document.getElementById('leyenda').innerHTML = estados + '<hr>' + rutasTxt;
+  }
+
+  // ── Buses en vivo ──
+  async function cargarVivo() {
+    try {
+      const r = await apiFetch('/api/monitoreo/vivo');
+      offsetReloj = new Date(r.servidor_utc).getTime() - Date.now();
+      buses = r.buses;
+      ultimaCarga = Date.now(); errorCarga = null;
+    } catch (e) {
+      errorCarga = e.message;
+    }
+    pintarBuses();
+    tic();
+  }
+
+  function busesVisibles() {
+    const sel = rutaSeleccionada();
+    return buses.filter(b => sel === null || b.ruta_id === sel);
+  }
+
+  function pintarBuses() {
+    const visibles = busesVisibles();
+    const ids = new Set(visibles.filter(b => b.lat != null).map(b => b.bus_id));
+    for (const [id, mk] of marcadores) {
+      if (!ids.has(id)) { mapa.removeLayer(mk); marcadores.delete(id); }
+    }
+    visibles.forEach(b => {
+      if (b.lat == null) return;
+      const icono = iconoBus(b);
+      let mk = marcadores.get(b.bus_id);
+      if (!mk) {
+        mk = L.marker([b.lat, b.lon], { icon: icono, zIndexOffset: 1000 })
+          .bindPopup('', { autoPan: false })
+          .on('click', ev => { L.DomEvent.stopPropagation(ev); seleccionar(b.bus_id, false); });
+        mk.addTo(mapa);
+        marcadores.set(b.bus_id, mk);
+      } else {
+        mk.setLatLng([b.lat, b.lon]);
+        mk.setIcon(icono);
+      }
+      mk.getPopup().setContent(popupBus(b));
+    });
+    if (primeraVista && ids.size) {
+      primeraVista = false;
+      const pts = visibles.filter(b => b.lat != null).map(b => [b.lat, b.lon]);
+      if (rutaSeleccionada() === null && !rutas.some(r => Object.keys(r.trazados).length)) {
+        mapa.fitBounds(pts, { padding: [60, 60], maxZoom: 16 });
+      } else {
+        dibujarRutas(true);
+      }
+    }
+    pintarResumen();
+    pintarLista();
+  }
+
+  function iconoBus(b) {
+    const est = ESTADOS[b.estado] || ESTADOS.sin_senal;
+    const flecha = b.rumbo != null && b.estado !== 'sin_senal'
+      ? `<div class="rumbo" style="transform:rotate(${b.rumbo}deg);--flecha:${est.hex}"></div>` : '';
+    return L.divIcon({ className: '', iconSize: [34, 34], iconAnchor: [17, 17], popupAnchor: [0, -18],
+      html: `<div class="bus-mk ${seleccionado === b.bus_id ? 'sel' : ''}">${flecha}
+               <div class="circ" style="background:${est.hex}">${esc(b.numero)}</div></div>` });
+  }
+
+  function hace(iso) {
+    if (!iso) return '—';
+    const s = Math.max(0, Math.round((Date.now() + offsetReloj - new Date(iso).getTime()) / 1000));
+    if (s < 60) return `hace ${s} s`;
+    if (s < 3600) return `hace ${Math.floor(s / 60)} min`;
+    if (s < 86400) return `hace ${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min`;
+    return `hace ${Math.floor(s / 86400)} d`;
+  }
+  function horaBogota(iso) {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleString('es-CO', { timeZone: 'America/Bogota', day: '2-digit', month: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+  }
+
+  function popupBus(b) {
+    const est = ESTADOS[b.estado] || ESTADOS.sin_senal;
+    const ruta = b.ruta_nombre ? esc(b.ruta_nombre) : '<span class="pend">Sin despacho hoy</span>';
+    const vel = b.velocidad_kmh != null ? `${Math.round(b.velocidad_kmh)} km/h` : '—';
+    return `<div class="pop">
+      <h4>Bus ${esc(b.numero)} · ${esc(b.placa || 's/p')}</h4>
+      <div class="fila"><span>Estado</span><b style="color:${est.hex}">${est.txt}</b></div>
+      ${b.encierro ? `<div class="fila"><span>Zona</span><span>${esc(b.encierro)}</span></div>` : ''}
+      <div class="fila"><span>Ruta</span><span>${ruta}</span></div>
+      <div class="fila"><span>Velocidad</span><span>${vel}</span></div>
+      <div class="fila"><span>Sentido</span><span class="pend">${b.sentido ? esc(b.sentido) : 'Próximamente'}</span></div>
+      <div class="fila"><span>Último punto</span><span class="pend">${b.ultimo_punto ? esc(b.ultimo_punto) : 'Próximamente'}</span></div>
+      <div class="fila"><span>Último reporte</span><span>${horaBogota(b.ultimo_reporte_at)}</span></div>
+      <div class="fila"><span></span><span data-hace="${esc(b.ultimo_reporte_at || '')}">${hace(b.ultimo_reporte_at)}</span></div>
+      ${b.precision_m != null ? `<div class="fila"><span>Precisión GPS</span><span>${b.precision_m} m</span></div>` : ''}
+    </div>`;
+  }
+
+  // ── Panel lateral ──
+  // Filtros del panel: por estado, más "sin despacho" (bus sin ruta asignada hoy).
+  const SIN_DESPACHO = { txt: 'Sin despacho', hex: '#7c3aed' };
+  function cumpleFiltro(b) {
+    if (!filtroEstado) return true;
+    return filtroEstado === 'sin_despacho' ? !b.ruta_id : b.estado === filtroEstado;
+  }
+  function pintarResumen() {
+    const vis = busesVisibles();
+    const n = k => vis.filter(b => k === 'sin_despacho' ? !b.ruta_id : b.estado === k).length;
+    const info = k => k === 'sin_despacho' ? SIN_DESPACHO : ESTADOS[k];
+    document.getElementById('resumen').innerHTML =
+      ['movimiento', 'detenido', 'sin_fix', 'sin_senal', 'encierro', 'sin_despacho']
+      .filter(k => n(k) || filtroEstado === k)
+      .map(k => `<span class="chip ${filtroEstado === k ? 'on' : ''}" style="color:${info(k).hex}"
+          onclick="filtrarEstado('${k}')"><span class="dot" style="background:${info(k).hex}"></span>${info(k).txt}: ${n(k)}</span>`)
+      .join('');
+  }
+  function filtrarEstado(k) { filtroEstado = filtroEstado === k ? null : k; pintarResumen(); pintarLista(); }
+
+  function pintarLista() {
+    const q = document.getElementById('buscar').value.trim().toLowerCase();
+    const lista = busesVisibles().filter(b =>
+      cumpleFiltro(b) &&
+      (!q || String(b.numero).includes(q) || (b.placa || '').toLowerCase().includes(q)));
+    const cont = document.getElementById('lista');
+    if (!buses.length) {
+      cont.innerHTML = `<div class="vacio">${errorCarga ? esc(errorCarga) : 'Ningún bus tiene equipo GPS reportando todavía.'}</div>`;
+      return;
+    }
+    if (!lista.length) { cont.innerHTML = '<div class="vacio">Ningún bus coincide con el filtro.</div>'; return; }
+    cont.innerHTML = lista.map(b => {
+      const est = ESTADOS[b.estado] || ESTADOS.sin_senal;
+      const vel = b.estado === 'movimiento' ? ` · ${Math.round(b.velocidad_kmh)} km/h` : '';
+      const ruta = b.ruta_id ? `<span class="item-ruta" style="background:${colorRuta[b.ruta_id] || '#999'}"></span>${esc(b.ruta_nombre)}`
+                             : 'Sin despacho hoy';
+      return `<div class="item ${seleccionado === b.bus_id ? 'sel' : ''}" onclick="seleccionar(${b.bus_id}, true)">
+        <div class="item-num" style="background:${est.hex}">${esc(b.numero)}</div>
+        <div class="item-info">
+          <div class="item-l1">${esc(b.placa || 's/p')} <span style="color:${est.hex};font-size:12px;">· ${est.txt}${vel}</span></div>
+          <div class="item-l2">${ruta}</div>
+          <div class="item-l3" data-hace="${esc(b.ultimo_reporte_at || '')}">${hace(b.ultimo_reporte_at)}</div>
+        </div></div>`;
+    }).join('');
+  }
+
+  function seleccionar(busId, centrar) {
+    seleccionado = busId;
+    const b = buses.find(x => x.bus_id === busId);
+    marcadores.forEach((mk, id) => { const bb = buses.find(x => x.bus_id === id); if (bb) mk.setIcon(iconoBus(bb)); });
+    pintarLista();
+    if (!b) return;
+    const mk = marcadores.get(busId);
+    if (!mk) return;
+    if (centrar) mapa.flyTo([b.lat, b.lon], Math.max(mapa.getZoom(), 16), { duration: .6 });
+    mk.openPopup();
+    if (window.innerWidth <= 760) document.getElementById('panel').classList.remove('abierto');
+  }
+
+  function togglePanel() { document.getElementById('panel').classList.toggle('abierto'); }
+
+  // Refresca los "hace X s" cada segundo sin volver a consultar.
+  function tic() {
+    document.querySelectorAll('[data-hace]').forEach(el => { if (el.dataset.hace) el.textContent = hace(el.dataset.hace); });
+    const box = document.getElementById('actualizado');
+    const txt = document.getElementById('actTxt');
+    box.classList.toggle('error', !!errorCarga);
+    if (errorCarga) txt.textContent = `Sin conexión: ${errorCarga}`;
+    else if (ultimaCarga) txt.textContent = `Actualizado hace ${Math.round((Date.now() - ultimaCarga) / 1000)} s`;
+  }
+</script>
+</body>
+</html>
