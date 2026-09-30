@@ -469,7 +469,9 @@
     });
     pintarLeyenda(una);
     actualizarFlechas();
-    if (encuadrar && limites.length) mapa.fitBounds(limites, { padding: [30, 30] });
+    // El encuadre incluye los buses visibles: un bus lejos del trazado no debe quedar fuera de la vista.
+    busesVisibles().forEach(b => { if (b.lat != null) limites.push([b.lat, b.lon]); });
+    if (encuadrar && limites.length) mapa.fitBounds(limites, { padding: [40, 40], maxZoom: 16 });
   }
 
   function pintarLeyenda(una) {
@@ -528,12 +530,7 @@
     });
     if (primeraVista && ids.size) {
       primeraVista = false;
-      const pts = visibles.filter(b => b.lat != null).map(b => [b.lat, b.lon]);
-      if (rutaSeleccionada() === null && !rutas.some(r => Object.keys(r.trazados).length)) {
-        mapa.fitBounds(pts, { padding: [60, 60], maxZoom: 16 });
-      } else {
-        dibujarRutas(true);
-      }
+      dibujarRutas(true);
     }
     pintarResumen();
     pintarLista();
@@ -610,8 +607,15 @@
       cont.innerHTML = `<div class="vacio">${errorCarga ? esc(errorCarga) : 'Ningún bus tiene equipo GPS reportando todavía.'}</div>`;
       return;
     }
-    if (!lista.length) { cont.innerHTML = '<div class="vacio">Ningún bus coincide con el filtro.</div>'; return; }
-    cont.innerHTML = lista.map(b => {
+    const sel = rutaSeleccionada();
+    const ocultos = sel === null ? 0 : buses.filter(b => b.ruta_id !== sel).length;
+    const nota = ocultos
+      ? `<div class="vacio" style="padding:10px 12px;text-align:left;border-bottom:1px solid var(--border);">
+           ${ocultos} bus(es) no están despachados hoy en esta ruta y no se muestran.
+           <a href="#" onclick="event.preventDefault(); document.getElementById('selRuta').value='todas'; cambiarRuta();">Ver todas las rutas</a></div>`
+      : '';
+    if (!lista.length) { cont.innerHTML = nota + '<div class="vacio">Ningún bus coincide con el filtro.</div>'; return; }
+    cont.innerHTML = nota + lista.map(b => {
       const est = ESTADOS[b.estado] || ESTADOS.sin_senal;
       const vel = b.estado === 'movimiento' ? ` · ${Math.round(b.velocidad_kmh)} km/h` : '';
       const ruta = b.ruta_id ? `<span class="item-ruta" style="background:${colorRuta[b.ruta_id] || '#999'}"></span>${esc(b.ruta_nombre)}`
