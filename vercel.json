@@ -12,6 +12,7 @@
     { "src": "/(.+\\.png)", "dest": "/$1" }
   ],
   "crons": [
-    { "path": "/api/cron/cierre-despacho", "schedule": "59 4 * * *" }
+    { "path": "/api/cron/cierre-despacho", "schedule": "59 4 * * *" },
+    { "path": "/api/cron/monitoreo", "schedule": "0 6 * * *" }
   ]
 }

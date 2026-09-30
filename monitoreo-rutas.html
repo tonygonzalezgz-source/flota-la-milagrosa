@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <link rel="icon" type="image/png" href="favicon.png" />
+  <link rel="apple-touch-icon" href="favicon.png" />
+  <script>
+    (function() {
+      if (window.location === window.parent.location) {
+        const token = localStorage.getItem('authToken');
+        if (!token) { window.location.href = '/index.html'; }
+      }
+    })();
+  </script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>La Milagrosa — Rutas Geográficas</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg:#f4f4f6; --white:#fff; --border:#e5e5eb; --border2:#d0d0d8;
+      --txt:#111; --txt2:#555; --txt3:#888; --primary:#6366f1; --red:#ef4444;
+      --radius:12px; --radius-s:8px; --shadow:0 1px 4px rgba(0,0,0,.07);
+      --c-ida:#2563eb; --c-reg:#ea580c;
+    }
+    html, body { height:100%; }
+    body {
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+      background:var(--bg); color:var(--txt); font-size:14px; display:flex; flex-direction:column; overflow:hidden;
+    }
+    .topbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:12px 16px;
+      background:var(--white); border-bottom:1px solid var(--border); }
+    .titulo { font-size:18px; font-weight:800; letter-spacing:-.3px; }
+    .sub { font-size:12.5px; color:var(--txt2); }
+    .capas { margin-left:auto; display:flex; border:1.5px solid var(--border2); border-radius:var(--radius-s); overflow:hidden; }
+    .capas button { border:none; background:var(--white); padding:7px 11px; font-family:inherit; font-size:12.5px;
+      font-weight:600; color:var(--txt2); cursor:pointer; border-right:1px solid var(--border); }
+    .capas button:last-child { border-right:none; }
+    .capas button.active { background:var(--primary); color:#fff; }
+
+    .cuerpo { flex:1; display:flex; min-height:0; }
+    .panel { width:440px; flex-shrink:0; background:var(--white); border-right:1px solid var(--border);
+      overflow-y:auto; padding:14px; }
+    #mapa { flex:1; min-height:0; }
+
+    .btn { border:1px solid var(--border2); background:var(--white); color:var(--txt); border-radius:var(--radius-s);
+      padding:7px 12px; font-family:inherit; font-size:12.5px; font-weight:700; cursor:pointer; white-space:nowrap; }
+    .btn:hover { border-color:var(--primary); color:var(--primary); }
+    .btn.sm { padding:4px 9px; font-size:12px; }
+    .btn-primary { border:none; background:var(--primary); color:#fff; border-radius:var(--radius-s); padding:9px 16px;
+      font-family:inherit; font-size:13px; font-weight:700; cursor:pointer; }
+    .btn-primary:disabled { opacity:.5; cursor:default; }
+    select, input[type=text], input[type=number] {
+      padding:7px 9px; border:1.5px solid var(--border2); border-radius:var(--radius-s);
+      font-family:inherit; font-size:13px; background:var(--white); color:var(--txt);
+    }
+    select:focus, input:focus { outline:none; border-color:var(--primary); }
+
+    .seccion { font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--txt3);
+      margin:14px 0 8px; display:flex; align-items:center; gap:8px; }
+    .seccion:first-child { margin-top:0; }
+
+    .ruta { border:1px solid var(--border); border-radius:10px; padding:10px 12px; margin-bottom:8px; cursor:pointer; }
+    .ruta:hover { border-color:var(--border2); }
+    .ruta.sel { border-color:var(--primary); background:#f5f6ff; }
+    .ruta-l1 { display:flex; align-items:center; gap:8px; font-weight:700; }
+    .ruta-color { width:12px; height:12px; border-radius:3px; flex-shrink:0; }
+    .ruta-l2 { font-size:12px; color:var(--txt3); margin-top:3px; }
+    .ruta-acc { display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
+    .etq { font-size:11px; font-weight:700; padding:2px 7px; border-radius:999px; }
+    .etq.ok { background:rgba(34,197,94,.12); color:#16a34a; }
+    .etq.no { background:rgba(136,136,136,.15); color:var(--txt3); }
+
+    .caja { border:1px solid var(--border); border-radius:10px; padding:12px; margin-bottom:10px; }
+    .drop { border:2px dashed var(--border2); border-radius:10px; padding:18px; text-align:center; color:var(--txt2);
+      font-size:13px; cursor:pointer; line-height:1.6; }
+    .drop.over { border-color:var(--primary); background:#f5f6ff; }
+    .campo { margin-bottom:10px; }
+    .campo label { display:block; font-size:12px; font-weight:700; color:var(--txt2); margin-bottom:4px; }
+    .campo select { width:100%; }
+
+    table { width:100%; border-collapse:collapse; }
+    th { text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:.4px; color:var(--txt3);
+      padding:6px 4px; border-bottom:1px solid var(--border); }
+    td { padding:6px 4px; border-bottom:1px solid var(--border); font-size:12.5px; vertical-align:middle; }
+    tr:last-child td { border-bottom:none; }
+    tr.foco td { background:#f5f6ff; }
+    td input[type=text] { width:100%; min-width:90px; padding:5px 7px; font-size:12.5px; }
+    td input[type=number] { width:62px; padding:5px 6px; font-size:12.5px; }
+    td select { padding:5px 6px; font-size:12px; }
+    .num { width:22px; height:22px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center;
+      font-size:11px; font-weight:800; background:#fff; border:2px solid var(--c, #555); }
+    .dist { font-size:11px; color:var(--txt3); }
+    .aviso { background:#fef3c7; border:1px solid #fcd34d; color:#92400e; border-radius:var(--radius-s);
+      padding:8px 10px; font-size:12.5px; line-height:1.5; margin-bottom:8px; }
+    .acciones { display:flex; gap:8px; justify-content:flex-end; margin-top:12px; position:sticky; bottom:-14px;
+      background:var(--white); padding:10px 0; border-top:1px solid var(--border); }
+    .vacio { color:var(--txt3); font-size:13px; text-align:center; padding:16px; line-height:1.6; }
+    .pc-num.terminal { border-radius:4px; }
+    .flecha-ruta { width:14px; height:14px; position:relative; }
+    .flecha-ruta::before { content:''; position:absolute; left:2px; top:1px; border-left:5px solid transparent;
+      border-right:5px solid transparent; border-bottom:10px solid var(--c); filter:drop-shadow(0 0 1.5px #fff); }
+    .pc-num { background:#fff; border:2px solid var(--c); color:#111; border-radius:50%; width:22px; height:22px;
+      font-size:11px; font-weight:800; display:flex; align-items:center; justify-content:center; box-shadow:0 1px 3px rgba(0,0,0,.3); }
+    .toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#111; color:#fff;
+      border-radius:var(--radius-s); padding:11px 20px; font-size:13px; font-weight:600; z-index:2000; transition:opacity .25s; max-width:90vw; }
+    .toast.hidden { opacity:0; pointer-events:none; }
+
+    @media (max-width:860px) {
+      body { padding-top:52px; overflow:auto; }
+      .cuerpo { flex-direction:column; }
+      .panel { width:auto; border-right:none; border-bottom:1px solid var(--border); overflow:visible; }
+      #mapa { min-height:60vh; }
+      select, input[type=text], input[type=number] { font-size:16px; }
+      .capas { margin-left:0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div>
+      <div class="titulo">Rutas Geográficas</div>
+      <div class="sub">Trazados de ida y regreso y puntos de control de cada ruta.</div>
+    </div>
+    <div class="capas" id="capas"></div>
+  </div>
+
+  <div class="cuerpo">
+    <div class="panel" id="panel"></div>
+    <div id="mapa"></div>
+  </div>
+  <div class="toast hidden" id="toast"></div>
+
+<script>
+  const API = (window.location.port === '3030') ? 'http://localhost:8001' : window.location.origin;
+  const COLOR = { ida: '#2563eb', regreso: '#ea580c', ambos: '#7c3aed', null: '#6b7280' };
+  const TXT_SENTIDO = { ida: 'Ida', regreso: 'Regreso', ambos: 'Ambos' };
+  // Capas gratuitas sin API key (CARTO empezó a exigir key en 2026: sus mosaicos
+  // salen con "API KEY REQUIRED"). Claro/Oscuro de Esri solo tienen detalle hasta
+  // zoom 16; de ahí en adelante Leaflet amplía la imagen (maxNativeZoom).
+  const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services';
+  const MAP_STYLES = {
+    calles:   { name: 'Calles',   maxZoom: 20, maxNativeZoom: 19,
+                url: `${ESRI}/World_Street_Map/MapServer/tile/{z}/{y}/{x}`,
+                attr: '&copy; Esri, HERE, Garmin, OpenStreetMap' },
+    claro:    { name: 'Claro',    maxZoom: 20, maxNativeZoom: 16,
+                url: `${ESRI}/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}`,
+                labels: `${ESRI}/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}`,
+                attr: '&copy; Esri, HERE, Garmin, OpenStreetMap' },
+    satelite: { name: 'Satélite', maxZoom: 20, maxNativeZoom: 19,
+                url: `${ESRI}/World_Imagery/MapServer/tile/{z}/{y}/{x}`,
+                attr: '&copy; Esri, Maxar, Earthstar Geographics' },
+    oscuro:   { name: 'Oscuro',   maxZoom: 20, maxNativeZoom: 16,
+                url: `${ESRI}/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}`,
+                labels: `${ESRI}/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}`,
+                attr: '&copy; Esri, HERE, Garmin, OpenStreetMap' },
+  };
+
+  async function apiFetch(path, opts = {}) {
+    const token = localStorage.getItem('authToken');
+    const headers = { ...(token ? { 'Authorization': `Bearer ${token}` } : {}), ...(opts.headers || {}) };
+    if (opts.body && !(opts.body instanceof FormData)) headers['Content-Type'] = 'application/json';
+    const res = await fetch(API + path, { ...opts, headers });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error || 'Error del servidor');
+    return json;
+  }
+  function esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+  }
+  function km(m) { return m == null ? '—' : (m / 1000).toFixed(1) + ' km'; }
+  function lsGet(k, d) { try { return localStorage.getItem(k) ?? d; } catch { return d; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); } catch {} }
+
+  let mapa, capaBase, capa, estiloActual = 'calles';
+  let rutas = [];
+  let rutaVista = null;      // id de la ruta mostrada
+  let geoVista = null;       // geometría guardada de esa ruta
+  let imp = null;            // estado de la importación en curso
+  let focoPunto = null;
+  let cfgVista = null;          // configuración del motor de la ruta mostrada
+  let encierrosLista = [];
+  let puntosEdit = null;        // copia editable de los puntos de la ruta mostrada
+  let puntosSucios = false;
+  let modoZona = null;          // {lat, lon} mientras se agrega una zona de encierro
+  let capaZonas = null;
+
+  const CAMPOS_CONFIG = [
+    ['vel_aviso_kmh',    'Velocidad de aviso',       'km/h', 'Se registra el exceso de velocidad.'],
+    ['vel_critica_kmh',  'Velocidad crítica',        'km/h', 'Además dispara alarma.'],
+    ['corredor_m',       'Corredor de la ruta',      'm',    'Distancia máxima al trazado antes de contar como fuera de ruta.'],
+    ['posiciones_fuera', 'Posiciones fuera seguidas','',     'Cuántos reportes seguidos fuera del corredor para declarar abandono.'],
+    ['precision_max_m',  'Precisión GPS máxima',     'm',    'Posiciones con peor precisión se ignoran para abandono.'],
+    ['desconexion_min',  'Desconexión',              'min',  'Sin reportes por más de este tiempo = sin señal.'],
+  ];
+
+  document.addEventListener('DOMContentLoaded', async () => {
+    mapa = L.map('mapa').setView([6.25, -75.57], 12);
+    mapa.on('zoomend', () => actualizarFlechas());
+    mapa.on('click', e => {
+      if (!modoZona || imp) return;
+      modoZona.lat = +e.latlng.lat.toFixed(7); modoZona.lon = +e.latlng.lng.toFixed(7);
+      pintarPanel(); dibujarVista();
+    });
+    document.getElementById('capas').innerHTML = Object.entries(MAP_STYLES).map(([k, s]) =>
+      `<button data-k="${k}" onclick="setEstilo('${k}')">${s.name}</button>`).join('');
+    const e = lsGet('locMapStyle', 'calles');
+    setEstilo(MAP_STYLES[e] ? e : 'calles');
+    prepararGoogle();
+    await cargarRutas();
+    const primera = rutas.find(r => r.tiene_ida || r.tiene_regreso);
+    if (primera) verRuta(primera.id); else pintarPanel();
+  });
+  window.addEventListener('message', e => { if (e.data?.type === 'VIEW_SHOWN') mapa?.invalidateSize(); });
+  window.addEventListener('resize', () => mapa?.invalidateSize());
+
+  // ── Mapa de Google (si hay clave) con Esri como respaldo ──
+  // Se cobra por cada mapa de Google creado, así que cada capa se crea una sola
+  // vez y se reutiliza al cambiar de estilo.
+  const GOOGLE_OSCURO = [
+    { elementType: 'geometry', stylers: [{ color: '#242f3e' }] },
+    { elementType: 'labels.text.stroke', stylers: [{ color: '#242f3e' }] },
+    { elementType: 'labels.text.fill', stylers: [{ color: '#8a8f98' }] },
+    { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#38414e' }] },
+    { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#212a37' }] },
+    { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#9ca5b3' }] },
+    { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#17263c' }] },
+    { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+  ];
+  const GOOGLE_ESTILOS = {
+    calles:   { type: 'roadmap' },
+    claro:    { type: 'roadmap', styles: [{ stylers: [{ saturation: -100 }, { lightness: 30 }] },
+                                          { featureType: 'poi', stylers: [{ visibility: 'off' }] }] },
+    satelite: { type: 'hybrid' },
+    oscuro:   { type: 'roadmap', styles: GOOGLE_OSCURO },
+  };
+  const GOOGLE_MUTANT = { src: 'https://unpkg.com/leaflet.gridlayer.googlemutant@0.16.0/dist/Leaflet.GoogleMutant.js',
+                          integrity: 'sha384-NVeApJLhFaaKalRqZ2xBNeRECGMKMkF5VMTDJtXWk2g0Tq+5Jo1N7CZjhL3gQSFW' };
+  let usarGoogle = false;
+  let capasCache = {};
+
+  function cargarScript(src, integrity) {
+    return new Promise((ok, mal) => {
+      const s = document.createElement('script');
+      s.src = src; s.async = true;
+      if (integrity) { s.integrity = integrity; s.crossOrigin = 'anonymous'; }
+      s.onload = ok; s.onerror = () => mal(new Error('No cargó ' + src));
+      document.head.appendChild(s);
+    });
+  }
+
+  async function prepararGoogle() {
+    try {
+      const cfg = await apiFetch('/api/monitoreo/mapa-config');
+      if (!cfg.google_maps_key) return;
+      // Clave rechazada por Google (sitio no autorizado, facturación, etc.): volver a Esri.
+      window.gm_authFailure = () => {
+        console.warn('Google Maps rechazó la clave; se usa el mapa alterno.');
+        usarGoogle = false; capasCache = {}; setEstilo(estiloActual);
+      };
+      await new Promise((ok, mal) => {
+        window.__gmListo = ok;
+        cargarScript(`https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(cfg.google_maps_key)}` +
+                     `&v=weekly&language=es&region=CO&loading=async&callback=__gmListo`).catch(mal);
+      });
+      if (google.maps.importLibrary) await google.maps.importLibrary('maps');
+      await cargarScript(GOOGLE_MUTANT.src, GOOGLE_MUTANT.integrity);
+      usarGoogle = true; capasCache = {};
+      setEstilo(estiloActual);
+    } catch (e) {
+      console.warn('Mapa de Google no disponible:', e.message);
+    }
+  }
+
+  function crearCapa(k) {
+    if (usarGoogle) {
+      const g = GOOGLE_ESTILOS[k];
+      return L.gridLayer.googleMutant({ type: g.type, styles: g.styles, maxZoom: 21 });
+    }
+    const s = MAP_STYLES[k];
+    const opts = { maxZoom: s.maxZoom, maxNativeZoom: s.maxNativeZoom, attribution: s.attr };
+    return s.labels
+      ? L.layerGroup([L.tileLayer(s.url, opts), L.tileLayer(s.labels, { ...opts, attribution: '' })])
+      : L.tileLayer(s.url, opts);
+  }
+
+  function setEstilo(k) {
+    estiloActual = k; lsSet('locMapStyle', k);
+    if (capaBase) mapa.removeLayer(capaBase);
+    capaBase = capasCache[k] || (capasCache[k] = crearCapa(k));
+    capaBase.addTo(mapa);
+    if (capaBase.bringToBack) capaBase.bringToBack();
+    document.querySelectorAll('#capas button').forEach(b => b.classList.toggle('active', b.dataset.k === k));
+  }
+
+  async function cargarRutas() {
+    try { rutas = await apiFetch('/api/monitoreo/rutas'); }
+    catch (e) { rutas = []; toast(e.message); }
+  }
+
+  // ══ Panel: listado / detalle ══
+  function pintarPanel() {
+    if (imp) return pintarImportacion();
+    const p = document.getElementById('panel');
+    if (!rutas.length) {
+      p.innerHTML = `<div class="vacio">No hay rutas activas. Créalas primero en Configuración → Catálogo.</div>`;
+      return;
+    }
+    let html = `<div class="seccion">Rutas (${rutas.length})</div>`;
+    html += rutas.map(r => {
+      const tiene = r.tiene_ida || r.tiene_regreso;
+      return `<div class="ruta ${rutaVista === r.id ? 'sel' : ''}" onclick="verRuta(${r.id})">
+        <div class="ruta-l1"><span class="ruta-color" style="background:${esc(r.color || '#999')}"></span>${esc(r.nombre)}
+          <span class="etq ${tiene ? 'ok' : 'no'}" style="margin-left:auto;">${tiene ? 'Con trazado' : 'Sin trazado'}</span></div>
+        <div class="ruta-l2">${tiene ? `Ida ${km(r.longitud_ida_m)} · Regreso ${km(r.longitud_regreso_m)} · ${r.puntos_control} puntos de control`
+                                     : 'Importa el KML/KMZ de Google Earth para esta ruta.'}</div>
+        <div class="ruta-acc" onclick="event.stopPropagation()">
+          <button class="btn sm" onclick="iniciarImportacion(${r.id})">${tiene ? 'Reemplazar con KML/KMZ' : 'Importar KML/KMZ'}</button>
+          ${tiene ? `<button class="btn sm" onclick="exportarKml(${r.id})">Exportar KML</button>` : ''}
+        </div></div>`;
+    }).join('');
+    const rv = rutas.find(r => r.id === rutaVista);
+    if (rv && (rv.tiene_ida || rv.tiene_regreso) && puntosEdit) html += detalleRuta(rv);
+    p.innerHTML = html;
+  }
+
+  async function verRuta(id) {
+    rutaVista = id; focoPunto = null; modoZona = null;
+    try {
+      const [g, cfg, zonas] = await Promise.all([
+        apiFetch(`/api/monitoreo/rutas/geometria?ruta_id=${id}`),
+        apiFetch(`/api/monitoreo/rutas/${id}/config`),
+        apiFetch('/api/monitoreo/encierros'),
+      ]);
+      geoVista = g[0] || { trazados: {}, puntos: [] };
+      cfgVista = cfg; encierrosLista = zonas;
+    } catch (e) { geoVista = { trazados: {}, puntos: [] }; toast(e.message); }
+    puntosEdit = geoVista.puntos.map(p => ({ ...p }));
+    puntosSucios = false;
+    pintarPanel();
+    dibujarVista(true);
+  }
+
+  function enfocar(lat, lon, id) {
+    focoPunto = id;
+    mapa.flyTo([lat, lon], Math.max(mapa.getZoom(), 17), { duration: .5 });
+    pintarPanel();
+  }
+
+  function detalleRuta(rv) {
+    const zonasRuta = encierrosLista.filter(z => z.ruta_id === null || z.ruta_id === rv.id);
+    let h = `<div class="seccion">Puntos de control — ${esc(rv.nombre)}</div>`;
+    if (!puntosEdit.length) h += `<div class="vacio">Esta ruta no tiene puntos de control.</div>`;
+    else h += `<table><thead><tr><th>#</th><th>Alias · Nombre</th><th>Tipo</th><th>Radio m</th><th title="Minutos esperados desde la salida del terminal">Min. obj.</th></tr></thead><tbody>
+      ${puntosEdit.map((pc, i) => `<tr class="${focoPunto === pc.id ? 'foco' : ''}">
+        <td><span class="num" style="--c:${COLOR[pc.sentido] || COLOR.null};cursor:pointer" title="Ver en el mapa"
+             onclick="enfocar(${pc.lat}, ${pc.lon}, ${pc.id})">${pc.orden}</span></td>
+        <td><div style="display:flex;gap:4px;align-items:center;">
+              <input type="text" value="${esc(pc.alias || '')}" maxlength="6" style="width:56px;min-width:56px;text-transform:uppercase"
+                     onchange="editarPunto(${i}, 'alias', this.value.trim().toUpperCase())" />
+              <span>${esc(pc.nombre)}</span></div>
+            <div class="dist">${TXT_SENTIDO[pc.sentido] || 'Sin sentido'}</div></td>
+        <td><select onchange="editarPunto(${i}, 'tipo', this.value)">
+              <option value="control" ${pc.tipo !== 'terminal' ? 'selected' : ''}>Control</option>
+              <option value="terminal" ${pc.tipo === 'terminal' ? 'selected' : ''}>Terminal</option></select></td>
+        <td><input type="number" min="5" max="500" step="5" value="${pc.radio_m}" onchange="editarPunto(${i}, 'radio_m', Math.round(+this.value))" /></td>
+        <td><input type="number" min="0" max="600" value="${pc.minutos_objetivo ?? ''}" placeholder="—"
+                   onchange="editarPunto(${i}, 'minutos_objetivo', this.value === '' ? null : Math.round(+this.value))" /></td>
+      </tr>`).join('')}</tbody></table>
+      <div class="dist" style="margin-top:6px;">Min. obj. = minutos esperados desde la salida del terminal; se usan para calcular atraso y adelanto.</div>
+      <div style="display:flex;justify-content:flex-end;margin-top:8px;">
+        <button class="btn-primary" onclick="guardarPuntos()" ${puntosSucios ? '' : 'disabled'}>Guardar puntos</button></div>`;
+
+    h += `<div class="seccion">Configuración de la ruta</div><div class="caja">
+      ${CAMPOS_CONFIG.map(([k, label, unidad, ayuda]) => `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;" title="${esc(ayuda)}">
+          <label style="flex:1;font-size:12.5px;font-weight:600;">${label}<div class="dist" style="font-weight:400;">${ayuda}</div></label>
+          <input type="number" id="cfg-${k}" value="${cfgVista?.[k] ?? ''}" style="width:72px;" />
+          <span class="dist" style="width:30px;">${unidad}</span></div>`).join('')}
+      <div style="display:flex;justify-content:flex-end;"><button class="btn-primary" onclick="guardarConfig()">Guardar configuración</button></div></div>`;
+
+    h += `<div class="seccion">Zonas de encierro</div>`;
+    if (modoZona === null) {
+      h += zonasRuta.length ? zonasRuta.map(z => `<div class="caja" style="display:flex;align-items:center;gap:8px;padding:8px 10px;">
+          <div style="flex:1;cursor:pointer" onclick="enfocar(${z.lat}, ${z.lon}, null)"><b>${esc(z.nombre)}</b>
+            <div class="dist">Radio ${z.radio_m} m · ${z.ruta_id ? 'solo esta ruta' : 'toda la empresa'}</div></div>
+          <button class="btn sm" onclick="borrarZona(${z.id})">Quitar</button></div>`).join('')
+        : `<div class="dist" style="margin-bottom:8px;">Patios o parqueaderos: un bus adentro queda "En encierro" y no genera desconexión ni abandono.</div>`;
+      h += `<button class="btn sm" onclick="iniciarZona()">+ Agregar zona de encierro</button>`;
+    } else {
+      h += `<div class="caja">
+        ${modoZona.lat == null ? '<div class="aviso">Haz clic en el mapa donde queda el patio.</div>'
+          : `<div class="dist" style="margin-bottom:6px;">Ubicación marcada. Puedes hacer clic de nuevo para moverla.</div>`}
+        <div class="campo"><label>Nombre</label><input type="text" id="zonaNombre" value="${esc(modoZona.nombre || '')}" maxlength="80"
+             oninput="modoZona.nombre = this.value" style="width:100%" /></div>
+        <div class="campo"><label>Radio (m)</label><input type="number" id="zonaRadio" value="${modoZona.radio_m}" min="20" max="1000"
+             onchange="modoZona.radio_m = Math.round(+this.value); dibujarVista()" /></div>
+        <div class="campo"><label><input type="checkbox" id="zonaSoloRuta" ${modoZona.soloRuta ? 'checked' : ''}
+             onchange="modoZona.soloRuta = this.checked" /> Solo para esta ruta</label></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;">
+          <button class="btn" onclick="modoZona = null; pintarPanel(); dibujarVista()">Cancelar</button>
+          <button class="btn-primary" onclick="guardarZona()" ${modoZona.lat == null ? 'disabled' : ''}>Guardar zona</button></div></div>`;
+    }
+    return h;
+  }
+
+  function dibujarVista(encuadrar = false) {
+    const pts = puntosEdit || geoVista?.puntos || [];
+    dibujar({ ida: geoVista?.trazados.ida?.puntos, regreso: geoVista?.trazados.regreso?.puntos }, pts, encuadrar);
+    const zonas = encierrosLista.filter(z => z.ruta_id === null || z.ruta_id === rutaVista);
+    zonas.forEach(z => L.circle([z.lat, z.lon], { radius: z.radio_m, color: '#92400e', weight: 2, dashArray: '6 5',
+      fillColor: '#92400e', fillOpacity: .08 }).bindTooltip(`<b>Encierro:</b> ${esc(z.nombre)}`).addTo(capa));
+    if (modoZona && modoZona.lat != null) {
+      L.circle([modoZona.lat, modoZona.lon], { radius: modoZona.radio_m, color: '#92400e', weight: 2,
+        fillColor: '#92400e', fillOpacity: .18 }).addTo(capa);
+    }
+  }
+
+  function editarPunto(i, campo, valor) {
+    puntosEdit[i][campo] = valor;
+    puntosSucios = true;
+    pintarPanel();
+    if (campo === 'radio_m') dibujarVista();
+  }
+
+  async function guardarPuntos() {
+    try {
+      await apiFetch(`/api/monitoreo/rutas/${rutaVista}/geometria`, { method: 'PUT', body: JSON.stringify({
+        trazados: { ida: geoVista.trazados.ida?.puntos, regreso: geoVista.trazados.regreso?.puntos },
+        nombre_origen: geoVista.trazados.ida?.nombre_origen || geoVista.trazados.regreso?.nombre_origen,
+        puntos: puntosEdit.map(p => ({ id: p.id, nombre: p.nombre, lat: p.lat, lon: p.lon, radio_m: p.radio_m,
+          sentido: p.sentido || 'auto', tipo: p.tipo, alias: p.alias, minutos_objetivo: p.minutos_objetivo })) }) });
+      toast('Puntos de control guardados');
+      await cargarRutas();
+      verRuta(rutaVista);
+    } catch (e) { toast(e.message); }
+  }
+
+  async function guardarConfig() {
+    const body = {};
+    CAMPOS_CONFIG.forEach(([k]) => { body[k] = document.getElementById('cfg-' + k).value; });
+    try {
+      cfgVista = await apiFetch(`/api/monitoreo/rutas/${rutaVista}/config`, { method: 'PUT', body: JSON.stringify(body) });
+      toast('Configuración guardada');
+    } catch (e) { toast(e.message); }
+  }
+
+  function iniciarZona() {
+    modoZona = { lat: null, lon: null, nombre: '', radio_m: 100, soloRuta: false };
+    pintarPanel();
+  }
+
+  async function guardarZona() {
+    if (!modoZona.nombre?.trim()) { toast('Escribe el nombre de la zona'); return; }
+    try {
+      await apiFetch('/api/monitoreo/encierros', { method: 'POST', body: JSON.stringify({
+        nombre: modoZona.nombre.trim(), lat: modoZona.lat, lon: modoZona.lon, radio_m: modoZona.radio_m,
+        ruta_id: modoZona.soloRuta ? rutaVista : null }) });
+      toast('Zona de encierro guardada');
+      verRuta(rutaVista);
+    } catch (e) { toast(e.message); }
+  }
+
+  async function borrarZona(id) {
+    if (!confirm('¿Quitar esta zona de encierro?')) return;
+    try { await apiFetch(`/api/monitoreo/encierros/${id}`, { method: 'DELETE' }); verRuta(rutaVista); }
+    catch (e) { toast(e.message); }
+  }
+
+  async function exportarKml(id) {
+    try {
+      const token = localStorage.getItem('authToken');
+      const res = await fetch(`${API}/api/monitoreo/rutas/${id}/kml`, { headers: { 'Authorization': `Bearer ${token}` } });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'No se pudo exportar');
+      const blob = await res.blob();
+      const nombre = (res.headers.get('Content-Disposition') || '').match(/filename="([^"]+)"/)?.[1] || 'ruta.kml';
+      const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: nombre });
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    } catch (e) { toast(e.message); }
+  }
+
+  // ══ Dibujo en el mapa ══
+  // Flechas de sentido sobre el trazado (mismo estilo que el mapa en vivo).
+  const ZOOM_FLECHAS = 14, PASO_FLECHAS_M = 300;
+  let capaFlechas = null;
+  function distM(a, b) {
+    const R = 6371008.8, rad = Math.PI / 180;
+    const dLat = (b[0] - a[0]) * rad, dLon = (b[1] - a[1]) * rad;
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[0] * rad) * Math.cos(b[0] * rad) * Math.sin(dLon / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(h));
+  }
+  function rumboGrados(a, b) {
+    const dx = (b[1] - a[1]) * Math.cos(a[0] * Math.PI / 180), dy = b[0] - a[0];
+    return (Math.atan2(dx, dy) * 180 / Math.PI + 360) % 360;
+  }
+  function agregarFlechas(linea, color) {
+    let acumulado = 0, siguiente = PASO_FLECHAS_M / 2;
+    for (let i = 1; i < linea.length; i++) {
+      const a = linea[i - 1], b = linea[i], d = distM(a, b);
+      while (d > 0 && acumulado + d >= siguiente) {
+        const t = (siguiente - acumulado) / d;
+        L.marker([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], { interactive: false, keyboard: false,
+          icon: L.divIcon({ className: '', iconSize: [14, 14], iconAnchor: [7, 7],
+            html: `<div class="flecha-ruta" style="transform:rotate(${rumboGrados(a, b)}deg);--c:${color}"></div>` }) }).addTo(capaFlechas);
+        siguiente += PASO_FLECHAS_M;
+      }
+      acumulado += d;
+    }
+  }
+  function actualizarFlechas() {
+    if (!capaFlechas) return;
+    const ver = mapa.getZoom() >= ZOOM_FLECHAS;
+    if (ver && !mapa.hasLayer(capaFlechas)) capaFlechas.addTo(mapa);
+    if (!ver && mapa.hasLayer(capaFlechas)) mapa.removeLayer(capaFlechas);
+  }
+  function trazar(linea, color, regreso, tip) {
+    L.polyline(linea, { color: '#fff', weight: regreso ? 7 : 8, opacity: .7, interactive: false }).addTo(capa);
+    L.polyline(linea, { color, weight: regreso ? 4 : 5, opacity: .9, dashArray: regreso ? '9 7' : null })
+      .bindTooltip(tip, { sticky: true }).addTo(capa);
+    agregarFlechas(linea, color);
+  }
+
+  function dibujar(trazados, puntos, encuadrar) {
+    if (capa) mapa.removeLayer(capa);
+    if (capaFlechas) mapa.removeLayer(capaFlechas);
+    capa = L.layerGroup().addTo(mapa);
+    capaFlechas = L.layerGroup();
+    const lim = [];
+    if (trazados.ida) {
+      trazar(trazados.ida, COLOR.ida, false, 'Ida');
+      lim.push(...trazados.ida);
+      marcarExtremos(trazados.ida, COLOR.ida, 'ida');
+    }
+    if (trazados.regreso) {
+      trazar(trazados.regreso, COLOR.regreso, true, 'Regreso');
+      lim.push(...trazados.regreso);
+      marcarExtremos(trazados.regreso, COLOR.regreso, 'regreso');
+    }
+    actualizarFlechas();
+    (puntos || []).forEach((p, i) => {
+      const c = COLOR[p.sentido] || COLOR.null;
+      const tip = `<b>${p.orden ?? i + 1}. ${p.alias ? esc(p.alias) + ' · ' : ''}${esc(p.nombre)}</b><br>` +
+                  `${TXT_SENTIDO[p.sentido] || 'Sin sentido'} · ${p.tipo === 'terminal' ? 'Terminal' : 'Control'} · radio ${p.radio_m} m`;
+      L.circle([p.lat, p.lon], { radius: p.radio_m, color: c, weight: 1.5, fillColor: c, fillOpacity: .12 }).bindTooltip(tip).addTo(capa);
+      L.marker([p.lat, p.lon], { zIndexOffset: 500, icon: L.divIcon({ className: '', iconSize: [22, 22], iconAnchor: [11, 11],
+        html: `<div class="pc-num ${p.tipo === 'terminal' ? 'terminal' : ''}" style="--c:${c}">${p.orden ?? i + 1}</div>` }) }).bindTooltip(tip).addTo(capa);
+      lim.push([p.lat, p.lon]);
+    });
+    if (encuadrar && lim.length) mapa.fitBounds(lim, { padding: [30, 30] });
+  }
+
+  function marcarExtremos(linea, color, s) {
+    L.circleMarker(linea[0], { radius: 6, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1 })
+      .bindTooltip(`Inicio ${s}`).addTo(capa);
+    L.circleMarker(linea[linea.length - 1], { radius: 6, color, weight: 3, fillColor: '#fff', fillOpacity: 1 })
+      .bindTooltip(`Fin ${s}`).addTo(capa);
+  }
+
+  // ══ Importación KML/KMZ ══
+  function iniciarImportacion(rutaId) {
+    imp = { rutaId, archivo: null, lineas: null, puntos: null, avisos: [], nombre: null, guardando: false };
+    pintarImportacion();
+  }
+  function cancelarImportacion() {
+    imp = null;
+    if (rutaVista) verRuta(rutaVista); else { pintarPanel(); if (capa) mapa.removeLayer(capa); }
+  }
+
+  function pintarImportacion() {
+    const p = document.getElementById('panel');
+    const ruta = rutas.find(r => r.id === imp.rutaId);
+    const reemplaza = ruta && (ruta.tiene_ida || ruta.tiene_regreso);
+    let html = `<div class="seccion">Importar KML/KMZ</div>
+      <div class="campo"><label>Ruta</label>
+        <select onchange="imp.rutaId = +this.value; pintarImportacion()">
+          ${rutas.map(r => `<option value="${r.id}" ${r.id === imp.rutaId ? 'selected' : ''}>${esc(r.nombre)}</option>`).join('')}
+        </select></div>`;
+    if (reemplaza) html += `<div class="aviso">Esta ruta ya tiene trazado. Al guardar se <b>reemplazan</b> sus trazados y puntos de control.</div>`;
+
+    if (!imp.lineas) {
+      html += `<label class="drop" id="drop">
+          <input type="file" accept=".kml,.kmz" style="display:none" onchange="subirArchivo(this.files[0])" />
+          <b>Elige o arrastra el archivo</b><br>.kml o .kmz exportado desde Google Earth</label>
+        <div class="acciones"><button class="btn" onclick="cancelarImportacion()">Cancelar</button></div>`;
+      p.innerHTML = html;
+      const drop = document.getElementById('drop');
+      drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+      drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+      drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); subirArchivo(e.dataTransfer.files[0]); });
+      return;
+    }
+
+    html += `<div class="dist" style="margin-bottom:8px;">Archivo: <b>${esc(imp.archivo)}</b>${imp.nombre ? ` · carpeta "${esc(imp.nombre)}"` : ''}</div>`;
+    imp.avisos.forEach(a => { html += `<div class="aviso">${esc(a)}</div>`; });
+
+    html += `<div class="seccion">Trazados</div><table><thead><tr><th>Línea del archivo</th><th>Largo</th><th>Sentido</th></tr></thead><tbody>
+      ${imp.lineas.map((l, i) => `<tr><td>${esc(l.nombre)}<div class="dist">${l.puntos.length} vértices</div></td><td>${km(l.longitud_m)}</td>
+        <td><select onchange="cambiarSentidoLinea(${i}, this.value)">
+          <option value="ida" ${l.sentido === 'ida' ? 'selected' : ''}>Ida</option>
+          <option value="regreso" ${l.sentido === 'regreso' ? 'selected' : ''}>Regreso</option>
+          <option value="" ${!l.sentido ? 'selected' : ''}>No usar</option>
+        </select></td></tr>`).join('')}</tbody></table>`;
+
+    html += `<div class="seccion">Puntos de control (${imp.puntos.length}) <span class="dist" style="text-transform:none;letter-spacing:0;font-weight:400;">ordenados según el recorrido</span></div>`;
+    if (!imp.puntos.length) html += `<div class="vacio">El archivo no trae puntos. Podrás agregarlos en el editor.</div>`;
+    else html += `<table><thead><tr><th>#</th><th>Alias · Nombre</th><th>Sentido / Tipo</th><th>Radio m</th></tr></thead><tbody>
+      ${imp.puntos.map((pc, i) => {
+        const autoTxt = TXT_SENTIDO[pc.sentido_auto] || 'sin sentido';
+        const dist = [pc.dist_ida_m != null ? `ida ${Math.round(pc.dist_ida_m)} m` : null,
+                      pc.dist_regreso_m != null ? `regreso ${Math.round(pc.dist_regreso_m)} m` : null].filter(Boolean).join(' · ');
+        return `<tr class="${focoPunto === i ? 'foco' : ''}">
+          <td><span class="num" style="--c:${COLOR[pc.sentido] || COLOR.null};cursor:pointer" onclick="focoImp(${i})">${pc.orden}</span></td>
+          <td><div style="display:flex;gap:4px;">
+              <input type="text" value="${esc(pc.alias || '')}" maxlength="6" style="width:52px;min-width:52px;text-transform:uppercase"
+                     onchange="imp.puntos[${i}].alias = this.value.trim().toUpperCase()" />
+              <input type="text" value="${esc(pc.nombre)}" maxlength="80" onchange="imp.puntos[${i}].nombre = this.value.trim(); redibujarImp()" /></div>
+            <div class="dist">a ${dist}</div></td>
+          <td><select onchange="cambiarSentidoPunto(${i}, this.value)">
+            <option value="auto" ${!pc.manual ? 'selected' : ''}>Auto (${autoTxt})</option>
+            ${['ida', 'regreso', 'ambos'].map(s => `<option value="${s}" ${pc.manual && pc.sentido === s ? 'selected' : ''}>${TXT_SENTIDO[s]}</option>`).join('')}
+          </select>
+          <select style="margin-top:4px;" onchange="imp.puntos[${i}].tipo = this.value">
+            <option value="control" ${pc.tipo !== 'terminal' ? 'selected' : ''}>Control</option>
+            <option value="terminal" ${pc.tipo === 'terminal' ? 'selected' : ''}>Terminal</option></select></td>
+          <td><input type="number" min="5" max="500" step="5" value="${pc.radio_m}" onchange="cambiarRadio(${i}, this.value)" /></td>
+        </tr>`; }).join('')}</tbody></table>`;
+
+    html += `<div class="acciones">
+        <button class="btn" onclick="cancelarImportacion()">Cancelar</button>
+        <button class="btn-primary" onclick="guardarImportacion()" ${imp.guardando ? 'disabled' : ''}>${imp.guardando ? 'Guardando…' : 'Guardar ruta'}</button>
+      </div>`;
+    p.innerHTML = html;
+  }
+
+  async function subirArchivo(file) {
+    if (!file) return;
+    if (!/\.(kml|kmz)$/i.test(file.name)) { toast('El archivo debe ser .kml o .kmz'); return; }
+    const fd = new FormData(); fd.append('archivo', file);
+    try {
+      const r = await apiFetch('/api/monitoreo/rutas/importar', { method: 'POST', body: fd });
+      Object.assign(imp, { archivo: file.name, nombre: r.nombre, lineas: r.lineas, puntos: r.puntos, avisos: r.avisos });
+      // Si el nombre de la carpeta coincide con una ruta, se preselecciona.
+      const coincide = r.nombre && rutas.find(x => x.nombre.trim().toLowerCase() === r.nombre.trim().toLowerCase());
+      if (coincide && !rutas.find(x => x.id === imp.rutaId)?.tiene_ida) imp.rutaId = coincide.id;
+      pintarImportacion();
+      redibujarImp(true);
+    } catch (e) { toast(e.message); }
+  }
+
+  function trazadosImp() {
+    const t = {};
+    imp.lineas.forEach(l => { if (l.sentido && !t[l.sentido]) t[l.sentido] = l.puntos; });
+    return t;
+  }
+
+  function redibujarImp(encuadrar = false) { dibujar(trazadosImp(), imp.puntos, encuadrar); }
+
+  async function recalcular() {
+    const trazados = trazadosImp();
+    if (!trazados.ida && !trazados.regreso) { toast('Elige al menos un trazado de ida o regreso'); return; }
+    try {
+      const r = await apiFetch('/api/monitoreo/rutas/calcular', { method: 'POST', body: JSON.stringify({
+        trazados, puntos: imp.puntos.map(p => ({ nombre: p.nombre, lat: p.lat, lon: p.lon, radio_m: p.radio_m,
+                                                 sentido: p.manual ? p.sentido : 'auto', tipo: p.tipo, alias: p.alias })) }) });
+      imp.puntos = r.puntos; imp.avisos = r.avisos;
+    } catch (e) { toast(e.message); }
+    pintarImportacion(); redibujarImp();
+  }
+
+  function cambiarSentidoLinea(i, v) {
+    // Un sentido solo puede tenerlo una línea: la que lo tenía pasa a "No usar".
+    if (v) imp.lineas.forEach((l, j) => { if (j !== i && l.sentido === v) l.sentido = null; });
+    imp.lineas[i].sentido = v || null;
+    recalcular();
+  }
+  function cambiarSentidoPunto(i, v) {
+    imp.puntos[i].manual = v !== 'auto';
+    if (v !== 'auto') imp.puntos[i].sentido = v;
+    recalcular();
+  }
+  function cambiarRadio(i, v) {
+    const n = Math.round(+v);
+    if (!(n >= 5 && n <= 500)) { toast('El radio debe estar entre 5 y 500 m'); pintarImportacion(); return; }
+    imp.puntos[i].radio_m = n; redibujarImp();
+  }
+  function focoImp(i) {
+    focoPunto = i;
+    mapa.flyTo([imp.puntos[i].lat, imp.puntos[i].lon], Math.max(mapa.getZoom(), 17), { duration: .5 });
+    pintarImportacion();
+  }
+
+  async function guardarImportacion() {
+    const trazados = trazadosImp();
+    if (!trazados.ida && !trazados.regreso) { toast('Elige al menos un trazado de ida o regreso'); return; }
+    if (imp.puntos.some(p => !p.nombre)) { toast('Todos los puntos deben tener nombre'); return; }
+    const ruta = rutas.find(r => r.id === imp.rutaId);
+    if ((ruta.tiene_ida || ruta.tiene_regreso) && !confirm(`¿Reemplazar el trazado y los puntos de control de "${ruta.nombre}"?`)) return;
+    imp.guardando = true; pintarImportacion();
+    try {
+      const r = await apiFetch(`/api/monitoreo/rutas/${imp.rutaId}/geometria`, { method: 'PUT', body: JSON.stringify({
+        trazados, nombre_origen: imp.archivo,
+        puntos: imp.puntos.map(p => ({ nombre: p.nombre, lat: p.lat, lon: p.lon, radio_m: p.radio_m,
+                                       sentido: p.manual ? p.sentido : 'auto', tipo: p.tipo, alias: p.alias })) }) });
+      const id = imp.rutaId;
+      imp = null;
+      toast(r.avisos?.length ? 'Ruta guardada con avisos: revisa los puntos sin sentido' : 'Ruta guardada');
+      await cargarRutas();
+      verRuta(id);
+    } catch (e) { imp.guardando = false; pintarImportacion(); toast(e.message); }
+  }
+
+  let toastTimer = null;
+  function toast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.classList.remove('hidden');
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.add('hidden'), 3500);
+  }
+</script>
+</body>
+</html>

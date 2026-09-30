@@ -112,19 +112,19 @@ PG_SCHEMA    = os.path.join(os.path.dirname(__file__), "supabase_schema.sql")
 # Versión del esquema. IMPORTANTE: incrementar en 1 cada vez que se agregue
 # una migración (ALTER/CREATE) a migrate_db(); si no se incrementa, la
 # migración nueva NO corre en las BD ya versionadas.
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 14
 
 ROLE_VIEWS = {
-    "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho", "historial-despacho", "gastos", "tecnologia", "chequeo", "eds", "lavada", "mapa", "relojes"],
+    "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho", "historial-despacho", "gastos", "tecnologia", "chequeo", "eds", "lavada", "mapa", "relojes", "mb-mapa", "mb-rutas", "mb-equipos"],
     "Analista":       ["historial", "dashboard", "tecnologia", "despacho", "historial-despacho", "chequeo", "alistamiento"],
     "Técnico Mant.":  ["mant"],
     "Técnico Cámaras":       ["tecnologia"],
     "Jefe Op. Tecnológicas": ["tecnologia"],
     "Operador EDS":   ["eds"],
     "Operador Lavada": ["lavada"],
-    "Propietario":    ["propietario", "gastos", "tecnologia", "lavada"],
-    "Despachador":    ["despacho", "historial-despacho", "chequeo", "mapa", "relojes"],
-    "Jefe de Ruta":   ["dashboard", "despacho", "historial-despacho", "chequeo", "alistamiento", "relojes"],
+    "Propietario":    ["propietario", "gastos", "tecnologia", "lavada", "mb-mapa"],
+    "Despachador":    ["despacho", "historial-despacho", "chequeo", "mapa", "relojes", "mb-mapa"],
+    "Jefe de Ruta":   ["dashboard", "despacho", "historial-despacho", "chequeo", "alistamiento", "relojes", "mb-mapa"],
     "Conductor":      ["alistamiento"],
 }
 
@@ -1038,6 +1038,12 @@ def migrate_db():
         )
     except Exception as e:
         print(f"[migrate_db] backfill propietario_id desde usuario_buses: {e}")
+
+    # Monitoreo de Bus (equipos GPS, posiciones, rutas geográficas) — SCHEMA_VERSION 12-14
+    try:
+        monitoreo.migrar(db)
+    except Exception as e:
+        print(f"[migrate_db] monitoreo: {e}")
 
     # Registrar la versión migrada: mientras coincida con SCHEMA_VERSION,
     # los próximos init_db() retornan con una sola consulta.
@@ -2198,6 +2204,16 @@ def cron_cierre_despacho():
     db.commit()
     db.close()
     return jsonify({"ok": True, "fecha": fecha, "cerrados": cerrados})
+
+
+@app.route("/api/cron/monitoreo", methods=["GET", "POST"])
+def cron_monitoreo():
+    """Mantenimiento diario del módulo Monitoreo de Bus (particiones de posiciones)."""
+    if CRON_SECRET:
+        auth = request.headers.get("Authorization", "")
+        if auth != f"Bearer {CRON_SECRET}":
+            return jsonify({"error": "No autorizado"}), 401
+    return jsonify(monitoreo.cron_monitoreo())
 
 
 # ──────────────────────────────────────────
@@ -4744,6 +4760,16 @@ def gps_asignar_relojes(bus_id):
     db.commit()
     db.close()
     return jsonify({"ok": True})
+
+
+# ──────────────────────────────────────────
+#  Monitoreo de Bus (api/monitoreo/)
+# ──────────────────────────────────────────
+
+import monitoreo  # noqa: E402
+
+monitoreo.configurar(get_db=get_db, require_role=require_role, database_url=DATABASE_URL)
+app.register_blueprint(monitoreo.bp)
 
 
 # ──────────────────────────────────────────

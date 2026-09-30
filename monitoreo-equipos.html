@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <link rel="icon" type="image/png" href="favicon.png" />
+  <link rel="apple-touch-icon" href="favicon.png" />
+  <script>
+    (function() {
+      if (window.location === window.parent.location) {
+        const token = localStorage.getItem('authToken');
+        if (!token) { window.location.href = '/index.html'; }
+      }
+    })();
+  </script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>La Milagrosa — Equipos GPS</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg:#f4f4f6; --white:#fff; --border:#e5e5eb; --border2:#d0d0d8;
+      --txt:#111; --txt2:#555; --txt3:#888; --primary:#6366f1; --green:#22c55e;
+      --red:#ef4444; --yellow:#f59e0b; --radius:12px; --radius-s:8px;
+      --shadow:0 1px 4px rgba(0,0,0,.07);
+    }
+    body {
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+      background:var(--bg); color:var(--txt); padding:24px; font-size:14px;
+    }
+    .page-header { display:flex; align-items:flex-start; gap:12px; flex-wrap:wrap; margin-bottom:18px; }
+    .page-title { font-size:22px; font-weight:800; letter-spacing:-.4px; }
+    .page-sub   { font-size:13px; color:var(--txt2); margin-top:3px; max-width:680px; }
+
+    .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:16px; }
+    .kpi { background:var(--white); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); padding:12px 14px; }
+    .kpi-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:var(--txt3); }
+    .kpi-val { font-size:24px; font-weight:800; margin-top:2px; }
+    .kpi-val.ok { color:#16a34a; } .kpi-val.bad { color:#dc2626; } .kpi-val.warn { color:#d97706; }
+
+    .btn {
+      border:1px solid var(--border2); background:var(--white); color:var(--txt);
+      border-radius:var(--radius-s); padding:8px 14px; font-family:inherit;
+      font-size:12.5px; font-weight:700; cursor:pointer; box-shadow:var(--shadow); white-space:nowrap;
+    }
+    .btn:hover { border-color:var(--primary); color:var(--primary); }
+    .btn.sm { padding:5px 10px; font-size:12px; box-shadow:none; }
+    .btn.danger:hover { border-color:var(--red); color:var(--red); }
+    .btn-primary {
+      border:none; background:var(--primary); color:#fff; border-radius:var(--radius-s);
+      padding:9px 16px; font-family:inherit; font-size:13px; font-weight:700; cursor:pointer; white-space:nowrap;
+    }
+    .btn-primary:disabled { opacity:.5; cursor:default; }
+
+    .card {
+      background:var(--white); border:1px solid var(--border); border-radius:var(--radius);
+      box-shadow:var(--shadow); padding:16px 18px; margin-bottom:16px;
+    }
+    .card.pend { border-color:rgba(245,158,11,.5); background:#fffbeb; }
+    .card-title {
+      display:flex; align-items:center; gap:8px;
+      font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.5px;
+      color:var(--txt3); margin-bottom:12px;
+    }
+    .card-hint { font-size:12.5px; color:var(--txt2); margin:-4px 0 12px; line-height:1.5; }
+    table { width:100%; border-collapse:collapse; }
+    th {
+      text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.4px;
+      color:var(--txt3); padding:8px; border-bottom:1px solid var(--border); white-space:nowrap;
+    }
+    td { padding:10px 8px; border-bottom:1px solid var(--border); font-size:13px; vertical-align:middle; }
+    tr:last-child td { border-bottom:none; }
+    tr.detalle td { background:#fafafc; padding:0; }
+    .pill { display:inline-flex; align-items:center; gap:6px; border-radius:999px;
+      padding:3px 10px; font-size:11.5px; font-weight:700; white-space:nowrap; }
+    .pill .dot { width:6px; height:6px; border-radius:50%; background:currentColor; }
+    .pill.on   { background:rgba(34,197,94,.12); color:#16a34a; }
+    .pill.off  { background:rgba(136,136,136,.15); color:var(--txt3); }
+    .pill.bad  { background:rgba(239,68,68,.12); color:#dc2626; }
+    .pill.warn { background:rgba(245,158,11,.15); color:#b45309; }
+    .mono { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12.5px; color:var(--txt2); }
+    .sub { font-size:11.5px; color:var(--txt3); margin-top:2px; }
+    .desfase-alto { color:#b45309; font-weight:700; }
+    .acciones { display:flex; gap:6px; flex-wrap:wrap; }
+    select, input[type=text] {
+      padding:8px 10px; border:1.5px solid var(--border2); border-radius:var(--radius-s);
+      font-family:inherit; font-size:13px; background:var(--white); color:var(--txt);
+    }
+    select { cursor:pointer; min-width:150px; }
+    select:focus, input:focus { outline:none; border-color:var(--primary); }
+    .empty { text-align:center; color:var(--txt3); padding:22px; font-size:13.5px; line-height:1.6; }
+    .payload { max-width:360px; white-space:pre-wrap; word-break:break-all; font-size:11.5px; max-height:90px; overflow:auto; }
+
+    .paquetes { padding:10px 14px 14px; }
+    .paquetes table td, .paquetes table th { padding:6px 8px; font-size:12px; }
+
+    /* Modal */
+    .modal-bg { position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center;
+      justify-content:center; z-index:1000; padding:16px; }
+    .modal-bg.hidden { display:none; }
+    .modal { background:var(--white); border-radius:14px; width:100%; max-width:560px; max-height:92vh;
+      overflow:auto; padding:22px; box-shadow:0 12px 40px rgba(0,0,0,.25); }
+    .modal h3 { font-size:17px; font-weight:800; margin-bottom:4px; }
+    .modal .modal-sub { font-size:12.5px; color:var(--txt2); margin-bottom:16px; line-height:1.5; }
+    .field { margin-bottom:12px; }
+    .field label { display:block; font-size:12px; font-weight:700; color:var(--txt2); margin-bottom:5px; }
+    .field input, .field select { width:100%; }
+    .modal-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:16px; }
+    .url-box { display:flex; gap:8px; align-items:stretch; }
+    .url-box code { flex:1; background:#f4f4f8; border:1px solid var(--border); border-radius:var(--radius-s);
+      padding:10px; font-size:12px; word-break:break-all; font-family:ui-monospace,Menlo,monospace; }
+    .aviso { background:#fef3c7; border:1px solid #fcd34d; color:#92400e; border-radius:var(--radius-s);
+      padding:10px 12px; font-size:12.5px; line-height:1.5; margin-top:12px; }
+    .pasos { font-size:12.5px; color:var(--txt2); line-height:1.7; margin-top:12px; padding-left:18px; }
+    .pasos b { color:var(--txt); }
+
+    .toast {
+      position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
+      background:#111; color:#fff; border-radius:var(--radius-s); padding:11px 20px;
+      font-size:13px; font-weight:600; z-index:2000; box-shadow:0 4px 16px rgba(0,0,0,.25);
+      transition:opacity .25s; max-width:90vw;
+    }
+    .toast.hidden { opacity:0; pointer-events:none; }
+
+    /* Móvil: tablas → tarjetas apiladas, sin tapar el menú de la shell */
+    @media (max-width:760px) {
+      body { padding:16px; padding-top:64px; }
+      select, input[type=text] { font-size:16px; }   /* evita el auto-zoom de iOS */
+      table.responsive thead { display:none; }
+      table.responsive, table.responsive tbody, table.responsive tr, table.responsive td { display:block; width:100%; }
+      table.responsive tr:not(.detalle) { border:1px solid var(--border); border-radius:10px; margin-bottom:10px; padding:6px 10px; background:var(--white); }
+      table.responsive td { border:none; padding:6px 0; display:flex; justify-content:space-between; gap:12px; text-align:right; }
+      table.responsive td::before { content:attr(data-label); font-size:11px; font-weight:700; text-transform:uppercase;
+        color:var(--txt3); text-align:left; flex-shrink:0; }
+      table.responsive td.full { display:block; text-align:left; }
+      table.responsive td.full::before { display:block; margin-bottom:4px; }
+      .payload { max-width:none; }
+      .acciones { justify-content:flex-end; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="page-header">
+    <div style="flex:1; min-width:240px;">
+      <div class="page-title">Equipos GPS</div>
+      <div class="page-sub">Equipos GPS instalados en los buses. Cada uno envía su posición periódicamente a BusControl.
+        Aquí los registras, les asignas el bus y verificas que estén reportando.</div>
+    </div>
+    <button class="btn" onclick="cargar()">Refrescar</button>
+    <button class="btn-primary" onclick="abrirRegistro()">+ Registrar equipo</button>
+  </div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="card pend" id="cardPendientes" style="display:none;">
+    <div class="card-title">⚠ Equipos pendientes por asignar <span id="nPend"></span></div>
+    <div class="card-hint">Estos IMEI están enviando posiciones pero no están registrados. Verifica que el IMEI coincida con la
+      etiqueta del equipo, elige el bus y pulsa <b>Asignar</b>. Si el equipo ya trae un token en su URL, se conserva y no hay que reconfigurarlo.</div>
+    <div style="overflow-x:auto;">
+      <table class="responsive">
+        <thead><tr><th>IMEI</th><th>Visto</th><th>Paquetes</th><th>Último paquete</th><th>Bus</th><th></th></tr></thead>
+        <tbody id="tbodyPend"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Equipos registrados</div>
+    <div style="overflow-x:auto;">
+      <table class="responsive">
+        <thead>
+          <tr><th>Bus</th><th>IMEI</th><th>Estado</th><th>Último reporte</th><th>Hora GPS</th><th>Desfase</th><th>Paquetes</th><th></th></tr>
+        </thead>
+        <tbody id="tbody"><tr><td colspan="8"><div class="empty">Cargando…</div></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Modal: registrar equipo -->
+  <div class="modal-bg hidden" id="modalRegistro" onclick="if(event.target===this) cerrarModal('modalRegistro')">
+    <div class="modal">
+      <h3>Registrar equipo</h3>
+      <div class="modal-sub">El IMEI está en la etiqueta del equipo y en su configuración.
+        Al registrar se genera un token único para la URL de envío.</div>
+      <div class="field"><label for="regImei">IMEI</label>
+        <input type="text" id="regImei" inputmode="numeric" autocomplete="off" placeholder="Ej: 862000000000000" /></div>
+      <div class="field"><label for="regBus">Bus</label><select id="regBus"></select></div>
+      <div class="field"><label for="regNotas">Notas (opcional)</label>
+        <input type="text" id="regNotas" autocomplete="off" placeholder="Referencia interna (opcional)" /></div>
+      <div class="modal-actions">
+        <button class="btn" onclick="cerrarModal('modalRegistro')">Cancelar</button>
+        <button class="btn-primary" id="btnRegistrar" onclick="registrar()">Registrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: URL con token -->
+  <div class="modal-bg hidden" id="modalToken" onclick="if(event.target===this) cerrarModal('modalToken')">
+    <div class="modal">
+      <h3 id="tokTitulo">URL de envío del equipo</h3>
+      <div class="modal-sub" id="tokSub"></div>
+      <div class="url-box"><code id="tokUrl"></code>
+        <button class="btn" onclick="copiarUrl()">Copiar</button></div>
+      <div class="aviso">Copia la URL ahora: por seguridad el token <b>no se vuelve a mostrar</b>.
+        Si lo pierdes, genera uno nuevo con “Nuevo token” (y actualiza el equipo).</div>
+      <ol class="pasos">
+        <li>Pega la URL completa como dirección de envío (HTTP) en la configuración del equipo.</li>
+        <li>Guarda. En menos de un minuto el equipo debe aparecer como <b>Reportando</b> aquí.</li>
+      </ol>
+      <div class="modal-actions"><button class="btn-primary" onclick="cerrarModal('modalToken')">Listo</button></div>
+    </div>
+  </div>
+
+  <div class="toast hidden" id="toast"></div>
+
+<script>
+  const API = (window.location.port === '3030') ? 'http://localhost:8001' : window.location.origin;
+  const SIN_SENAL_S = 180;     // sin reporte en más de 3 min = sin señal (igual al valor por defecto de las rutas)
+  const DESFASE_ALTO_S = 60;   // hora GPS atrasada más de 1 min respecto a la recepción
+
+  async function apiFetch(path, opts = {}) {
+    const token = localStorage.getItem('authToken');
+    const res = await fetch(API + path, {
+      ...opts,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        ...(opts.headers || {}),
+      },
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error || 'Error del servidor');
+    return json;
+  }
+
+  let buses = [], equipos = [], pendientes = [];
+  const abiertos = new Set();   // equipos con el detalle de paquetes desplegado
+  let timer = null;
+
+  document.addEventListener('DOMContentLoaded', () => { cargar(); programarRefresco(); });
+  window.addEventListener('message', e => { if (e.data?.type === 'VIEW_SHOWN') cargar(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) cargar(); });
+
+  function programarRefresco() {
+    clearInterval(timer);
+    timer = setInterval(() => { if (!document.hidden) cargar(true); }, 15000);
+  }
+
+  // ── Formato ──
+  function esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+  }
+  function fmtHora(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    if (isNaN(d)) return '—';
+    return d.toLocaleString('es-CO', { timeZone: 'America/Bogota', day: '2-digit', month: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+  }
+  function edadS(iso) {
+    if (!iso) return null;
+    const t = new Date(iso).getTime();
+    return isNaN(t) ? null : Math.max(0, Math.round((Date.now() - t) / 1000));
+  }
+  function fmtDur(s) {
+    if (s === null || s === undefined) return '—';
+    const neg = s < 0; s = Math.abs(s);
+    let txt;
+    if (s < 60) txt = `${s} s`;
+    else if (s < 3600) txt = `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, '0')} s`;
+    else if (s < 86400) txt = `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min`;
+    else txt = `${Math.floor(s / 86400)} d ${Math.floor((s % 86400) / 3600)} h`;
+    return neg ? `−${txt}` : txt;
+  }
+  function busLabel(b) { return b ? `Bus ${b.numero} · ${b.placa || 's/p'}` : ''; }
+
+  function estadoEquipo(e) {
+    if (!e.activo) return { cls: 'off', txt: 'Desactivado', clave: 'off' };
+    const edad = edadS(e.ultimo_reporte_at);
+    if (edad === null) return { cls: 'off', txt: 'Nunca ha reportado', clave: 'nunca' };
+    if (edad > SIN_SENAL_S) return { cls: 'bad', txt: 'Sin señal', clave: 'sinsenal' };
+    if (!e.ultimo_fix) return { cls: 'warn', txt: 'Sin fix GPS', clave: 'sinfix' };
+    return { cls: 'on', txt: 'Reportando', clave: 'ok' };
+  }
+
+  // ── Carga ──
+  async function cargar(silencioso = false) {
+    try {
+      if (!buses.length) buses = await apiFetch('/api/buses');
+      [equipos, pendientes] = await Promise.all([
+        apiFetch('/api/monitoreo/equipos'),
+        apiFetch('/api/monitoreo/pendientes'),
+      ]);
+    } catch (e) {
+      if (!silencioso) {
+        document.getElementById('tbody').innerHTML =
+          `<tr><td colspan="8"><div class="empty">No se pudo cargar: ${esc(e.message)}</div></td></tr>`;
+      }
+      return;
+    }
+    // No redibujar mientras el usuario está eligiendo un bus en un select.
+    if (silencioso && document.activeElement?.tagName === 'SELECT') return;
+    pintarKpis();
+    pintarPendientes();
+    pintarEquipos();
+  }
+
+  function pintarKpis() {
+    const activos = equipos.filter(e => e.activo);
+    const est = activos.map(estadoEquipo);
+    const n = k => est.filter(x => x.clave === k).length;
+    const kpis = [
+      ['Equipos activos', activos.length, ''],
+      ['Reportando', n('ok'), 'ok'],
+      ['Sin señal (> 3 min)', n('sinsenal'), n('sinsenal') ? 'bad' : ''],
+      ['Sin fix GPS', n('sinfix'), n('sinfix') ? 'warn' : ''],
+      ['Pendientes', pendientes.length, pendientes.length ? 'warn' : ''],
+    ];
+    document.getElementById('kpis').innerHTML = kpis.map(([l, v, c]) =>
+      `<div class="kpi"><div class="kpi-label">${l}</div><div class="kpi-val ${c}">${v}</div></div>`).join('');
+  }
+
+  function opcionesBus(seleccionado, excluirOcupados = true, equipoId = null) {
+    const ocupados = new Set(equipos.filter(e => e.activo && e.bus_id && e.id !== equipoId).map(e => e.bus_id));
+    return ['<option value="">— Sin bus —</option>'].concat(
+      buses.map(b => {
+        const ocupado = excluirOcupados && ocupados.has(b.id);
+        return `<option value="${b.id}" ${b.id === seleccionado ? 'selected' : ''} ${ocupado ? 'disabled' : ''}>` +
+               `${esc(busLabel(b))}${ocupado ? ' (ya tiene equipo)' : ''}</option>`;
+      })
+    ).join('');
+  }
+
+  function pintarPendientes() {
+    const card = document.getElementById('cardPendientes');
+    card.style.display = pendientes.length ? '' : 'none';
+    document.getElementById('nPend').textContent = pendientes.length ? `(${pendientes.length})` : '';
+    document.getElementById('tbodyPend').innerHTML = pendientes.map(p => `
+      <tr>
+        <td data-label="IMEI"><span class="mono">${esc(p.imei)}</span>
+          <div class="sub">${p.trae_token ? 'Trae token en la URL' : 'Sin token en la URL'}</div></td>
+        <td data-label="Visto">${fmtHora(p.ultimo_visto_at)}<div class="sub">desde ${fmtHora(p.primer_visto_at)}</div></td>
+        <td data-label="Paquetes">${p.paquetes}</td>
+        <td data-label="Último paquete" class="full"><div class="mono payload">${esc(p.ultimo_payload)}</div></td>
+        <td data-label="Bus"><select id="pend-${esc(p.imei)}">${opcionesBus(null)}</select></td>
+        <td data-label=""><div class="acciones">
+          <button class="btn-primary" onclick="asignarPendiente('${esc(p.imei)}')">Asignar</button>
+          <button class="btn sm danger" onclick="descartarPendiente('${esc(p.imei)}')">Descartar</button>
+        </div></td>
+      </tr>`).join('');
+  }
+
+  function pintarEquipos() {
+    const tbody = document.getElementById('tbody');
+    if (!equipos.length) {
+      tbody.innerHTML = `<tr><td colspan="8"><div class="empty">Todavía no hay equipos registrados.<br>
+        Pulsa <b>+ Registrar equipo</b>, o configura el equipo y aparecerá arriba como pendiente.</div></td></tr>`;
+      return;
+    }
+    tbody.innerHTML = equipos.map(e => {
+      const est = estadoEquipo(e);
+      const edad = edadS(e.ultimo_reporte_at);
+      const desfaseAlto = e.ultimo_desfase_s !== null && Math.abs(e.ultimo_desfase_s) > DESFASE_ALTO_S;
+      const bus = buses.find(b => b.id === e.bus_id);
+      const fila = `
+      <tr>
+        <td data-label="Bus"><select id="bus-${e.id}" onchange="cambiarBus(${e.id})" ${e.activo ? '' : 'disabled'}>
+          ${opcionesBus(e.bus_id, true, e.id)}</select>
+          ${e.notas ? `<div class="sub">${esc(e.notas)}</div>` : ''}</td>
+        <td data-label="IMEI"><span class="mono">${esc(e.imei)}</span></td>
+        <td data-label="Estado"><span class="pill ${est.cls}"><span class="dot"></span>${est.txt}</span></td>
+        <td data-label="Último reporte">${fmtHora(e.ultimo_reporte_at)}
+          ${edad !== null ? `<div class="sub">hace ${fmtDur(edad)}</div>` : ''}</td>
+        <td data-label="Hora GPS">${fmtHora(e.ultima_hora_gps)}</td>
+        <td data-label="Desfase"><span class="${desfaseAlto ? 'desfase-alto' : ''}"
+            title="Recepción en el servidor menos la hora que reporta el GPS">${fmtDur(e.ultimo_desfase_s)}</span></td>
+        <td data-label="Paquetes">${Number(e.paquetes || 0).toLocaleString('es-CO')}</td>
+        <td data-label=""><div class="acciones">
+          <button class="btn sm" onclick="toggleDetalle(${e.id})">${abiertos.has(e.id) ? 'Ocultar' : 'Paquetes'}</button>
+          ${e.pos_lat != null ? `<a class="btn sm" style="text-decoration:none;" target="_blank" rel="noopener"
+              href="https://www.google.com/maps?q=${e.pos_lat},${e.pos_lon}">Mapa</a>` : ''}
+          <button class="btn sm" onclick="regenerarToken(${e.id})">Nuevo token</button>
+          <button class="btn sm ${e.activo ? 'danger' : ''}" onclick="toggleActivo(${e.id}, ${e.activo ? 0 : 1})">
+            ${e.activo ? 'Desactivar' : 'Activar'}</button>
+        </div></td>
+      </tr>`;
+      const detalle = abiertos.has(e.id)
+        ? `<tr class="detalle"><td colspan="8" class="full"><div class="paquetes" id="det-${e.id}">Cargando paquetes…</div></td></tr>`
+        : '';
+      return fila + detalle;
+    }).join('');
+    abiertos.forEach(id => cargarDetalle(id));
+  }
+
+  // ── Detalle: últimos paquetes ──
+  function toggleDetalle(id) {
+    abiertos.has(id) ? abiertos.delete(id) : abiertos.add(id);
+    pintarEquipos();
+  }
+
+  async function cargarDetalle(id) {
+    const cont = document.getElementById('det-' + id);
+    if (!cont) return;
+    try {
+      const pos = await apiFetch(`/api/monitoreo/equipos/${id}/posiciones?limite=20`);
+      if (!pos.length) { cont.innerHTML = '<div class="empty">Sin paquetes en los últimos 7 días.</div>'; return; }
+      cont.innerHTML = `<table>
+        <thead><tr><th>Recibido</th><th>Hora GPS</th><th>Desfase</th><th>Fix</th><th>Lat, Lon</th><th>Vel.</th><th>Rumbo</th><th>Precisión</th><th>Sat.</th></tr></thead>
+        <tbody>${pos.map(p => `<tr>
+          <td>${fmtHora(p.recibido_at)}</td>
+          <td>${fmtHora(p.hora_gps)}</td>
+          <td class="${p.desfase_s !== null && Math.abs(p.desfase_s) > DESFASE_ALTO_S ? 'desfase-alto' : ''}">${fmtDur(p.desfase_s)}</td>
+          <td>${p.fix ? '<span class="pill on">Sí</span>' : '<span class="pill warn">Sin fix</span>'}</td>
+          <td class="mono">${p.lat != null ? `${p.lat.toFixed(6)}, ${p.lon.toFixed(6)}` : '—'}</td>
+          <td>${p.velocidad_kmh != null ? Math.round(p.velocidad_kmh) + ' km/h' : '—'}</td>
+          <td>${p.rumbo != null ? Math.round(p.rumbo) + '°' : '—'}</td>
+          <td>${p.precision_m != null ? p.precision_m + ' m' : '—'}</td>
+          <td>${p.satelites ?? '—'}</td>
+        </tr>`).join('')}</tbody></table>`;
+    } catch (err) {
+      cont.innerHTML = `<div class="empty">${esc(err.message)}</div>`;
+    }
+  }
+
+  // ── Acciones ──
+  function abrirRegistro() {
+    document.getElementById('regImei').value = '';
+    document.getElementById('regNotas').value = '';
+    document.getElementById('regBus').innerHTML = opcionesBus(null);
+    document.getElementById('modalRegistro').classList.remove('hidden');
+    setTimeout(() => document.getElementById('regImei').focus(), 50);
+  }
+  function cerrarModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+  async function registrar() {
+    const imei = document.getElementById('regImei').value.trim();
+    const busId = document.getElementById('regBus').value;
+    if (!imei) { toast('Escribe el IMEI del equipo'); return; }
+    const btn = document.getElementById('btnRegistrar');
+    btn.disabled = true;
+    try {
+      const r = await apiFetch('/api/monitoreo/equipos', {
+        method: 'POST',
+        body: JSON.stringify({ imei, bus_id: busId ? +busId : null,
+                               notas: document.getElementById('regNotas').value.trim() }),
+      });
+      cerrarModal('modalRegistro');
+      mostrarUrl(r.imei, r.token, 'Equipo registrado');
+      cargar();
+    } catch (e) { toast(e.message); }
+    finally { btn.disabled = false; }
+  }
+
+  function urlEnvio(imei, token) {
+    return `${API}/api/gps/posicion?imei=${encodeURIComponent(imei)}&token=${encodeURIComponent(token)}`;
+  }
+
+  function mostrarUrl(imei, token, titulo) {
+    document.getElementById('tokTitulo').textContent = titulo;
+    document.getElementById('tokSub').innerHTML =
+      `Equipo <b class="mono">${esc(imei)}</b>. Configura esta URL como dirección de envío del equipo.`;
+    document.getElementById('tokUrl').textContent = urlEnvio(imei, token);
+    document.getElementById('modalToken').classList.remove('hidden');
+  }
+
+  async function copiarUrl() {
+    const txt = document.getElementById('tokUrl').textContent;
+    try { await navigator.clipboard.writeText(txt); toast('URL copiada'); }
+    catch { toast('No se pudo copiar: selecciónala y cópiala a mano'); }
+  }
+
+  async function cambiarBus(id) {
+    const v = document.getElementById('bus-' + id).value;
+    try {
+      await apiFetch(`/api/monitoreo/equipos/${id}`, { method: 'PUT', body: JSON.stringify({ bus_id: v ? +v : null }) });
+      toast(v ? 'Equipo asignado al bus' : 'Equipo sin bus');
+    } catch (e) { toast(e.message); }
+    cargar();
+  }
+
+  async function toggleActivo(id, activo) {
+    if (!activo && !confirm('¿Desactivar este equipo? Sus envíos se rechazarán hasta que lo actives de nuevo.')) return;
+    try {
+      await apiFetch(`/api/monitoreo/equipos/${id}`, { method: 'PUT', body: JSON.stringify({ activo: !!activo }) });
+      toast(activo ? 'Equipo activado' : 'Equipo desactivado');
+    } catch (e) { toast(e.message); }
+    cargar();
+  }
+
+  async function regenerarToken(id) {
+    if (!confirm('¿Generar un token nuevo? El equipo dejará de ser aceptado hasta que le pongas la URL nueva.')) return;
+    try {
+      const r = await apiFetch(`/api/monitoreo/equipos/${id}/token`, { method: 'POST' });
+      mostrarUrl(r.imei, r.token, 'Token nuevo generado');
+    } catch (e) { toast(e.message); }
+  }
+
+  async function asignarPendiente(imei) {
+    const v = document.getElementById('pend-' + imei).value;
+    if (!v && !confirm('¿Registrar el equipo sin bus? No se verá en el mapa hasta que le asignes uno.')) return;
+    try {
+      const r = await apiFetch(`/api/monitoreo/pendientes/${encodeURIComponent(imei)}/asignar`, {
+        method: 'POST', body: JSON.stringify({ bus_id: v ? +v : null }),
+      });
+      if (r.token) mostrarUrl(r.imei, r.token, 'Equipo registrado — falta el token');
+      else toast('Equipo registrado. Conserva el token que ya traía.');
+    } catch (e) { toast(e.message); }
+    cargar();
+  }
+
+  async function descartarPendiente(imei) {
+    if (!confirm(`¿Descartar el IMEI ${imei}? Si sigue enviando, volverá a aparecer.`)) return;
+    try {
+      await apiFetch(`/api/monitoreo/pendientes/${encodeURIComponent(imei)}`, { method: 'DELETE' });
+    } catch (e) { toast(e.message); }
+    cargar();
+  }
+
+  let toastTimer = null;
+  function toast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.classList.remove('hidden');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.add('hidden'), 3000);
+  }
+</script>
+</body>
+</html>
