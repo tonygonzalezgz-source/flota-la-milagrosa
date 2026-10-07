@@ -1361,6 +1361,8 @@ def get_buses():
 @app.route("/api/buses/<int:bus_id>", methods=["GET"])
 @require_auth
 def get_bus(bus_id):
+    if not _puede_ver_bus(bus_id):
+        return _sin_acceso_bus()
     db = get_db()
     row = db.execute("SELECT * FROM buses WHERE id = ?", (bus_id,)).fetchone()
     db.close()
@@ -1469,7 +1471,7 @@ def delete_bus(bus_id):
 # ──────────────────────────────────────────
 
 @app.route("/api/propietarios", methods=["GET"])
-@require_auth
+@require_role("Administrador", "Analista")
 def get_propietarios():
     db = get_db()
     rows = db.execute(
@@ -1626,7 +1628,7 @@ def delete_ruta(ruta_id):
 # ──────────────────────────────────────────
 
 @app.route("/api/conductores", methods=["GET"])
-@require_auth
+@require_role("Administrador", "Analista", "Despachador", "Jefe de Ruta")
 def get_conductores():
     db   = get_db()
     rows = db.execute(
@@ -1998,7 +2000,7 @@ def _rutas_de_despachador(db, uid):
 
 
 @app.route("/api/despacho", methods=["GET"])
-@require_auth
+@require_role("Administrador", "Analista", "Despachador", "Jefe de Ruta", "Conductor")
 def get_despacho():
     """Devuelve las rutas activas y todos los buses (con su estado del día).
     Administrador y Despachador ven la misma flota completa y el mismo catálogo
@@ -2040,7 +2042,7 @@ def get_despacho():
 
 
 @app.route("/api/despacho/historial", methods=["GET"])
-@require_auth
+@require_role("Administrador", "Analista", "Despachador", "Jefe de Ruta")
 def get_historial_despacho():
     """Historial de despacho: todos los vehículos por cada fecha con actividad."""
     desde = request.args.get("desde", (date.today() - timedelta(days=30)).isoformat())
@@ -2259,7 +2261,7 @@ def ahora_bogota():
 
 
 @app.route("/api/alistamiento", methods=["GET"])
-@require_auth
+@require_role("Administrador", "Analista", "Despachador", "Jefe de Ruta", "Conductor")
 def get_alistamiento():
     """Devuelve el alistamiento de un bus para una fecha dada, o null si no existe."""
     fecha  = request.args.get("fecha", date.today().isoformat())
@@ -2332,7 +2334,7 @@ def upsert_alistamiento():
 
 
 @app.route("/api/alistamiento/historial", methods=["GET"])
-@require_auth
+@require_role("Administrador", "Analista", "Despachador", "Jefe de Ruta", "Conductor")
 def historial_alistamiento():
     """Historial de alistamientos de un bus, ordenado del más reciente al más antiguo."""
     bus_id = request.args.get("bus_id")
@@ -2405,7 +2407,7 @@ def get_tipos_novedad():
 # ──────────────────────────────────────────
 
 @app.route("/api/pasajeros", methods=["POST"])
-@require_auth
+@require_role("Administrador", "Analista")
 def create_pasajeros():
     data = request.get_json(force=True)
     bus_id     = data.get("bus_id")
@@ -2428,7 +2430,7 @@ def create_pasajeros():
 
 
 @app.route("/api/pasajeros", methods=["GET"])
-@require_auth
+@require_role("Administrador", "Analista", "Jefe de Ruta")
 def get_pasajeros():
     fecha = request.args.get("fecha", date.today().isoformat())
     db = get_db()
@@ -2456,8 +2458,10 @@ def get_pasajeros():
 # ──────────────────────────────────────────
 
 @app.route("/api/mantenimiento/estado/<int:bus_id>", methods=["GET"])
-@require_auth
+@require_role("Administrador", "Técnico Mant.")
 def get_maint_estado(bus_id):
+    if not _puede_ver_bus(bus_id):
+        return _sin_acceso_bus()
     db = get_db()
     rows = db.execute(
         """
@@ -2504,7 +2508,7 @@ def get_maint_estado_flota():
 
 
 @app.route("/api/mantenimiento/estado", methods=["PUT"])
-@require_auth
+@require_role("Administrador", "Técnico Mant.")
 def update_maint_estado():
     data = request.get_json(force=True)
     bus_id          = data.get("bus_id")
@@ -2516,6 +2520,8 @@ def update_maint_estado():
 
     if not all([bus_id, tipo_novedad_id]):
         return jsonify({"error": "Faltan campos requeridos"}), 400
+    if not _puede_ver_bus(bus_id):
+        return _sin_acceso_bus()
 
     db = get_db()
     db.execute(
@@ -2538,16 +2544,18 @@ def update_maint_estado():
 
 
 @app.route("/api/mantenimiento/registro", methods=["POST"])
-@require_auth
+@require_role("Administrador", "Analista", "Jefe de Ruta", "Técnico Mant.")
 def create_maint_registro():
     data = request.get_json(force=True)
     bus_id          = data.get("bus_id")
     tipo_novedad_id = data.get("tipo_novedad_id")
     observacion     = data.get("observacion", "")
-    usuario_id      = data.get("usuario_id")
+    usuario_id      = request.jwt_user_id  # el autor es quien tiene la sesión
 
     if not all([bus_id, tipo_novedad_id]):
         return jsonify({"error": "Faltan campos requeridos"}), 400
+    if not _puede_ver_bus(bus_id):
+        return _sin_acceso_bus()
 
     db = get_db()
     cursor = db.execute(
@@ -2650,6 +2658,29 @@ def _usuario_consultado():
     if getattr(request, "jwt_user_rol", None) in ROLES_CON_BUSES_ASIGNADOS:
         return request.jwt_user_id
     return request.args.get("user_id", type=int)
+
+
+def _puede_ver_bus(bus_id):
+    """Propietario y Técnico Mant. solo acceden a los buses que tienen
+    asignados; los demás roles, a cualquiera."""
+    if getattr(request, "jwt_user_rol", None) not in ROLES_CON_BUSES_ASIGNADOS:
+        return True
+    try:
+        bus_id = int(bus_id)
+    except (TypeError, ValueError):
+        return False
+    db = get_db()
+    try:
+        return db.execute(
+            "SELECT 1 FROM usuario_buses WHERE usuario_id = ? AND bus_id = ?",
+            (request.jwt_user_id, bus_id),
+        ).fetchone() is not None
+    finally:
+        db.close()
+
+
+def _sin_acceso_bus():
+    return jsonify({"error": "No tienes acceso a este bus"}), 403
 
 
 def _bus_ids_for_user(db, user_id):
@@ -2908,7 +2939,7 @@ def batch_upsert_movilidad():
 
 
 @app.route("/api/movilidad/fecha/<fecha>", methods=["DELETE"])
-@require_auth
+@require_role("Administrador", "Analista")
 def delete_movilidad_fecha(fecha):
     """Elimina todos los registros de movilidad para una fecha dada."""
     db      = get_db()
@@ -3947,9 +3978,11 @@ def admin_set_usuario_rutas(uid):
 # ══════════════════════════════════════════
 
 @app.route("/api/mantenimiento/config/<int:bus_id>", methods=["GET"])
-@require_auth
+@require_role("Administrador", "Técnico Mant.")
 def get_bus_mant_config(bus_id):
     """Devuelve los ítems del catálogo con la config y último historial para un bus."""
+    if not _puede_ver_bus(bus_id):
+        return _sin_acceso_bus()
     db = get_db()
     bus = db.execute(
         "SELECT id, numero, placa, km_actuales, km_inicial FROM buses WHERE id = ?",
@@ -4014,7 +4047,7 @@ def get_bus_mant_config(bus_id):
 
 
 @app.route("/api/mantenimiento/config", methods=["POST"])
-@require_auth
+@require_role("Administrador", "Técnico Mant.")
 def upsert_bus_mant_config():
     """Bulk upsert de la config de un bus.
     Body: { bus_id, km_inicial, items: [{ item_id, intervalo_km, intervalo_dias,
@@ -4026,6 +4059,8 @@ def upsert_bus_mant_config():
     km_inicial = data.get("km_inicial")
     if not bus_id:
         return jsonify({"error": "bus_id requerido"}), 400
+    if not _puede_ver_bus(bus_id):
+        return _sin_acceso_bus()
 
     db = get_db()
     if km_inicial is not None:
@@ -4116,8 +4151,10 @@ def add_mant_historial():
 
 
 @app.route("/api/mantenimiento/historial/<int:bus_id>", methods=["GET"])
-@require_auth
+@require_role("Administrador", "Técnico Mant.")
 def get_mant_historial(bus_id):
+    if not _puede_ver_bus(bus_id):
+        return _sin_acceso_bus()
     db = get_db()
     rows = db.execute(
         """SELECT h.id, h.item_id, c.sistema, c.nombre, h.fecha_realizado,
@@ -4134,7 +4171,7 @@ def get_mant_historial(bus_id):
 
 
 @app.route("/api/mantenimiento/alertas", methods=["GET"])
-@require_auth
+@require_role("Administrador", "Analista", "Jefe de Ruta", "Técnico Mant.")
 def get_mant_alertas():
     """Calcula on-the-fly las alarmas (amarillas/rojas) de toda la flota."""
     db    = get_db()
