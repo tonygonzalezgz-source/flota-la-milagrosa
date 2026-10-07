@@ -1232,6 +1232,12 @@ def aceptar_tratamiento_datos():
         return jsonify({"error": f"No se pudo registrar la aceptación: {e}"}), 500
 
 
+# Límites del contexto que se manda al modelo en cada pregunta del chatbot
+# (cuidan el costo en tokens): últimos 10 mensajes, cada uno hasta 2.000 caracteres.
+CHAT_MAX_MENSAJES = 10
+CHAT_MAX_CARACTERES = 2000
+
+
 def _feature_chatbot_enabled():
     return os.environ.get("FEATURE_CHATBOT", "false").strip().lower() in ("1", "true", "yes", "on")
 
@@ -1280,7 +1286,14 @@ def chat():
         role = m.get("role")
         content = m.get("content")
         if role in ("user", "assistant") and isinstance(content, str) and content.strip():
-            messages.append({"role": role, "content": content})
+            messages.append({"role": role, "content": content[:CHAT_MAX_CARACTERES]})
+
+    # Tope de contexto: al modelo solo van los últimos mensajes, así una
+    # conversación larga (o un historial guardado en el celular) no dispara
+    # los tokens. La conversación debe arrancar con una pregunta del usuario.
+    messages = messages[-CHAT_MAX_MENSAJES:]
+    while messages and messages[0]["role"] != "user":
+        messages.pop(0)
 
     if not messages or messages[-1]["role"] != "user":
         return jsonify({"error": "Falta un mensaje del usuario."}), 400
@@ -1324,7 +1337,7 @@ def chat():
 @app.route("/api/buses", methods=["GET"])
 @require_auth
 def get_buses():
-    user_id = request.args.get("user_id", type=int)
+    user_id = _usuario_consultado()
     db = get_db()
     if user_id:
         user = db.execute(
@@ -2466,7 +2479,7 @@ def get_maint_estado_flota():
     (evita el N+1 de una llamada por bus desde los dashboards).
     Respuesta: { "<bus_id>": [items...] }. Con user_id de un Propietario,
     solo sus buses."""
-    user_id = request.args.get("user_id", type=int)
+    user_id = _usuario_consultado()
     db      = get_db()
     is_prop, bus_ids = _bus_ids_for_user(db, user_id)
 
@@ -2555,7 +2568,7 @@ def create_maint_registro():
 @require_auth
 def dashboard_propietario():
     today = date.today().isoformat()
-    user_id = request.args.get("user_id", type=int)
+    user_id = _usuario_consultado()
     db = get_db()
 
     bus_ids = []
@@ -2623,6 +2636,22 @@ def dashboard_propietario():
 #  Movilidad diaria
 # ──────────────────────────────────────────
 
+# Roles que solo pueden ver los buses que tienen asignados (usuario_buses).
+ROLES_CON_BUSES_ASIGNADOS = ("Propietario", "Técnico Mant.")
+
+
+def _usuario_consultado():
+    """Usuario por el que se filtran los datos de una consulta.
+
+    Propietario y Técnico Mant. solo ven lo suyo: se usa SIEMPRE el usuario
+    del token, aunque la petición mande otro `user_id` o no mande ninguno.
+    Los demás roles (Administrador, Analista…) pueden pedir la vista de un
+    usuario con `?user_id=`, o la flota completa sin él."""
+    if getattr(request, "jwt_user_rol", None) in ROLES_CON_BUSES_ASIGNADOS:
+        return request.jwt_user_id
+    return request.args.get("user_id", type=int)
+
+
 def _bus_ids_for_user(db, user_id):
     """Retorna (es_propietario, [bus_ids]).
     Si no es Propietario → (False, []) → sin restricción.
@@ -2640,7 +2669,7 @@ def _bus_ids_for_user(db, user_id):
 @require_auth
 def get_movilidad():
     fecha            = request.args.get("fecha", date.today().isoformat())
-    user_id          = request.args.get("user_id", type=int)
+    user_id          = _usuario_consultado()
     db               = get_db()
     is_prop, bus_ids = _bus_ids_for_user(db, user_id)
 
@@ -2702,7 +2731,7 @@ def get_movilidad():
 def get_movilidad_rango():
     desde            = request.args.get("desde", date.today().isoformat())
     hasta            = request.args.get("hasta", date.today().isoformat())
-    user_id          = request.args.get("user_id", type=int)
+    user_id          = _usuario_consultado()
     db               = get_db()
     is_prop, bus_ids = _bus_ids_for_user(db, user_id)
 
@@ -2894,7 +2923,7 @@ def delete_movilidad_fecha(fecha):
 @require_auth
 def get_movilidad_fechas():
     """Fechas que tienen al menos un registro (para resaltar el calendario)."""
-    user_id = request.args.get("user_id", type=int)
+    user_id = _usuario_consultado()
     db      = get_db()
     is_prop, bus_ids = _bus_ids_for_user(db, user_id)
 
