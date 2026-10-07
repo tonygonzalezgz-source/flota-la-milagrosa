@@ -74,6 +74,10 @@ class Usuario {
 
 final apiClientProvider = Provider<ApiClient>((ref) => ApiClient());
 
+/// Conversación del asistente guardada en el celular (ver features/chat).
+/// Se borra al cerrar sesión.
+const claveHistorialChat = 'chatHistorial';
+
 final secureStorageProvider =
     Provider<FlutterSecureStorage>((ref) => const FlutterSecureStorage());
 
@@ -157,5 +161,6 @@ class SessionController extends AsyncNotifier<Usuario?> {
     _api.token = null;
     await _storage.delete(key: _kToken);
     await _storage.delete(key: _kUser);
+    await _storage.delete(key: claveHistorialChat);
   }
 }

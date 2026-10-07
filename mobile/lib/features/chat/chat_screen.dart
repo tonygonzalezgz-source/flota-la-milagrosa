@@ -45,6 +45,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _texto = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+    // Si quedó abierta una conversación de ayer, ya caducó: se empieza otra.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ref.read(chatProvider.notifier).revisarVigencia();
+    });
+  }
+
+  @override
   void dispose() {
     _texto.dispose();
     super.dispose();
@@ -65,6 +74,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     // La lista va invertida para que siempre quede pegada al último mensaje,
     // también mientras la respuesta se va escribiendo.
     final items = <Widget>[
+      const Center(
+        child: Text(
+          'Hoy · la conversación se guarda en este celular hasta la medianoche',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 11, color: AppColors.muted),
+        ),
+      ),
       _burbuja(const MensajeChat(
         Autor.asistente,
         'Hola 👋 Soy el asistente de BusControl. Pregúntame por tus buses: '
