@@ -6,6 +6,7 @@ import '../../core/modulos.dart';
 import '../../core/session.dart';
 import '../../core/theme.dart';
 import '../../widgets/comunes.dart';
+import '../chat/chat_screen.dart';
 import '../propietario/propietario_shell.dart';
 
 /// Menú principal: un acceso por cada módulo que el rol tiene permitido.
@@ -25,6 +26,7 @@ class HomeScreen extends ConsumerWidget {
     final web = lista.where((m) => !m.nativo).toList();
 
     return Scaffold(
+      floatingActionButton: const BotonAsistente(),
       appBar: AppBar(
         title: const Text('BusControl'),
         actions: [

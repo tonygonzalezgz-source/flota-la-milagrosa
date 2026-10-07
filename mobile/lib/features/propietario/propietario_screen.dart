@@ -10,6 +10,7 @@ import '../../core/theme.dart';
 import '../../widgets/aurora.dart';
 import '../../widgets/comunes.dart';
 import '../../widgets/marca.dart' show logoBusControlAsset;
+import '../chat/chat_screen.dart';
 import 'grafica_semanal.dart';
 import 'vehiculo_screen.dart';
 
@@ -83,6 +84,7 @@ class _PropietarioScreenState extends ConsumerState<PropietarioScreen> {
     final user = ref.watch(sessionProvider).value;
     return Scaffold(
       backgroundColor: AppColors.bgLight,
+      floatingActionButton: const BotonAsistente(),
       body: _cargando || _error != null
           ? Column(children: [
               _cabecera(user?.nombre ?? '', traslape: 24),

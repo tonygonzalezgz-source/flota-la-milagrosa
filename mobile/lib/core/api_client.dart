@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 
 import 'config.dart';
@@ -58,6 +60,38 @@ class ApiClient {
 
   Future<dynamic> delete(String path) => _run(() => _dio.delete(path));
 
+  /// POST cuya respuesta llega por partes como Server-Sent Events
+  /// (`data: {...}`), p. ej. el asistente `/api/chat`. Entrega cada evento
+  /// apenas llega, así la respuesta se va viendo mientras se escribe.
+  Stream<Map<String, dynamic>> postEventos(String path, {Object? body}) async* {
+    try {
+      final res = await _dio.post<ResponseBody>(
+        path,
+        data: body,
+        // El modelo puede pensar o consultar la BD un rato antes del primer dato.
+        options: Options(responseType: ResponseType.stream, receiveTimeout: const Duration(seconds: 90)),
+      );
+      yield* eventosSse(res.data!.stream.cast<List<int>>().transform(utf8.decoder));
+    } on DioException catch (e) {
+      final status = e.response?.statusCode;
+      if (status == 401) onUnauthorized?.call();
+      throw ApiException(await _mensajeStream(e), status);
+    }
+  }
+
+  /// Con `ResponseType.stream` el cuerpo del error también llega como stream.
+  Future<String> _mensajeStream(DioException e) async {
+    final data = e.response?.data;
+    if (data is ResponseBody) {
+      try {
+        final texto = await data.stream.cast<List<int>>().transform(utf8.decoder).join();
+        final j = jsonDecode(texto);
+        if (j is Map && j['error'] is String) return j['error'] as String;
+      } catch (_) {}
+    }
+    return _mensaje(e);
+  }
+
   Map<String, dynamic>? _limpiar(Map<String, dynamic>? q) {
     if (q == null) return null;
     final out = <String, dynamic>{};
@@ -91,6 +125,30 @@ class ApiClient {
       default:
         final s = e.response?.statusCode;
         return s != null ? 'Error del servidor ($s)' : 'Error de red';
+    }
+  }
+}
+
+/// Convierte texto Server-Sent Events en sus eventos JSON. Los trozos pueden
+/// cortar un evento por la mitad: se acumula hasta la línea en blanco que lo
+/// cierra.
+Stream<Map<String, dynamic>> eventosSse(Stream<String> trozos) async* {
+  var buf = '';
+  await for (final t in trozos) {
+    buf += t.replaceAll('\r\n', '\n');
+    int fin;
+    while ((fin = buf.indexOf('\n\n')) >= 0) {
+      final bloque = buf.substring(0, fin);
+      buf = buf.substring(fin + 2);
+      for (final linea in bloque.split('\n')) {
+        if (!linea.startsWith('data:')) continue;
+        try {
+          final ev = jsonDecode(linea.substring(5).trim());
+          if (ev is Map<String, dynamic>) yield ev;
+        } catch (_) {
+          // Un evento malformado no corta la conversación.
+        }
+      }
     }
   }
 }
