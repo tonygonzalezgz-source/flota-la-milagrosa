@@ -112,7 +112,7 @@ PG_SCHEMA    = os.path.join(os.path.dirname(__file__), "supabase_schema.sql")
 # Versión del esquema. IMPORTANTE: incrementar en 1 cada vez que se agregue
 # una migración (ALTER/CREATE) a migrate_db(); si no se incrementa, la
 # migración nueva NO corre en las BD ya versionadas.
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
 
 ROLE_VIEWS = {
     "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho", "historial-despacho", "gastos", "tecnologia", "chequeo", "eds", "lavada", "mapa", "relojes", "mb-mapa", "mb-rutas", "mb-equipos"],
@@ -130,6 +130,23 @@ ROLE_VIEWS = {
 
 # Roles que pueden operar el módulo de chequeo (llegada/salida en puestos)
 ROLES_CHEQUEO = ("Despachador", "Administrador", "Jefe de Ruta")
+
+# Desde esta fecha (inclusive) los pasajeros de movilidad diaria salen de la
+# registradora que anota el despachador: pasajeros = registradora_fin -
+# registradora_inicio. Antes se conservan los digitados o importados del BEA.
+PAX_REGISTRADORA_DESDE = "2026-10-05"
+
+
+def _pax_registradora(inicio, fin):
+    """Pasajeros según el torniquete (fin - inicio), o None si falta alguna
+    lectura o el fin es menor que el inicio (lectura inválida)."""
+    if inicio is None or fin is None:
+        return None
+    try:
+        inicio, fin = int(inicio), int(fin)
+    except (TypeError, ValueError):
+        return None
+    return fin - inicio if fin >= inicio else None
 
 
 # ══════════════════════════════════════════
@@ -1044,6 +1061,34 @@ def migrate_db():
         monitoreo.migrar(db)
     except Exception as e:
         print(f"[migrate_db] monitoreo: {e}")
+
+    # Pasajeros de movilidad desde la registradora del despacho — SCHEMA_VERSION 15
+    # Backfill de los días desde PAX_REGISTRADORA_DESDE que ya tenían movilidad
+    # guardada antes del cambio. Idempotente: solo toca filas cuyo despacho
+    # tiene ambas lecturas válidas (fin >= inicio).
+    try:
+        db.execute(
+            """UPDATE registros_movilidad
+                  SET pasajeros = (
+                      SELECT d.registradora_fin - d.registradora_inicio
+                        FROM despacho_diario d
+                       WHERE d.bus_id = registros_movilidad.bus_id
+                         AND d.fecha  = registros_movilidad.fecha)
+                WHERE fecha >= ?
+                  AND EXISTS (
+                      SELECT 1
+                        FROM despacho_diario d
+                       WHERE d.bus_id = registros_movilidad.bus_id
+                         AND d.fecha  = registros_movilidad.fecha
+                         AND d.registradora_inicio IS NOT NULL
+                         AND d.registradora_fin    IS NOT NULL
+                         AND d.registradora_fin >= d.registradora_inicio)""",
+            (PAX_REGISTRADORA_DESDE,),
+        )
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"[migrate_db] backfill pasajeros desde registradora: {e}")
 
     # Registrar la versión migrada: mientras coincida con SCHEMA_VERSION,
     # los próximos init_db() retornan con una sola consulta.
@@ -2082,6 +2127,7 @@ def batch_upsert_despacho():
     estados_validos = ("trabajando", "taller", "descanso")
     db    = get_db()
     saved = 0
+    pax_por_bus = {}   # bus_id → pasajeros según la registradora (fin - inicio)
 
     # Validación previa: si algún bus queda en 'trabajando' pero tiene
     # documentos vencidos (SOAT / Tecnomecánica / Tarjeta de Operación), se
@@ -2180,6 +2226,22 @@ def batch_upsert_despacho():
              viajes, reg_inicio, reg_fin, uid),
         )
         saved += 1
+        pax = _pax_registradora(reg_inicio, reg_fin)
+        if pax is not None:
+            pax_por_bus[bus_id] = pax
+
+    # Los pasajeros de movilidad diaria salen de la registradora (ver
+    # PAX_REGISTRADORA_DESDE): si el despachador corrige una lectura después de
+    # que el analista guardó la movilidad, el dato guardado se actualiza. Solo
+    # toca registros de movilidad existentes; no los crea.
+    if fecha >= PAX_REGISTRADORA_DESDE:
+        for bus_id, pax in pax_por_bus.items():
+            db.execute(
+                """UPDATE registros_movilidad
+                      SET pasajeros = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE bus_id = ? AND fecha = ? AND pasajeros <> ?""",
+                (pax, bus_id, fecha, pax),
+            )
 
     db.commit()
     db.close()
@@ -2783,10 +2845,23 @@ def batch_upsert_movilidad():
     # Lo que envíe el cliente solo se usa como respaldo cuando no hay
     # despacho o el despacho tiene ese campo vacío.
     desp_rows = db.execute(
-        "SELECT bus_id, conductor_id, ruta_id FROM despacho_diario WHERE fecha = ?",
+        """SELECT bus_id, conductor_id, ruta_id, registradora_inicio, registradora_fin
+             FROM despacho_diario WHERE fecha = ?""",
         (fecha,),
     ).fetchall()
     despacho = {d["bus_id"]: dict(d) for d in desp_rows}
+
+    # Desde PAX_REGISTRADORA_DESDE los pasajeros salen de la registradora del
+    # despacho (fin - inicio) y mandan sobre lo que envíe el cliente o el BEA.
+    # Sin lecturas válidas se usa el valor enviado como respaldo.
+    usa_registradora = fecha >= PAX_REGISTRADORA_DESDE
+
+    def _pasajeros(r, d):
+        if usa_registradora and d:
+            pax = _pax_registradora(d.get("registradora_inicio"), d.get("registradora_fin"))
+            if pax is not None:
+                return pax
+        return r.get("pasajeros", 0)
 
     # Administrador y Analista pueden corregir el conductor/ruta del despacho
     # cuando el despachador se equivocó. La corrección se propaga al despacho
@@ -2809,7 +2884,7 @@ def batch_upsert_movilidad():
                        km_recorridos = excluded.km_recorridos,
                        usuario_id    = excluded.usuario_id,
                        updated_at    = CURRENT_TIMESTAMP""",
-                (bus_id, fecha, r.get("vueltas", 0), r.get("pasajeros", 0),
+                (bus_id, fecha, r.get("vueltas", 0), _pasajeros(r, d),
                  r.get("km_recorridos", 0),
                  d["ruta_id"] if d else None,
                  d["conductor_id"] if d else None,
@@ -2852,7 +2927,7 @@ def batch_upsert_movilidad():
                    conductor_id  = excluded.conductor_id,
                    usuario_id    = excluded.usuario_id,
                    updated_at    = CURRENT_TIMESTAMP""",
-            (bus_id, fecha, r.get("vueltas", 0), r.get("pasajeros", 0),
+            (bus_id, fecha, r.get("vueltas", 0), _pasajeros(r, d),
              r.get("km_recorridos", 0), r.get("novedades", ""),
              ruta_id, conductor_id, usuario_id),
         )
