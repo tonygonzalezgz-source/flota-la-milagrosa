@@ -243,6 +243,7 @@ class _AlistamientoFormState extends ConsumerState<AlistamientoForm> {
               ],
               selected: {?v},
               style: ButtonStyle(
+                foregroundColor: const WidgetStatePropertyAll(AppColors.texto),
                 backgroundColor: WidgetStateProperty.resolveWith((s) {
                   if (!s.contains(WidgetState.selected)) return null;
                   return switch (v) {

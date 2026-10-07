@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/config.dart';
 import '../../core/session.dart';
 import '../../widgets/marca.dart';
 
+/// Login con el estilo "Cabina Neón" (propuesta A).
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
@@ -18,7 +20,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProv
   bool _verPass = false;
   String? _error;
 
-  /// Entrada escalonada: logo, nombre, campos y botón aparecen subiendo.
+  /// Entrada escalonada: campos, botón y pie aparecen subiendo.
   late final AnimationController _entrada =
       AnimationController(vsync: this, duration: const Duration(milliseconds: 1100))..forward();
 
@@ -60,74 +62,98 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProv
     );
   }
 
-  /// Campo "vidrio" del login web. Se usa hintText (no labelText) para que el
-  /// texto quede centrado dentro del campo y no flote sobre el borde.
-  InputDecoration _campo(String hint, IconData icono, {Widget? sufijo}) => InputDecoration(
-        hintText: hint,
-        hintStyle: TextStyle(color: Marca.texto.withValues(alpha: .55)),
-        prefixIcon: Icon(icono, color: Marca.cian),
-        suffixIcon: sufijo,
-        filled: true,
-        fillColor: Colors.white.withValues(alpha: .07),
-        contentPadding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: Marca.cian.withValues(alpha: .25)),
+  /// Etiqueta en mayúsculas encima de un campo de vidrio. La etiqueta va
+  /// fuera del campo para que nunca quede montada sobre el borde.
+  Widget _campo({
+    required String etiqueta,
+    required IconData icono,
+    required TextEditingController controller,
+    required String pista,
+    bool oculto = false,
+    Widget? sufijo,
+    TextInputAction? accion,
+    ValueChanged<String>? alEnviar,
+  }) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(etiqueta,
+          style: const TextStyle(
+            fontFamily: Marca.cuerpo,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 2,
+            color: Marca.apagado,
+          )),
+      const SizedBox(height: 8),
+      TextField(
+        controller: controller,
+        obscureText: oculto,
+        autocorrect: false,
+        enableSuggestions: false,
+        textInputAction: accion,
+        onSubmitted: alEnviar,
+        cursorColor: Marca.cian,
+        style: const TextStyle(fontFamily: Marca.cuerpo, color: Marca.texto, fontSize: 16, fontWeight: FontWeight.w500),
+        decoration: InputDecoration(
+          hintText: pista,
+          hintStyle: const TextStyle(fontFamily: Marca.cuerpo, color: Color(0xFF5F7790)),
+          prefixIcon: Icon(icono, color: Marca.cian),
+          suffixIcon: sufijo,
+          filled: true,
+          fillColor: Colors.white.withValues(alpha: .04),
+          contentPadding: const EdgeInsets.symmetric(vertical: 17, horizontal: 16),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide(color: Marca.cian.withValues(alpha: .28)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: const BorderSide(color: Marca.cian, width: 1.4),
+          ),
         ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: Marca.cian.withValues(alpha: .25)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Marca.cian, width: 1.6),
-        ),
-      );
+      ),
+    ]);
+  }
 
   @override
   Widget build(BuildContext context) {
-    const estiloTexto = TextStyle(color: Colors.white, fontSize: 16);
+    final host = Uri.tryParse(AppConfig.apiUrl)?.host ?? AppConfig.apiUrl;
     return Scaffold(
       body: FondoAnimado(
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 420),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                   // Logo, nombre y subtítulo "viajan" desde la intro hasta aquí
                   // (Hero), así que no llevan animación de entrada propia.
-                  const Center(child: Hero(tag: 'logo-buscontrol', child: LogoBusControl(tamano: 116))),
-                  const SizedBox(height: 22),
+                  const Center(child: Hero(tag: 'logo-buscontrol', child: LogoBusControl(tamano: 124))),
+                  const SizedBox(height: 20),
                   const Hero(tag: 'nombre-buscontrol', child: NombreBusControl()),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
                   const Hero(tag: 'sub-buscontrol', child: SubtituloBusControl()),
-                  const SizedBox(height: 36),
-                  _paso(.35, .8, TextField(
+                  const SizedBox(height: 40),
+                  _paso(.3, .75, _campo(
+                    etiqueta: 'USUARIO',
+                    pista: 'Tu usuario',
+                    icono: Icons.person_outline,
                     controller: _user,
-                    autocorrect: false,
-                    enableSuggestions: false,
-                    textInputAction: TextInputAction.next,
-                    style: estiloTexto,
-                    cursorColor: Marca.cian,
-                    decoration: _campo('Usuario', Icons.person_outline),
+                    accion: TextInputAction.next,
                   )),
-                  const SizedBox(height: 14),
-                  _paso(.45, .9, TextField(
+                  const SizedBox(height: 16),
+                  _paso(.4, .85, _campo(
+                    etiqueta: 'CONTRASEÑA',
+                    pista: 'Tu contraseña',
+                    icono: Icons.lock_outline,
                     controller: _pass,
-                    obscureText: !_verPass,
-                    onSubmitted: (_) => _entrar(),
-                    style: estiloTexto,
-                    cursorColor: Marca.cian,
-                    decoration: _campo(
-                      'Contraseña',
-                      Icons.lock_outline,
-                      sufijo: IconButton(
-                        color: Marca.texto,
-                        icon: Icon(_verPass ? Icons.visibility_off : Icons.visibility),
-                        onPressed: () => setState(() => _verPass = !_verPass),
-                      ),
+                    oculto: !_verPass,
+                    alEnviar: (_) => _entrar(),
+                    sufijo: IconButton(
+                      color: Marca.apagado,
+                      tooltip: _verPass ? 'Ocultar contraseña' : 'Mostrar contraseña',
+                      icon: Icon(_verPass ? Icons.visibility_off_outlined : Icons.visibility_outlined),
+                      onPressed: () => setState(() => _verPass = !_verPass),
                     ),
                   )),
                   AnimatedSize(
@@ -138,24 +164,29 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProv
                             padding: const EdgeInsets.only(top: 14),
                             child: Text(_error!,
                                 textAlign: TextAlign.center,
-                                style: const TextStyle(color: Color(0xFFFCA5A5))),
+                                style: const TextStyle(fontFamily: Marca.cuerpo, color: Color(0xFFFCA5A5))),
                           ),
                   ),
-                  const SizedBox(height: 24),
-                  _paso(.55, 1, FilledButton(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: Marca.azul,
-                      disabledBackgroundColor: Marca.azul.withValues(alpha: .5),
-                      minimumSize: const Size.fromHeight(54),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  const SizedBox(height: 26),
+                  _paso(.5, .95, _BotonNeon(cargando: _cargando, onPressed: _entrar)),
+                  const SizedBox(height: 28),
+                  _paso(.6, 1, Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: Marca.verde,
+                        shape: BoxShape.circle,
+                        boxShadow: [BoxShadow(color: Marca.verde, blurRadius: 10)],
+                      ),
                     ),
-                    onPressed: _cargando ? null : _entrar,
-                    child: _cargando
-                        ? const SizedBox(
-                            height: 22, width: 22,
-                            child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
-                        : const Text('Ingresar'),
-                  )),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text('Conexión cifrada con $host',
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontFamily: Marca.cuerpo, fontSize: 12, color: Color(0xFF6F87A0))),
+                    ),
+                  ])),
                 ]),
               ),
             ),
@@ -164,4 +195,39 @@ class _LoginScreenState extends ConsumerState<LoginScreen> with SingleTickerProv
       ),
     );
   }
+}
+
+/// Botón principal cian con resplandor.
+class _BotonNeon extends StatelessWidget {
+  final bool cargando;
+  final VoidCallback onPressed;
+  const _BotonNeon({required this.cargando, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [BoxShadow(color: Marca.cian.withValues(alpha: .5), blurRadius: 28)],
+        ),
+        child: FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: Marca.cian,
+            foregroundColor: Marca.sobreCian,
+            disabledBackgroundColor: Marca.cian.withValues(alpha: .5),
+            minimumSize: const Size.fromHeight(58),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            textStyle: const TextStyle(fontFamily: Marca.display, fontSize: 16, fontWeight: FontWeight.w700, letterSpacing: 3),
+          ),
+          onPressed: cargando ? null : onPressed,
+          child: cargando
+              ? const SizedBox(
+                  height: 22, width: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2.5, color: Marca.sobreCian))
+              : const Row(mainAxisSize: MainAxisSize.min, children: [
+                  Text('INGRESAR'),
+                  SizedBox(width: 12),
+                  Icon(Icons.arrow_forward, size: 20),
+                ]),
+        ),
+      );
 }

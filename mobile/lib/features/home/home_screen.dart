@@ -6,6 +6,7 @@ import '../../core/modulos.dart';
 import '../../core/session.dart';
 import '../../core/theme.dart';
 import '../../widgets/comunes.dart';
+import '../propietario/propietario_shell.dart';
 
 /// Menú principal: un acceso por cada módulo que el rol tiene permitido.
 class HomeScreen extends ConsumerWidget {
@@ -15,6 +16,10 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(sessionProvider).value;
     if (user == null) return const SizedBox.shrink();
+    // El propietario entra directo a su tablero con barra inferior.
+    if (user.esPropietario && user.allowedViews.contains('propietario')) {
+      return const PropietarioShell();
+    }
     final lista = modulosDe(user.allowedViews);
     final nativos = lista.where((m) => m.nativo).toList();
     final web = lista.where((m) => !m.nativo).toList();

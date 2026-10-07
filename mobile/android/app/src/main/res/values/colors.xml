@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Fondo de arranque: mismo azul noche de la intro de BusControl -->
-    <color name="fondo_arranque">#020C18</color>
+    <color name="fondo_arranque">#050B18</color>
 </resources>

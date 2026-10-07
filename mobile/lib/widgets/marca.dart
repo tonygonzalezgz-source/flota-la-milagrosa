@@ -2,16 +2,22 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-/// Colores de la marca BusControl (los del login web: azul noche + cian).
+/// Estilo "Cabina Neón" (propuesta A elegida para el login y la apertura):
+/// azul casi negro con cuadrícula, cian y violeta luminosos.
 class Marca {
-  static const fondoArriba = Color(0xFF020C18);
-  static const fondoAbajo = Color(0xFF04213A);
+  static const fondo = Color(0xFF050B18);
   static const cian = Color(0xFF22D3EE);
-  static const azul = Color(0xFF3B82F6);
-  static const texto = Color(0xFFC8F0FF);
+  static const violeta = Color(0xFFA78BFA);
+  static const texto = Color(0xFFE6F6FF);
+  static const apagado = Color(0xFF8FA7BD);
+  static const verde = Color(0xFF34D399);
+  static const sobreCian = Color(0xFF04121F);
+
+  static const display = 'ChakraPetch';
+  static const cuerpo = 'Manrope';
 }
 
-/// Fondo azul noche con destellos que se desplazan lentamente.
+/// Fondo de cuadrícula con dos resplandores que se desplazan lentamente.
 class FondoAnimado extends StatefulWidget {
   final Widget child;
   const FondoAnimado({super.key, required this.child});
@@ -20,12 +26,9 @@ class FondoAnimado extends StatefulWidget {
   State<FondoAnimado> createState() => _FondoAnimadoState();
 }
 
-class _FondoAnimadoState extends State<FondoAnimado>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(
-    vsync: this,
-    duration: const Duration(seconds: 14),
-  )..repeat();
+class _FondoAnimadoState extends State<FondoAnimado> with SingleTickerProviderStateMixin {
+  late final AnimationController _c =
+      AnimationController(vsync: this, duration: const Duration(seconds: 16))..repeat();
 
   @override
   void dispose() {
@@ -34,60 +37,60 @@ class _FondoAnimadoState extends State<FondoAnimado>
   }
 
   @override
-  Widget build(BuildContext context) =>
-      CustomPaint(painter: _Destellos(_c), child: widget.child);
+  Widget build(BuildContext context) => CustomPaint(painter: _Cuadricula(_c), child: widget.child);
 }
 
-class _Destellos extends CustomPainter {
+class _Cuadricula extends CustomPainter {
   final Animation<double> t;
-  _Destellos(this.t) : super(repaint: t);
+  _Cuadricula(this.t) : super(repaint: t);
 
-  // (x, y, radio relativo, color, fase)
-  static const _orbes = [
-    (0.15, 0.20, 0.55, Marca.azul, 0.0),
-    (0.85, 0.35, 0.45, Marca.cian, 0.33),
-    (0.40, 0.90, 0.60, Marca.azul, 0.66),
-  ];
+  static const _paso = 32.0;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final rect = Offset.zero & size;
-    canvas.drawRect(
-      rect,
-      Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Marca.fondoArriba, Marca.fondoAbajo],
-        ).createShader(rect),
-    );
+    canvas.drawRect(Offset.zero & size, Paint()..color = Marca.fondo);
+
+    // Resplandores: cian arriba a la derecha, violeta abajo a la izquierda.
     final lado = size.shortestSide;
-    for (final (x, y, r, color, fase) in _orbes) {
-      final a = (t.value + fase) * 2 * math.pi;
+    final a = t.value * 2 * math.pi;
+    for (final (x, y, color, fase) in const [
+      (0.8, 0.22, Marca.cian, 0.0),
+      (0.2, 0.82, Marca.violeta, math.pi),
+    ]) {
       final centro = Offset(
-        size.width * x + math.cos(a) * lado * .08,
-        size.height * y + math.sin(a) * lado * .06,
+        size.width * x + math.cos(a + fase) * lado * .07,
+        size.height * y + math.sin(a + fase) * lado * .05,
       );
-      final radio = lado * r;
+      final radio = lado * .7;
       canvas.drawCircle(
         centro,
         radio,
         Paint()
           ..shader = RadialGradient(
-            colors: [color.withValues(alpha: .22), color.withValues(alpha: 0)],
+            colors: [color.withValues(alpha: .16), color.withValues(alpha: 0)],
           ).createShader(Rect.fromCircle(center: centro, radius: radio)),
       );
+    }
+
+    final linea = Paint()
+      ..color = Marca.cian.withValues(alpha: .05)
+      ..strokeWidth = 1;
+    for (var x = 0.0; x <= size.width; x += _paso) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), linea);
+    }
+    for (var y = 0.0; y <= size.height; y += _paso) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), linea);
     }
   }
 
   @override
-  bool shouldRepaint(_Destellos old) => false;
+  bool shouldRepaint(_Cuadricula old) => false;
 }
 
 const logoBusControlAsset = 'assets/logo-buscontrol.png';
 
-/// Logo de BusControl sobre una insignia blanca con halo cian.
-/// [brillo] (0–1) intensifica el halo; se usa para el pulso de la intro.
+/// Logo de BusControl en un círculo blanco con anillo cian-violeta luminoso.
+/// [brillo] (0–1) intensifica el resplandor; se usa para el pulso de la intro.
 class LogoBusControl extends StatelessWidget {
   final double tamano;
   final double brillo;
@@ -95,48 +98,55 @@ class LogoBusControl extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-    width: tamano,
-    height: tamano,
-    padding: EdgeInsets.all(tamano * .14),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      shape: BoxShape.circle,
-      boxShadow: [
-        BoxShadow(
-          color: Marca.cian.withValues(alpha: .25 + .35 * brillo),
-          blurRadius: 18 + 30 * brillo,
-          spreadRadius: 2 + 6 * brillo,
+        width: tamano,
+        height: tamano,
+        padding: const EdgeInsets.all(3),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: const SweepGradient(
+            startAngle: 0,
+            endAngle: 2 * math.pi,
+            colors: [Marca.cian, Marca.violeta, Marca.cian],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Marca.cian.withValues(alpha: .25 + .35 * brillo),
+              blurRadius: 20 + 30 * brillo,
+              spreadRadius: 1 + 5 * brillo,
+            ),
+          ],
         ),
-      ],
-    ),
-    child: Image.asset(logoBusControlAsset, fit: BoxFit.contain),
-  );
+        child: Container(
+          padding: EdgeInsets.all(tamano * .15),
+          decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+          child: Image.asset(logoBusControlAsset, fit: BoxFit.contain),
+        ),
+      );
 }
 
-/// Nombre "BusControl" con el mismo estilo del login web.
+/// "BUSCONTROL" en Chakra Petch con resplandor cian.
 class NombreBusControl extends StatelessWidget {
   final double tamano;
-  const NombreBusControl({super.key, this.tamano = 32});
+  const NombreBusControl({super.key, this.tamano = 34});
 
   // Material transparente: durante el Hero el texto viaja fuera del Scaffold
   // y sin él Flutter lo pinta con el subrayado amarillo de "falta Material".
   @override
   Widget build(BuildContext context) => Material(
-    type: MaterialType.transparency,
-    child: Text(
-      'BusControl',
-      textAlign: TextAlign.center,
-      style: TextStyle(
-        color: Colors.white,
-        fontSize: tamano,
-        fontWeight: FontWeight.w800,
-        letterSpacing: -.3,
-        shadows: [
-          Shadow(color: Marca.cian.withValues(alpha: .45), blurRadius: 24),
-        ],
-      ),
-    ),
-  );
+        type: MaterialType.transparency,
+        child: Text(
+          'BUSCONTROL',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontFamily: Marca.display,
+            color: Colors.white,
+            fontSize: tamano,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 2,
+            shadows: [Shadow(color: Marca.cian.withValues(alpha: .55), blurRadius: 22)],
+          ),
+        ),
+      );
 }
 
 class SubtituloBusControl extends StatelessWidget {
@@ -144,11 +154,17 @@ class SubtituloBusControl extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => const Material(
-    type: MaterialType.transparency,
-    child: Text(
-      'Flota La Milagrosa',
-      textAlign: TextAlign.center,
-      style: TextStyle(color: Marca.texto, fontSize: 15, letterSpacing: .5),
-    ),
-  );
+        type: MaterialType.transparency,
+        child: Text(
+          'FLOTA LA MILAGROSA',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontFamily: Marca.cuerpo,
+            color: Marca.cian,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 4,
+          ),
+        ),
+      );
 }
