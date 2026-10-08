@@ -36,11 +36,12 @@ jobs:
 
       # APK de prueba (firmado con la clave debug): sirve para instalar
       # directo en un celular Android, no para la Play Store.
-      # Mapa en vivo con Google Maps si existe el secreto GOOGLE_MAPS_API_KEY
-      # (Settings → Secrets and variables → Actions); sin él usa Esri.
+      # Mapa en vivo con Google Maps si existe GOOGLE_MAPS_API_KEY en
+      # Settings → Secrets and variables → Actions (como secreto o como
+      # variable); sin ella usa Esri.
       - run: flutter build apk --release --dart-define=GOOGLE_MAPS_API_KEY="$GOOGLE_MAPS_API_KEY"
         env:
-          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY }}
+          GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY || vars.GOOGLE_MAPS_API_KEY }}
 
       - uses: actions/upload-artifact@v4
         with:
