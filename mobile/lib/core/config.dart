@@ -9,6 +9,11 @@ class AppConfig {
     defaultValue: 'https://buscontrol.net',
   );
 
+  /// Clave de Google Maps para el mapa en vivo (Android/iOS), igual que la web:
+  ///   flutter build apk --dart-define=GOOGLE_MAPS_API_KEY=…
+  /// Sin clave se usa el mapa alterno de Esri.
+  static const String googleMapsKey = String.fromEnvironment('GOOGLE_MAPS_API_KEY');
+
   /// Base de todos los endpoints: `<apiUrl>/api`.
   static String get apiBase {
     final base = apiUrl.endsWith('/') ? apiUrl.substring(0, apiUrl.length - 1) : apiUrl;

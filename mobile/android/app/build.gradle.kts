@@ -4,6 +4,18 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Valores de --dart-define (Flutter los pasa en base64 separados por comas).
+// La clave de Google Maps llega así, no se guarda en el repositorio.
+val dartDefines: Map<String, String> =
+    (project.findProperty("dart-defines") as String?)
+        ?.split(",")
+        ?.mapNotNull { def ->
+            val par = String(java.util.Base64.getDecoder().decode(def)).split("=", limit = 2)
+            if (par.size == 2) par[0] to par[1] else null
+        }
+        ?.toMap()
+        ?: emptyMap()
+
 android {
     namespace = "co.lamilagrosa.buscontrol"
     compileSdk = flutter.compileSdkVersion
@@ -27,6 +39,8 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // Mapa en vivo con Google Maps (sin clave, la app usa el mapa alterno de Esri).
+        manifestPlaceholders["googleMapsKey"] = dartDefines["GOOGLE_MAPS_API_KEY"] ?: ""
     }
 
     buildTypes {
