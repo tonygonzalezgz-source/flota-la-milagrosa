@@ -33,7 +33,7 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        <!-- Google Maps (Mapa en vivo): clave de --dart-define=GOOGLE_MAPS_API_KEY -->
+        <!-- Google Maps (Mapa en vivo): la clave llega con el dart-define GOOGLE_MAPS_API_KEY -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="${googleMapsKey}" />

@@ -5,7 +5,7 @@
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <!-- Solo en debug: permite probar contra el API local por http
-         (flutter run --dart-define=API_URL=http://192.168.x.x:8001).
+         (flutter run con el dart-define API_URL=http://192.168.x.x:8001).
          La versión release solo habla https con producción. -->
     <application android:usesCleartextTraffic="true"/>
 </manifest>
