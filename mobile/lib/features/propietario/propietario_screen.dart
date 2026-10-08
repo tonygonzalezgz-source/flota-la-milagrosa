@@ -11,6 +11,7 @@ import '../../widgets/aurora.dart';
 import '../../widgets/comunes.dart';
 import '../../widgets/marca.dart' show logoBusControlAsset;
 import '../chat/chat_screen.dart';
+import '../reportes/reportes_screen.dart';
 import 'grafica_semanal.dart';
 import 'vehiculo_screen.dart';
 
@@ -219,6 +220,8 @@ class _PropietarioScreenState extends ConsumerState<PropietarioScreen> {
             ]),
             const SizedBox(height: 16),
             GraficaSemanal(semanas: semanas(_movilidad, n: semanasGrafica)),
+            const SizedBox(height: 12),
+            _accesoReportes(),
             for (final d in _docs) ...[const SizedBox(height: 12), _doc(d)],
             const SizedBox(height: 20),
             const Text('Mis vehículos', style: estiloTituloAurora),
@@ -236,6 +239,23 @@ class _PropietarioScreenState extends ConsumerState<PropietarioScreen> {
       ),
     ]);
   }
+
+  Widget _accesoReportes() => TarjetaAurora(
+        padding: const EdgeInsets.all(14),
+        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ReportesScreen())),
+        child: const Row(children: [
+          IconoSuave(Icons.assessment_outlined, color: AppColors.primary, fondo: AppColors.primarySoft, tamano: 44),
+          SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Reportes de mis buses', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+              Text('Días trabajados, movilidad por rango y Excel',
+                  style: TextStyle(fontSize: 12, color: AppColors.muted)),
+            ]),
+          ),
+          Icon(Icons.chevron_right, color: AppColors.muted),
+        ]),
+      );
 
   Widget _kpi(IconData icono, Color color, Color fondo, String valor, String titulo, double? cambio) =>
       TarjetaAurora(

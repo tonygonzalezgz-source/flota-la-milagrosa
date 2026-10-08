@@ -2042,7 +2042,7 @@ def get_despacho():
 
 
 @app.route("/api/despacho/historial", methods=["GET"])
-@require_role("Administrador", "Analista", "Despachador", "Jefe de Ruta")
+@require_role("Administrador", "Analista", "Despachador", "Jefe de Ruta", "Propietario")
 def get_historial_despacho():
     """Historial de despacho: todos los vehículos por cada fecha con actividad."""
     desde = request.args.get("desde", (date.today() - timedelta(days=30)).isoformat())
@@ -2056,7 +2056,7 @@ def get_historial_despacho():
             SELECT DISTINCT fecha FROM despacho_diario
             WHERE fecha BETWEEN ? AND ?{grupo_filter}
         )
-        SELECT f.fecha, b.numero, b.placa, b.modelo, b.grupo,
+        SELECT f.fecha, b.id AS bus_id, b.numero, b.placa, b.modelo, b.grupo,
                c.nombre AS conductor_nombre,
                r.nombre AS ruta_nombre,
                d.estado, d.viajes_realizados,
@@ -2071,9 +2071,19 @@ def get_historial_despacho():
     """
 
     # Administrador y Despachador ven todo el historial: la restricción por
-    # grupo/rutas ya no aplica (ver comentario en get_despacho).
-    query = base_query.format(grupo_filter="", bus_filter="")
-    rows  = db.execute(query, (desde, hasta)).fetchall()
+    # grupo/rutas ya no aplica (ver comentario en get_despacho). El propietario
+    # solo ve sus buses (días trabajados, en taller y en descanso de sus reportes).
+    is_prop, bus_ids = _bus_ids_for_user(db, _usuario_consultado())
+    if is_prop:
+        if not bus_ids:
+            db.close()
+            return jsonify([])
+        bus_filter = f"WHERE b.id IN ({','.join('?' * len(bus_ids))})"
+        params = [desde, hasta] + bus_ids
+    else:
+        bus_filter, params = "", [desde, hasta]
+    query = base_query.format(grupo_filter="", bus_filter=bus_filter)
+    rows  = db.execute(query, params).fetchall()
 
     db.close()
     return jsonify([dict(r) for r in rows])

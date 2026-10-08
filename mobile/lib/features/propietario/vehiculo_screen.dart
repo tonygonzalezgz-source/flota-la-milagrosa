@@ -9,6 +9,7 @@ import '../../core/session.dart';
 import '../../core/theme.dart';
 import '../../widgets/aurora.dart';
 import '../../widgets/comunes.dart';
+import '../reportes/reportes_screen.dart';
 import 'grafica_semanal.dart';
 import 'propietario_screen.dart' show semanasGrafica;
 
@@ -173,6 +174,13 @@ class _VehiculoScreenState extends ConsumerState<VehiculoScreen> {
                   style: const TextStyle(fontSize: 12, color: Color(0xFF9FB2E8)),
                 ),
             ]),
+          ),
+          BotonCabecera(
+            icono: Icons.assessment_outlined,
+            tooltip: 'Reporte de este bus',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => ReportesScreen(busId: _busId)),
+            ),
           ),
         ]),
         const SizedBox(height: 18),
