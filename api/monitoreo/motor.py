@@ -358,7 +358,10 @@ def _atajos(pos, ruta):
     tiempo, o sea, se saltó un tramo. Pasa aunque nunca se aleje más que el
     corredor (p. ej. sigue de largo en vez de dar la vuelta a la manzana).
     Lo que pudo recorrer entre dos reportes se acota con la distancia entre
-    ellos y su velocidad; con huecos de datos no se evalúa."""
+    ellos y su velocidad; con huecos de datos no se evalúa. Los reportes
+    intermedios están fuera del trazado (por eso no tienen medida): mientras
+    tanto el bus no estaba recorriendo el tramo, así que solo cuentan los
+    intervalos que tocan una posición sobre la ruta."""
     if not ruta or not ruta.trazados:
         return []
     atajos = []
@@ -372,8 +375,12 @@ def _atajos(pos, ruta):
             dt = (p["t"] - previa["t"]).total_seconds()
             if dt > MAX_HUECO_ATAJO_S:
                 evaluable = False
-            v = max(previa["vel"] or 0, p["vel"] or 0) / 3.6
-            capacidad += max(d, v * dt) * HOLGURA_ATAJO + 20
+            # Velocidad media entre los dos reportes (con la máxima, un bus
+            # en trancón que arranca y frena "alcanzaba" a hacer la vuelta).
+            vels = [v for v in (previa["vel"], p["vel"]) if v is not None]
+            v = (sum(vels) / len(vels) if vels else 0) / 3.6
+            if previa is ancla or p["medida"] is not None:
+                capacidad += max(d, v * dt) * HOLGURA_ATAJO + 20
             camino.append(p)
         previa = p
         if p["medida"] is None:
@@ -596,10 +603,23 @@ def analizar(posiciones, ruta, cfg, zonas=()):
     abandonos, inicio_ruta = _abandonos(pos, ruta, cfg, zonas_ruta)
     abandonos = _unir_atajos(abandonos, _atajos(pos, ruta))
     pasos, vueltas = _pasos_y_vueltas(pos, ruta)
+    excesos = _excesos(pos, ruta, cfg)
+    for evento in abandonos + excesos:
+        evento["vuelta"] = _vuelta_de(evento["inicio"], vueltas)
     return {
         "resumen": {**_resumen(pos), "inicio_ruta": inicio_ruta},
-        "excesos": _excesos(pos, ruta, cfg),
+        "excesos": excesos,
         "abandonos": abandonos,
         "pasos": pasos,
         "vueltas": vueltas,
     }
+
+
+def _vuelta_de(t, vueltas):
+    """Número de la vuelta en curso en el instante t (None: antes de la primera
+    salida del terminal, o esperando en el terminal entre vueltas)."""
+    for i, v in enumerate(vueltas):
+        fin = v["llegada"] or (vueltas[i + 1]["salida"] if i + 1 < len(vueltas) else None)
+        if v["salida"] <= t and (fin is None or t < fin):
+            return v["n"]
+    return None
