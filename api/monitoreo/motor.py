@@ -35,6 +35,11 @@ MOVIMIENTO_RUMBO_M = 20       # desplazamiento mínimo para calcular el rumbo en
 DIFERENCIA_RUMBO_GRADOS = 45  # para decidir el sentido en tramos compartidos
 ANGULO_SENTIDO_GRADOS = 60    # rumbo del bus vs. el del trazado para aceptar un cambio de sentido
 MAX_SALTO_KMH = 200           # saltos más rápidos que esto no suman kilómetros
+CONTINUIDAD_S = 600           # la medida sigue a la anterior si no pasaron más de 10 min
+RETROCESO_M = 150             # retroceso tolerado sobre el trazado (ruido del GPS)
+MIN_ATAJO_M = 250             # tramo de ruta saltado a partir del cual es "atajo"
+MAX_HUECO_ATAJO_S = 150       # con huecos de datos mayores no se puede saber qué hizo el bus
+HOLGURA_ATAJO = 1.25          # margen sobre lo que el bus pudo recorrer entre dos reportes
 
 
 def _angulo(a, b):
@@ -99,19 +104,25 @@ class Trazado:
         t = 0.0 if largo2 == 0 else max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / largo2))
         return math.hypot(px - (ax + t * dx), py - (ay + t * dy)), self.acum[i] + t * math.sqrt(largo2)
 
-    def cercano(self, lat, lon, radio):
-        """(distancia_m, medida_m, segmento) del tramo más cercano a <= radio, o None."""
+    def pasadas(self, lat, lon, radio):
+        """Veces que el trazado pasa a <= radio del punto: [(distancia_m, medida_m, segmento)],
+        la más cercana de cada pasada. Un trazado que vuelve por la misma calle tiene varias."""
         px, py = self.plano.xy(lat, lon)
-        candidatos = set()
+        segmentos = set()
         for cx in range(math.floor((px - radio) / CELDA_M), math.floor((px + radio) / CELDA_M) + 1):
             for cy in range(math.floor((py - radio) / CELDA_M), math.floor((py + radio) / CELDA_M) + 1):
-                candidatos.update(self.celdas.get((cx, cy), ()))
-        mejor = None
-        for i in candidatos:
-            d, m = self._segmento(i, px, py)
-            if d <= radio and (mejor is None or d < mejor[0]):
-                mejor = (d, m, i)
-        return mejor
+                segmentos.update(self.celdas.get((cx, cy), ()))
+        toques = sorted((m, d, i) for i in segmentos for d, m in (self._segmento(i, px, py),) if d <= radio)
+        pasadas = []
+        for m, d, i in toques:
+            if pasadas and m - pasadas[-1][3] <= 2 * radio + 10:
+                g = pasadas[-1]
+                g[3] = m
+                if d < g[0]:
+                    g[0], g[1], g[2] = d, m, i
+            else:
+                pasadas.append([d, m, i, m])
+        return [(d, m, i) for d, m, i, _ in pasadas]
 
     def distancia(self, lat, lon):
         """Distancia al trazado recorriéndolo entero (para las pocas posiciones fuera de ruta)."""
@@ -146,22 +157,29 @@ class Ruta:
 def _estados(pos, ruta, cfg):
     """Por posición: en_ruta, sentido, medida (m sobre el trazado) y si su
     precisión es dudosa. El sentido se decide por cercanía; donde ida y regreso
-    comparten calle, por el rumbo del bus; si aún es ambiguo, se mantiene el anterior."""
+    comparten calle, por el rumbo del bus; si aún es ambiguo, se mantiene el anterior.
+    Si el trazado pasa varias veces cerca, la medida sigue la continuidad del
+    recorrido (la siguiente pasada hacia adelante), no simplemente la más cercana."""
     corredor = cfg["corredor_m"]
     prec_max = cfg["precision_max_m"]
     anterior = None
+    ultima = None    # (sentido, medida, t) de la última posición ubicada sobre el trazado
     previa = None
     for p in pos:
         p["dudosa"] = p["precision"] is not None and p["precision"] > prec_max
         p["en_ruta"], p["sentido"], p["medida"] = False, None, None
         if not ruta or not ruta.trazados:
             continue
-        cand = {}
+        x, y = ruta.plano.xy(p["lat"], p["lon"])
+        pasadas, cand = {}, {}
         for s, t in ruta.trazados.items():
-            c = t.cercano(p["lat"], p["lon"], corredor)
-            if c:
-                cand[s] = c
-        p["en_ruta"] = bool(cand)
+            ps = t.pasadas(p["lat"], p["lon"], corredor)
+            if ps:
+                pasadas[s], cand[s] = ps, min(ps)
+        # Dentro de un punto de control o terminal también está en la ruta
+        # (p. ej. la bahía del terminal queda a un lado del trazado).
+        p["en_ruta"] = bool(cand) or any(math.hypot(x - q["_x"], y - q["_y"]) <= q["radio_m"]
+                                         for q in ruta.puntos)
         rumbo = None
         if p["vel"] is not None and p["vel"] >= RUMBO_MIN_KMH and p["rumbo"] is not None:
             rumbo = p["rumbo"]
@@ -187,8 +205,15 @@ def _estados(pos, ruta, cfg):
             if sentido is None:
                 sentido = anterior if anterior in cand else min(cand, key=lambda s: cand[s][0])
         if sentido:
-            p["sentido"], p["medida"] = sentido, cand[sentido][1]
+            elegida = cand[sentido]
+            if (ultima and ultima[0] == sentido and len(pasadas[sentido]) > 1
+                    and (p["t"] - ultima[2]).total_seconds() <= CONTINUIDAD_S):
+                adelante = [c for c in pasadas[sentido] if c[1] >= ultima[1] - RETROCESO_M]
+                if adelante:
+                    elegida = min(adelante, key=lambda c: c[1])
+            p["sentido"], p["medida"] = sentido, elegida[1]
             anterior = sentido
+            ultima = (sentido, elegida[1], p["t"])
         previa = p
 
 
@@ -299,6 +324,7 @@ def _abandonos(pos, ruta, cfg, zonas):
             "sentido_previo": actual["desde"]["sentido"] if actual["desde"] else None,
             "tipo": "encierro" if zona else "abandono",
             "encierro": zona["nombre"] if zona else None,
+            "saltado_m": None,
         })
 
     for p in pos:
@@ -324,6 +350,71 @@ def _abandonos(pos, ruta, cfg, zonas):
     if actual:
         cerrar(None)
     return episodios, inicio_ruta
+
+
+def _atajos(pos, ruta):
+    """El bus "se siguió derecho": entre dos posiciones sobre la ruta (mismo
+    sentido) avanzó en el trazado mucho más de lo que pudo recorrer en ese
+    tiempo, o sea, se saltó un tramo. Pasa aunque nunca se aleje más que el
+    corredor (p. ej. sigue de largo en vez de dar la vuelta a la manzana).
+    Lo que pudo recorrer entre dos reportes se acota con la distancia entre
+    ellos y su velocidad; con huecos de datos no se evalúa."""
+    if not ruta or not ruta.trazados:
+        return []
+    atajos = []
+    ancla, previa = None, None     # última posición sobre el trazado / anterior
+    camino, capacidad, evaluable = [], 0.0, True
+    for p in pos:
+        if p["dudosa"]:
+            continue
+        if ancla is not None:
+            d = geo.haversine_m(previa["lat"], previa["lon"], p["lat"], p["lon"])
+            dt = (p["t"] - previa["t"]).total_seconds()
+            if dt > MAX_HUECO_ATAJO_S:
+                evaluable = False
+            v = max(previa["vel"] or 0, p["vel"] or 0) / 3.6
+            capacidad += max(d, v * dt) * HOLGURA_ATAJO + 20
+            camino.append(p)
+        previa = p
+        if p["medida"] is None:
+            continue
+        if ancla is not None and evaluable and p["sentido"] == ancla["sentido"]:
+            avance = p["medida"] - ancla["medida"]
+            if avance - capacidad >= MIN_ATAJO_M:
+                intermedias = camino[:-1]
+                dist_max, punto_max = 0.0, None
+                for q in intermedias:
+                    dq = min(t.distancia(q["lat"], q["lon"]) for t in ruta.trazados.values())
+                    if dq > dist_max:
+                        dist_max, punto_max = dq, q
+                punto_max = punto_max or {"lat": (ancla["lat"] + p["lat"]) / 2, "lon": (ancla["lon"] + p["lon"]) / 2}
+                atajos.append({
+                    "inicio": ancla["t"], "fin": p["t"],
+                    "duracion_s": int((p["t"] - ancla["t"]).total_seconds()),
+                    "posiciones": len(intermedias),
+                    "distancia_max_m": round(dist_max),
+                    "km_fuera": round(_largo_m([ancla] + camino) / 1000, 2),
+                    "salida_lat": ancla["lat"], "salida_lon": ancla["lon"],
+                    "max_lat": punto_max["lat"], "max_lon": punto_max["lon"],
+                    "regreso_lat": p["lat"], "regreso_lon": p["lon"], "regreso": True,
+                    "sentido_previo": ancla["sentido"], "tipo": "atajo", "encierro": None,
+                    "saltado_m": round(avance),
+                })
+        ancla, camino, capacidad, evaluable = p, [], 0.0, True
+    return atajos
+
+
+def _unir_atajos(abandonos, atajos):
+    """Un atajo dentro de un abandono ya detectado se anota en ese abandono."""
+    for a in atajos:
+        mismo = next((e for e in abandonos if e["tipo"] == "abandono"
+                      and a["inicio"] <= e["inicio"] <= a["fin"]), None)
+        if mismo:
+            mismo["saltado_m"] = max(mismo["saltado_m"] or 0, a["saltado_m"])
+        else:
+            abandonos.append(a)
+    abandonos.sort(key=lambda e: e["inicio"])
+    return abandonos
 
 
 # ══════════════════════════════════════════
@@ -482,6 +573,9 @@ def _resumen(pos):
         "ultima": pos[-1]["t"] if pos else None,
         "km": round(_largo_m(camino) / 1000, 1),
         "vel_max": round(max(vels), 1) if vels else None,
+        # Estado al final del intervalo (lo usa el mapa en vivo).
+        "sentido_actual": next((p["sentido"] for p in reversed(pos) if p["sentido"]), None),
+        "en_ruta_actual": camino[-1]["en_ruta"] if camino else None,
     }
 
 
@@ -500,6 +594,7 @@ def analizar(posiciones, ruta, cfg, zonas=()):
     _estados(pos, ruta, cfg)
     zonas_ruta = [z for z in zonas if z.get("ruta_id") in (None, ruta.id if ruta else None)]
     abandonos, inicio_ruta = _abandonos(pos, ruta, cfg, zonas_ruta)
+    abandonos = _unir_atajos(abandonos, _atajos(pos, ruta))
     pasos, vueltas = _pasos_y_vueltas(pos, ruta)
     return {
         "resumen": {**_resumen(pos), "inicio_ruta": inicio_ruta},

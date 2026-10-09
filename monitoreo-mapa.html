@@ -115,6 +115,9 @@
     .pop .fila { display:flex; justify-content:space-between; gap:12px; }
     .pop .fila span:first-child { color:var(--txt3); }
     .pop .pend { color:var(--txt3); font-style:italic; }
+    .pop-alarma { background:rgba(220,38,38,.1); color:#b91c1c; border-radius:6px; padding:5px 8px;
+      font-weight:700; margin:4px 0 6px; }
+    .item-alarma { font-size:12px; color:#dc2626; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
     @media (max-width:760px) {
       body { padding-top:52px; }
@@ -370,7 +373,7 @@
 
   // Mismo código de colores que Rutas Geográficas.
   const COLOR_SENTIDO = { ida: '#2563eb', regreso: '#ea580c', ambos: '#7c3aed' };
-  const TXT_SENTIDO = { ida: 'Ida', regreso: 'Regreso', ambos: 'Ida y regreso' };
+  const TXT_SENTIDO = { ida: 'Ida (bajando)', regreso: 'Regreso (subiendo)', ambos: 'Ida y regreso' };
   const ZOOM_FLECHAS = 14;       // las flechas de sentido solo con zoom cercano
   const PASO_FLECHAS_M = 300;
   let capaFlechas = null;
@@ -475,14 +478,14 @@
   }
 
   function pintarLeyenda(una) {
-    const estados = ['movimiento', 'detenido', 'sin_fix', 'sin_senal', 'encierro']
+    const estados = ['movimiento', 'detenido', 'alarma', 'sin_fix', 'sin_senal', 'encierro']
       .map(k => `<div><span class="dot" style="background:${ESTADOS[k].hex}"></span>${ESTADOS[k].txt}</div>`).join('');
     const rutasTxt = una
-      ? `<div><span class="linea" style="border-color:${COLOR_SENTIDO.ida}"></span>Ida</div>
-         <div><span class="linea dash" style="border-color:${COLOR_SENTIDO.regreso}"></span>Regreso</div>
+      ? `<div><span class="linea" style="border-color:${COLOR_SENTIDO.ida}"></span>Ida (bajando)</div>
+         <div><span class="linea dash" style="border-color:${COLOR_SENTIDO.regreso}"></span>Regreso (subiendo)</div>
          <div><span class="pc-mini" style="--c:${COLOR_SENTIDO.ambos}"></span>Punto en ambos sentidos</div>
          <div><span class="pc-mini cuadro" style="--c:#555"></span>Terminal</div>`
-      : `<div><span class="linea"></span>Ida (tono fuerte)</div><div><span class="linea dash" style="opacity:.55"></span>Regreso (tono claro)</div>
+      : `<div><span class="linea"></span>Ida, bajando (tono fuerte)</div><div><span class="linea dash" style="opacity:.55"></span>Regreso, subiendo (tono claro)</div>
          <div class="leyenda-nota">Cada ruta con su color</div>`;
     document.getElementById('leyenda').innerHTML = estados + '<hr>' + rutasTxt;
   }
@@ -559,18 +562,43 @@
       hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
   }
 
+  // Sentido del bus: la ida baja (del barrio al centro) y el regreso sube.
+  const TXT_SENTIDO_BUS = { ida: 'Bajando', regreso: 'Subiendo' };
+  function horaCorta(iso) {
+    return iso ? new Date(iso).toLocaleTimeString('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+  }
+  function txtAlarma(a) {
+    if (!a) return '';
+    if (a.tipo === 'abandono') return `Fuera de ruta desde ${horaCorta(a.desde)} · a ${a.distancia_m} m de la ruta`;
+    if (a.tipo === 'atajo') return `Se saltó ${a.saltado_m >= 1000 ? (a.saltado_m / 1000).toFixed(1).replace('.', ',') + ' km' : a.saltado_m + ' m'} de ruta (${horaCorta(a.hora)})`;
+    if (a.tipo === 'exceso') return `Exceso de velocidad: ${Math.round(a.vel_max)} km/h (${horaCorta(a.hora)})`;
+    return '';
+  }
+  function txtUltimoPunto(u) {
+    if (!u) return '<span class="pend">Sin pasos en la última hora</span>';
+    const d = u.desvio_min;
+    const desv = d == null ? '' : ` <b style="color:${d > 0 ? '#dc2626' : d < 0 ? '#b45309' : '#16a34a'}">${d > 0 ? '+' + d : d < 0 ? '−' + -d : '0'}</b>`;
+    return `${u.tipo === 'terminal' ? 'Salió de ' : ''}<b>${esc(u.alias || '')}</b> ${horaCorta(u.hora)}${desv}`;
+  }
+  function txtSentido(b) {
+    if (!b.ruta_id) return '<span class="pend">Sin despacho hoy</span>';
+    if (!b.sentido) return '<span class="pend">Sin determinar</span>';
+    return `<b>${TXT_SENTIDO_BUS[b.sentido]}</b>${b.en_ruta === false ? ' <span class="pend">(fuera de ruta)</span>' : ''}`;
+  }
+
   function popupBus(b) {
     const est = ESTADOS[b.estado] || ESTADOS.sin_senal;
     const ruta = b.ruta_nombre ? esc(b.ruta_nombre) : '<span class="pend">Sin despacho hoy</span>';
     const vel = b.velocidad_kmh != null ? `${Math.round(b.velocidad_kmh)} km/h` : '—';
     return `<div class="pop">
       <h4>Bus ${esc(b.numero)} · ${esc(b.placa || 's/p')}</h4>
+      ${b.alarma ? `<div class="pop-alarma">⚠ ${esc(txtAlarma(b.alarma))}</div>` : ''}
       <div class="fila"><span>Estado</span><b style="color:${est.hex}">${est.txt}</b></div>
       ${b.encierro ? `<div class="fila"><span>Zona</span><span>${esc(b.encierro)}</span></div>` : ''}
       <div class="fila"><span>Ruta</span><span>${ruta}</span></div>
       <div class="fila"><span>Velocidad</span><span>${vel}</span></div>
-      <div class="fila"><span>Sentido</span><span class="pend">${b.sentido ? esc(b.sentido) : 'Próximamente'}</span></div>
-      <div class="fila"><span>Último punto</span><span class="pend">${b.ultimo_punto ? esc(b.ultimo_punto) : 'Próximamente'}</span></div>
+      <div class="fila"><span>Sentido</span><span>${txtSentido(b)}</span></div>
+      ${b.ruta_id ? `<div class="fila"><span>Último punto</span><span>${txtUltimoPunto(b.ultimo_punto)}</span></div>` : ''}
       <div class="fila"><span>Último reporte</span><span>${horaBogota(b.ultimo_reporte_at)}</span></div>
       <div class="fila"><span></span><span data-hace="${esc(b.ultimo_reporte_at || '')}">${hace(b.ultimo_reporte_at)}</span></div>
       ${b.precision_m != null ? `<div class="fila"><span>Precisión GPS</span><span>${b.precision_m} m</span></div>` : ''}
@@ -589,7 +617,7 @@
     const n = k => vis.filter(b => k === 'sin_despacho' ? !b.ruta_id : b.estado === k).length;
     const info = k => k === 'sin_despacho' ? SIN_DESPACHO : ESTADOS[k];
     document.getElementById('resumen').innerHTML =
-      ['movimiento', 'detenido', 'sin_fix', 'sin_senal', 'encierro', 'sin_despacho']
+      ['alarma', 'movimiento', 'detenido', 'sin_fix', 'sin_senal', 'encierro', 'sin_despacho']
       .filter(k => n(k) || filtroEstado === k)
       .map(k => `<span class="chip ${filtroEstado === k ? 'on' : ''}" style="color:${info(k).hex}"
           onclick="filtrarEstado('${k}')"><span class="dot" style="background:${info(k).hex}"></span>${info(k).txt}: ${n(k)}</span>`)
@@ -619,11 +647,13 @@
       const est = ESTADOS[b.estado] || ESTADOS.sin_senal;
       const vel = b.estado === 'movimiento' ? ` · ${Math.round(b.velocidad_kmh)} km/h` : '';
       const ruta = b.ruta_id ? `<span class="item-ruta" style="background:${colorRuta[b.ruta_id] || '#999'}"></span>${esc(b.ruta_nombre)}`
+                               + (b.sentido ? ` · ${TXT_SENTIDO_BUS[b.sentido]}` : '')
                              : 'Sin despacho hoy';
       return `<div class="item ${seleccionado === b.bus_id ? 'sel' : ''}" onclick="seleccionar(${b.bus_id}, true)">
         <div class="item-num" style="background:${est.hex}">${esc(b.numero)}</div>
         <div class="item-info">
           <div class="item-l1">${esc(b.placa || 's/p')} <span style="color:${est.hex};font-size:12px;">· ${est.txt}${vel}</span></div>
+          ${b.alarma ? `<div class="item-alarma" title="${esc(txtAlarma(b.alarma))}">⚠ ${esc(txtAlarma(b.alarma))}</div>` : ''}
           <div class="item-l2">${ruta}</div>
           <div class="item-l3" data-hace="${esc(b.ultimo_reporte_at || '')}">${hace(b.ultimo_reporte_at)}</div>
         </div></div>`;
