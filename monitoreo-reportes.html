@@ -118,6 +118,7 @@
     .desv.atiempo { background:rgba(34,197,94,.14); color:#16a34a; }
     .no-paso { color:#c4c4cc; }
     .leyenda { font-size:11.5px; color:var(--txt3); margin:8px 0 2px; display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+    .nota { font-size:11.5px; color:var(--txt3); margin:8px 0 2px; line-height:1.55; }
     details { margin-top:10px; }
     summary { cursor:pointer; font-size:12.5px; font-weight:700; color:var(--primary); padding:4px 0; }
     details table { margin-top:6px; }
@@ -144,6 +145,11 @@
     .modal-head { padding:14px 18px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px; }
     .modal-head h3 { font-size:16px; font-weight:800; flex:1; }
     .modal-x { border:none; background:none; font-size:24px; line-height:1; color:var(--txt3); cursor:pointer; }
+    .estilos { display:flex; border:1.5px solid var(--border2); border-radius:var(--radius-s); overflow:hidden; }
+    .estilos button { border:none; background:var(--white); padding:6px 11px; font-family:inherit; font-size:12.5px;
+      font-weight:600; color:var(--txt2); cursor:pointer; }
+    .estilos button + button { border-left:1px solid var(--border); }
+    .estilos button.on { background:var(--primary); color:#fff; }
     .mapa-info { padding:8px 18px; font-size:12.5px; color:var(--txt2); border-bottom:1px solid var(--border); line-height:1.5; }
     #mapaRep { flex:1; min-height:0; }
     .mk { width:14px; height:14px; border-radius:50%; border:3px solid #fff; box-shadow:0 1px 4px rgba(0,0,0,.4); }
@@ -223,13 +229,17 @@
   <div class="modal-overlay hidden" id="mapaModal" onclick="if(event.target===this) cerrarMapa()">
     <div class="modal">
       <div class="modal-head"><h3 id="mapaTitulo">Recorrido</h3>
+        <div class="estilos" id="estilosMapa">
+          <button data-k="calles" class="on" onclick="setEstiloMapa('calles')">Calles</button>
+          <button data-k="satelite" onclick="setEstiloMapa('satelite')">Satélite</button>
+        </div>
         <button class="modal-x" onclick="cerrarMapa()" title="Cerrar">&times;</button></div>
       <div class="mapa-info" id="mapaInfo"></div>
       <div style="position:relative; flex:1; display:flex; min-height:0;">
         <div id="mapaRep" style="flex:1;"></div>
         <div class="mapa-leyenda">
-          <div><span class="linea" style="border-color:#2563eb"></span>Ruta ida</div>
-          <div><span class="linea dash" style="border-color:#ea580c"></span>Ruta regreso</div>
+          <div><span class="linea" style="border-color:#2563eb"></span>Ruta ida (bajando)</div>
+          <div><span class="linea dash" style="border-color:#ea580c"></span>Ruta regreso (subiendo)</div>
           <div><span class="linea" style="border-color:#6366f1"></span>Recorrido del bus</div>
           <div><span class="linea" style="border-color:#dc2626"></span>Tramo del evento</div>
         </div>
@@ -242,7 +252,8 @@
 <script>
   const API = (window.location.port === '3030') ? 'http://localhost:8001' : window.location.origin;
   const LIB_EXCELJS = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
-  const TXT_SENTIDO = { ida: 'Ida', regreso: 'Regreso', ambos: 'Ida y regreso' };
+  // La ida baja (del barrio al centro) y el regreso sube.
+  const TXT_SENTIDO = { ida: 'Bajando', regreso: 'Subiendo', ambos: 'Ambos sentidos' };
 
   async function apiFetch(path) {
     const token = localStorage.getItem('authToken');
@@ -277,6 +288,7 @@
     return `${Math.floor(s / 3600)} h ${String(Math.floor((s % 3600) / 60)).padStart(2, '0')} min`;
   }
   function fmtMin(m) { return m === null || m === undefined ? '—' : `${String(m).replace('.', ',')} min`; }
+  function fmtKm(m) { return m >= 1000 ? `${fmtNum(m / 1000, 1)} km` : `${fmtNum(m)} m`; }
   function fmtNum(n, dec = 0) { return n === null || n === undefined ? '—' : Number(n).toLocaleString('es-CO', { maximumFractionDigits: dec }); }
   function desvio(m) {
     if (m === null || m === undefined) return '';
@@ -298,6 +310,7 @@
 
   async function init() {
     document.getElementById('fDesde').value = hoyBogota();
+    prepararGoogle();
     try {
       const u = JSON.parse(localStorage.getItem('currentUser') || '{}');
       esAdmin = u.rol === 'Administrador';
@@ -354,7 +367,7 @@
   function pintar() {
     const grupos = datos?.grupos || [];
     const excesos = todos('excesos');
-    const abandonos = todos('abandonos').filter(a => a.tipo === 'abandono');
+    const abandonos = todos('abandonos').filter(a => a.tipo !== 'encierro');
     const vueltas = grupos.reduce((s, g) => s + g.vueltas.length, 0);
     const criticos = excesos.filter(e => e.nivel === 'critico').length;
     const pasosControl = grupos.reduce((s, g) => s + g.pasos.filter(p => p.tipo === 'control').length, 0);
@@ -365,7 +378,8 @@
       ['Pasos con atraso', atrasos, atrasos ? 'warn' : '', 'frente a los minutos objetivo'],
       ['Excesos de velocidad', excesos.length, criticos ? 'bad' : excesos.length ? 'warn' : '', `${criticos} crítico(s)`],
       ['Abandonos de ruta', abandonos.length, abandonos.length ? 'bad' : '',
-        `${abandonos.filter(a => !a.regreso).length} sin regreso`],
+        [abandonos.filter(a => a.tipo === 'atajo').length ? `${abandonos.filter(a => a.tipo === 'atajo').length} atajo(s)` : '',
+         `${abandonos.filter(a => !a.regreso).length} sin regreso`].filter(Boolean).join(' · ')],
     ];
     document.getElementById('kpis').innerHTML = grupos.length ? kpis.map(([l, v, c, s]) =>
       `<div class="kpi"><div class="kpi-label">${l}</div><div class="kpi-val ${c}">${v}</div>
@@ -484,7 +498,7 @@
           <div class="sub">${esc(e.g.ruta_nombre || '')}</div></td>
         <td data-label=""><button class="btn ghost sm" onclick="verExceso(${e.gi}, ${e.i})">Mapa</button></td>
       </tr>`).join('')}</tbody></table></div></div>
-      <div class="leyenda">Aviso: supera el primer límite de la ruta. Crítico: supera el segundo. Los límites se configuran
+      <div class="nota">Aviso: supera el primer límite de la ruta. Crítico: supera el segundo. Los límites se configuran
         por ruta en Rutas Geográficas.</div>`;
   }
 
@@ -497,24 +511,27 @@
       return;
     }
     cont.innerHTML = `<div class="card" style="padding:6px 10px;"><div style="overflow-x:auto;"><table class="responsive">
-      <thead><tr><th>Fecha</th><th>Bus</th><th>Salió de la ruta</th><th>Regresó</th><th>Duración</th><th>Distancia máx.</th><th>Km fuera</th><th>Estado</th><th></th></tr></thead>
+      <thead><tr><th>Fecha</th><th>Bus</th><th>Salió de la ruta</th><th>Duración</th><th>Distancia</th><th>Estado</th><th></th></tr></thead>
       <tbody>${lista.map(a => {
         const est = a.tipo === 'encierro' ? `<span class="pill encierro">Fue a encierro${a.encierro ? ': ' + esc(a.encierro) : ''}</span>`
+          : a.tipo === 'atajo' ? '<span class="pill abandono">Atajo</span>'
           : a.regreso ? '<span class="pill abandono">Abandono</span>' : '<span class="pill sinregreso">No regresó</span>';
+        const saltado = a.saltado_m ? `<div class="sub">se saltó ${fmtKm(a.saltado_m)} de ruta</div>` : '';
         return `<tr class="${a.tipo === 'encierro' ? 'gris' : ''}">
         <td data-label="Fecha">${fmtFecha(a.g.fecha)}</td>
         <td data-label="Bus" class="bus"><b>${esc(busTxt(a.g))}</b><div class="sub">${esc(a.g.conductor || '')}</div></td>
-        <td data-label="Salió de la ruta" class="hora">${fmtHora(a.inicio, true)}</td>
-        <td data-label="Regresó" class="hora">${a.fin ? fmtHora(a.fin, true) : '—'}</td>
+        <td data-label="Salió de la ruta"><span class="hora">${fmtHora(a.inicio, true)}</span>
+          <div class="sub">${a.fin ? 'regresó ' + fmtHora(a.fin, true) : 'no regresó'}</div></td>
         <td data-label="Duración">${fmtDur(a.duracion_s)}</td>
-        <td data-label="Distancia máx.">${fmtNum(a.distancia_max_m)} m</td>
-        <td data-label="Km fuera">${fmtNum(a.km_fuera, 2)} km</td>
-        <td data-label="Estado">${est}</td>
+        <td data-label="Distancia">${a.tipo === 'atajo' && !a.distancia_max_m ? `${fmtNum(a.km_fuera, 2)} km por fuera`
+            : `hasta ${fmtNum(a.distancia_max_m)} m de la ruta<div class="sub">${fmtNum(a.km_fuera, 2)} km por fuera</div>`}</td>
+        <td data-label="Estado">${est}${saltado}</td>
         <td data-label=""><button class="btn ghost sm" onclick="verAbandono(${a.gi}, ${a.i})">Mapa</button></td>
       </tr>`; }).join('')}</tbody></table></div></div>
-      <div class="leyenda">Cuenta desde que el bus entra a la ruta en el día (antes viene del patio). Fuera del corredor de la
-        ruta en ${datos.grupos[0]?.limites.corredor_m ?? 50} m o más, por varios reportes seguidos. Si un bus termina en un patio o
-        parqueadero, crea esa zona de encierro en Rutas Geográficas y quedará como "Fue a encierro".</div>`;
+      <div class="nota">Cuenta desde que el bus entra a la ruta en el día (antes viene del patio). <b>Abandono</b>: fuera
+        del corredor de la ruta (${datos.grupos[0]?.limites.corredor_m ?? 50} m) por varios reportes seguidos. <b>Atajo</b>: se siguió
+        derecho y se saltó un tramo de la ruta, aunque no se haya alejado. Si un bus termina en un patio o parqueadero, crea esa
+        zona de encierro en Rutas Geográficas y quedará como "Fue a encierro".</div>`;
   }
 
   // ── Resumen por bus ──
@@ -535,7 +552,7 @@
         <td data-label="Vel. máx.">${g.resumen.vel_max != null ? fmtNum(g.resumen.vel_max) + ' km/h' : '—'}</td>
         <td data-label="Vueltas">${g.vueltas.length}</td>
         <td data-label="Excesos">${g.excesos.length}${g.excesos.some(e => e.nivel === 'critico') ? ' <span class="pill critico">crítico</span>' : ''}</td>
-        <td data-label="Abandonos">${g.abandonos.filter(a => a.tipo === 'abandono').length}</td>
+        <td data-label="Abandonos">${g.abandonos.filter(a => a.tipo !== 'encierro').length}</td>
         <td data-label=""><button class="btn ghost sm" onclick="verDia(${gi})">Ver recorrido</button></td>
       </tr>`).join('')}</tbody></table></div></div>`;
   }
@@ -546,11 +563,70 @@
   let mapa = null, capaMapa = null;
   const geometrias = {};   // ruta_id → {trazados, puntos}
 
-  function crearMapa() {
+  // ── Mapa base: Google (si hay clave, igual que el mapa en vivo) con Esri de respaldo ──
+  // Google cobra por cada mapa creado: se crea una sola vez y se reutiliza.
+  const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services';
+  const ESTILOS = {
+    calles:   { google: 'roadmap', esri: `${ESRI}/World_Street_Map/MapServer/tile/{z}/{y}/{x}`,
+                attr: '&copy; Esri, HERE, Garmin, OpenStreetMap' },
+    satelite: { google: 'hybrid', esri: `${ESRI}/World_Imagery/MapServer/tile/{z}/{y}/{x}`,
+                attr: '&copy; Esri, Maxar, Earthstar Geographics' },
+  };
+  const GOOGLE_MUTANT = { src: 'https://unpkg.com/leaflet.gridlayer.googlemutant@0.16.0/dist/Leaflet.GoogleMutant.js',
+                          integrity: 'sha384-NVeApJLhFaaKalRqZ2xBNeRECGMKMkF5VMTDJtXWk2g0Tq+5Jo1N7CZjhL3gQSFW' };
+  let usarGoogle = false, googleListo = null, capaBase = null, estiloMapa = 'calles';
+  const capasBase = {};
+
+  function cargarScript(src, integrity) {
+    return new Promise((ok, mal) => {
+      const s = document.createElement('script');
+      s.src = src; s.async = true;
+      if (integrity) { s.integrity = integrity; s.crossOrigin = 'anonymous'; }
+      s.onload = ok; s.onerror = () => mal(new Error('No cargó ' + src));
+      document.head.appendChild(s);
+    });
+  }
+
+  // Se llama al abrir la página: así el script ya está listo cuando se abra un mapa.
+  function prepararGoogle() {
+    googleListo = (async () => {
+      const cfg = await apiFetch('/api/monitoreo/mapa-config');
+      if (!cfg.google_maps_key) return;
+      window.gm_authFailure = () => {   // clave rechazada: volver a Esri
+        console.warn('Google Maps rechazó la clave; se usa el mapa alterno.');
+        usarGoogle = false;
+        Object.keys(capasBase).forEach(k => delete capasBase[k]);
+        if (mapa) setEstiloMapa(estiloMapa);
+      };
+      await new Promise((ok, mal) => {
+        window.__gmListo = ok;
+        cargarScript(`https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(cfg.google_maps_key)}` +
+                     `&v=weekly&language=es&region=CO&loading=async&callback=__gmListo`).catch(mal);
+      });
+      if (google.maps.importLibrary) await google.maps.importLibrary('maps');
+      await cargarScript(GOOGLE_MUTANT.src, GOOGLE_MUTANT.integrity);
+      usarGoogle = true;
+    })().catch(e => console.warn('Mapa de Google no disponible:', e.message));
+  }
+
+  function setEstiloMapa(k) {
+    estiloMapa = k;
+    if (capaBase) mapa.removeLayer(capaBase);
+    const s = ESTILOS[k];
+    capaBase = capasBase[k] || (capasBase[k] = usarGoogle
+      ? L.gridLayer.googleMutant({ type: s.google, maxZoom: 21 })
+      : L.tileLayer(s.esri, { maxZoom: 20, maxNativeZoom: 19, attribution: s.attr }));
+    capaBase.addTo(mapa);
+    if (capaBase.bringToBack) capaBase.bringToBack();
+    document.querySelectorAll('#estilosMapa button').forEach(b => b.classList.toggle('on', b.dataset.k === k));
+  }
+
+  async function crearMapa() {
     mapa = L.map('mapaRep', { zoomControl: true }).setView([6.25, -75.57], 13);
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
-      { maxZoom: 20, maxNativeZoom: 19, attribution: '&copy; Esri, HERE, Garmin, OpenStreetMap' }).addTo(mapa);
     capaMapa = L.layerGroup().addTo(mapa);
+    // Espera breve por Google; si tarda o falla, arranca con Esri.
+    await Promise.race([googleListo, new Promise(r => setTimeout(r, 4000))]);
+    setEstiloMapa(estiloMapa);
   }
   function cerrarMapa() { document.getElementById('mapaModal').classList.add('hidden'); }
 
@@ -572,7 +648,7 @@
     document.getElementById('mapaTitulo').textContent = titulo;
     document.getElementById('mapaInfo').innerHTML = info;
     document.getElementById('mapaModal').classList.remove('hidden');
-    if (!mapa) crearMapa();
+    if (!mapa) await crearMapa();
     setTimeout(() => mapa.invalidateSize(), 50);
     capaMapa.clearLayers();
     let pos, geo;
@@ -588,7 +664,7 @@
         const l = geo.trazados[s]?.puntos;
         if (!l) return;
         L.polyline(l, { color: '#fff', weight: 7, opacity: .7, interactive: false }).addTo(capaMapa);
-        L.polyline(l, { color, weight: 4, opacity: .75, dashArray: dash }).bindTooltip(`Ruta — ${s === 'ida' ? 'Ida' : 'Regreso'}`, { sticky: true }).addTo(capaMapa);
+        L.polyline(l, { color, weight: 4, opacity: .75, dashArray: dash }).bindTooltip(`Ruta — ${s === 'ida' ? 'Ida (bajando)' : 'Regreso (subiendo)'}`, { sticky: true }).addTo(capaMapa);
       });
       geo.puntos.forEach(p => {
         L.circle([p.lat, p.lon], { radius: p.radio_m, color: '#7c3aed', weight: 1, fillOpacity: .06, interactive: false }).addTo(capaMapa);
@@ -636,16 +712,26 @@
     });
   }
 
+  // Tramo a resaltar: en un atajo incluye la posición de regreso (también sobre la ruta).
+  function resalteAbandono(a, ultima) {
+    return { desde: a.inicio, hasta: a.tipo === 'atajo' ? isoMas(a.fin, 1) : (a.fin || isoMas(ultima, 1)) };
+  }
+
   function verAbandono(gi, i) {
     const g = datos.grupos[gi], a = g.abandonos[i];
     const fin = a.fin || isoMas(a.inicio, a.duracion_s + 1);
+    const atajo = a.tipo === 'atajo';
     abrirMapa({
-      g, titulo: `${busTxt(g)} — ${a.tipo === 'encierro' ? 'ida a encierro' : 'abandono de ruta'}`,
-      info: `${fmtFecha(g.fecha)} · salió ${fmtHora(a.inicio, true)} · ${a.fin ? 'regresó ' + fmtHora(a.fin, true) : 'no regresó'} ·
-        ${fmtDur(a.duracion_s)} · hasta <b>${fmtNum(a.distancia_max_m)} m</b> de la ruta · ${fmtNum(a.km_fuera, 2)} km fuera`,
+      g, titulo: `${busTxt(g)} — ${a.tipo === 'encierro' ? 'ida a encierro' : atajo ? 'atajo: se siguió derecho' : 'abandono de ruta'}`,
+      info: atajo
+        ? `${fmtFecha(g.fecha)} · ${fmtHora(a.inicio, true)} a ${fmtHora(a.fin, true)} · se saltó <b>${fmtKm(a.saltado_m)}</b> de ruta
+           y recorrió ${fmtKm(a.km_fuera * 1000)} por fuera`
+        : `${fmtFecha(g.fecha)} · salió ${fmtHora(a.inicio, true)} · ${a.fin ? 'regresó ' + fmtHora(a.fin, true) : 'no regresó'} ·
+           ${fmtDur(a.duracion_s)} · hasta <b>${fmtNum(a.distancia_max_m)} m</b> de la ruta · ${fmtNum(a.km_fuera, 2)} km fuera
+           ${a.saltado_m ? ` · se saltó <b>${fmtKm(a.saltado_m)}</b> de ruta` : ''}`,
       desde: isoMas(a.inicio, -360), hasta: isoMas(fin, 360),
-      resaltes: [{ desde: a.inicio, hasta: fin }],
-      marcas: [{ lat: a.max_lat, lon: a.max_lon, tip: `${fmtNum(a.distancia_max_m)} m de la ruta` }],
+      resaltes: [resalteAbandono(a, fin)],
+      marcas: atajo ? [] : [{ lat: a.max_lat, lon: a.max_lon, tip: `${fmtNum(a.distancia_max_m)} m de la ruta` }],
     });
   }
 
@@ -656,7 +742,7 @@
       info: `${esc(g.ruta_nombre || 'Sin ruta')} · ${fmtNum(g.resumen.km, 1)} km · ${g.vueltas.length} vuelta(s) ·
         en rojo los abandonos de ruta; los puntos rojos marcan excesos de velocidad`,
       desde: g.resumen.primera, hasta: isoMas(g.resumen.ultima, 1),
-      resaltes: g.abandonos.filter(a => a.tipo === 'abandono').map(a => ({ desde: a.inicio, hasta: a.fin || isoMas(g.resumen.ultima, 1) })),
+      resaltes: g.abandonos.filter(a => a.tipo !== 'encierro').map(a => resalteAbandono(a, g.resumen.ultima)),
       marcas: g.excesos.map(e => ({ lat: e.lat, lon: e.lon, tip: `${fmtNum(e.vel_max)} km/h` })),
       todoElDia: true,
     });
@@ -772,7 +858,9 @@
         { h: 'Duración (min)', w: 10, v: a => Math.round(a.duracion_s / 6) / 10 },
         { h: 'Distancia máx. (m)', w: 11, v: a => a.distancia_max_m },
         { h: 'Km fuera', w: 9, v: a => a.km_fuera },
-        { h: 'Estado', w: 20, v: a => a.tipo === 'encierro' ? `Encierro${a.encierro ? ': ' + a.encierro : ''}` : (a.regreso ? 'Abandono' : 'No regresó') },
+        { h: 'Estado', w: 20, v: a => a.tipo === 'encierro' ? `Encierro${a.encierro ? ': ' + a.encierro : ''}`
+            : a.tipo === 'atajo' ? 'Atajo' : (a.regreso ? 'Abandono' : 'No regresó') },
+        { h: 'Tramo saltado (m)', w: 11, v: a => a.saltado_m ?? '' },
         { h: 'Ubicación (más lejos)', w: 24, v: a => `${a.max_lat.toFixed(6)}, ${a.max_lon.toFixed(6)}` },
       ], todos('abandonos'), periodo);
 
