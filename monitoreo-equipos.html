@@ -111,6 +111,19 @@
       padding:10px 12px; font-size:12.5px; line-height:1.5; margin-top:12px; }
     .pasos { font-size:12.5px; color:var(--txt2); line-height:1.7; margin-top:12px; padding-left:18px; }
     .pasos b { color:var(--txt); }
+    .bus-num { font-weight:700; }
+    .sin-bus { color:var(--txt3); font-style:italic; }
+    .opciones { display:flex; flex-direction:column; gap:8px; }
+    .opciones .opcion { display:flex; gap:10px; align-items:flex-start; padding:10px 12px; border:1.5px solid var(--border2);
+      border-radius:var(--radius-s); cursor:pointer; font-size:13px; font-weight:400; line-height:1.45; margin:0; }
+    .opcion:hover, .opcion:has(input:checked) { border-color:var(--primary); }
+    .opcion:has(input:checked) { background:rgba(99,102,241,.05); }
+    .opciones .opcion input { margin-top:3px; width:16px; height:16px; flex-shrink:0; cursor:pointer; }
+    .opcion b { display:block; color:var(--txt); }
+    .opcion span { color:var(--txt2); font-size:12.5px; font-weight:400; }
+    .btn-danger { border:none; background:var(--red); color:#fff; border-radius:var(--radius-s);
+      padding:9px 16px; font-family:inherit; font-size:13px; font-weight:700; cursor:pointer; white-space:nowrap; }
+    .btn-danger:disabled { opacity:.5; cursor:default; }
 
     .toast {
       position:fixed; bottom:20px; left:50%; transform:translateX(-50%);
@@ -193,6 +206,49 @@
     </div>
   </div>
 
+  <!-- Modal: cambiar bus -->
+  <div class="modal-bg hidden" id="modalBus" onclick="if(event.target===this) cerrarModal('modalBus')">
+    <div class="modal">
+      <h3>Cambiar bus del equipo</h3>
+      <div class="modal-sub" id="busSub"></div>
+      <div class="field"><label for="busNuevo">Bus nuevo</label>
+        <select id="busNuevo" onchange="pintarOpcionesHistorial()"></select></div>
+      <div class="field" id="busHistorial" style="display:none;">
+        <label>¿Qué pasó con el equipo?</label>
+        <div class="opciones">
+          <label class="opcion"><input type="radio" name="motivoBus" value="reinstalado" checked />
+            <div><b>Se pasó a otro bus</b>
+              <span id="txtReinstalado"></span></div></label>
+          <label class="opcion"><input type="radio" name="motivoBus" value="error" />
+            <div><b>Se registró en el bus equivocado</b>
+              <span id="txtError"></span></div></label>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" onclick="cerrarModal('modalBus')">Cancelar</button>
+        <button class="btn-primary" id="btnCambiarBus" onclick="guardarBus()">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: eliminar equipo -->
+  <div class="modal-bg hidden" id="modalEliminar" onclick="if(event.target===this) cerrarModal('modalEliminar')">
+    <div class="modal">
+      <h3>Eliminar equipo</h3>
+      <div class="modal-sub" id="elimSub"></div>
+      <ul class="pasos" style="margin-top:0;">
+        <li>Se borra el registro del IMEI y su token: el IMEI queda libre para registrarlo de nuevo.</li>
+        <li>Las posiciones ya recibidas <b>se conservan</b> en el historial del bus (reportes).</li>
+        <li>Si el equipo sigue transmitiendo, aparecerá arriba en <b>Pendientes</b> y podrás asignarlo a otro bus
+          conservando el token que ya trae.</li>
+      </ul>
+      <div class="modal-actions">
+        <button class="btn" onclick="cerrarModal('modalEliminar')">Cancelar</button>
+        <button class="btn-danger" id="btnEliminar" onclick="eliminar()">Eliminar equipo</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal: URL con token -->
   <div class="modal-bg hidden" id="modalToken" onclick="if(event.target===this) cerrarModal('modalToken')">
     <div class="modal">
@@ -228,7 +284,7 @@
       },
     });
     const json = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(json.error || 'Error del servidor');
+    if (!res.ok) throw Object.assign(new Error(json.error || 'Error del servidor'), { datos: json });
     return json;
   }
 
@@ -320,12 +376,12 @@
   }
 
   function opcionesBus(seleccionado, excluirOcupados = true, equipoId = null) {
-    const ocupados = new Set(equipos.filter(e => e.activo && e.bus_id && e.id !== equipoId).map(e => e.bus_id));
+    const ocupados = new Map(equipos.filter(e => e.activo && e.bus_id && e.id !== equipoId).map(e => [e.bus_id, e.imei]));
     return ['<option value="">— Sin bus —</option>'].concat(
       buses.map(b => {
         const ocupado = excluirOcupados && ocupados.has(b.id);
         return `<option value="${b.id}" ${b.id === seleccionado ? 'selected' : ''} ${ocupado ? 'disabled' : ''}>` +
-               `${esc(busLabel(b))}${ocupado ? ' (ya tiene equipo)' : ''}</option>`;
+               `${esc(busLabel(b))}${ocupado ? ` (ya tiene el equipo ${esc(ocupados.get(b.id))})` : ''}</option>`;
       })
     ).join('');
   }
@@ -363,8 +419,7 @@
       const bus = buses.find(b => b.id === e.bus_id);
       const fila = `
       <tr>
-        <td data-label="Bus"><select id="bus-${e.id}" onchange="cambiarBus(${e.id})" ${e.activo ? '' : 'disabled'}>
-          ${opcionesBus(e.bus_id, true, e.id)}</select>
+        <td data-label="Bus">${bus ? `<span class="bus-num">${esc(busLabel(bus))}</span>` : '<span class="sin-bus">Sin bus</span>'}
           ${e.notas ? `<div class="sub">${esc(e.notas)}</div>` : ''}</td>
         <td data-label="IMEI"><span class="mono">${esc(e.imei)}</span></td>
         <td data-label="Estado"><span class="pill ${est.cls}"><span class="dot"></span>${est.txt}</span></td>
@@ -375,12 +430,14 @@
             title="Recepción en el servidor menos la hora que reporta el GPS">${fmtDur(e.ultimo_desfase_s)}</span></td>
         <td data-label="Paquetes">${Number(e.paquetes || 0).toLocaleString('es-CO')}</td>
         <td data-label=""><div class="acciones">
+          <button class="btn sm" onclick="abrirCambiarBus(${e.id})">Cambiar bus</button>
           <button class="btn sm" onclick="toggleDetalle(${e.id})">${abiertos.has(e.id) ? 'Ocultar' : 'Paquetes'}</button>
           ${e.pos_lat != null ? `<a class="btn sm" style="text-decoration:none;" target="_blank" rel="noopener"
               href="https://www.google.com/maps?q=${e.pos_lat},${e.pos_lon}">Mapa</a>` : ''}
           <button class="btn sm" onclick="regenerarToken(${e.id})">Nuevo token</button>
           <button class="btn sm ${e.activo ? 'danger' : ''}" onclick="toggleActivo(${e.id}, ${e.activo ? 0 : 1})">
             ${e.activo ? 'Desactivar' : 'Activar'}</button>
+          <button class="btn sm danger" onclick="abrirEliminar(${e.id})">Eliminar</button>
         </div></td>
       </tr>`;
       const detalle = abiertos.has(e.id)
@@ -446,7 +503,14 @@
       cerrarModal('modalRegistro');
       mostrarUrl(r.imei, r.token, 'Equipo registrado');
       cargar();
-    } catch (e) { toast(e.message); }
+    } catch (e) {
+      // IMEI ya registrado: en vez de registrarlo otra vez, se le cambia el bus.
+      if (e.datos?.equipo_id && confirm(`${e.message}\n\n¿Abrir «Cambiar bus» para ese equipo ahora?`)) {
+        cerrarModal('modalRegistro');
+        await cargar(true);
+        abrirCambiarBus(e.datos.equipo_id, busId ? +busId : undefined);
+      } else toast(e.message);
+    }
     finally { btn.disabled = false; }
   }
 
@@ -468,12 +532,83 @@
     catch { toast('No se pudo copiar: selecciónala y cópiala a mano'); }
   }
 
-  async function cambiarBus(id) {
-    const v = document.getElementById('bus-' + id).value;
+  // ── Cambiar bus ──
+  let equipoEnEdicion = null;
+
+  function abrirCambiarBus(id, busPropuesto) {
+    const e = equipos.find(x => x.id === id);
+    if (!e) return;
+    equipoEnEdicion = e;
+    const actual = buses.find(b => b.id === e.bus_id);
+    document.getElementById('busSub').innerHTML =
+      `Equipo <b class="mono">${esc(e.imei)}</b> — hoy está en <b>${actual ? esc(busLabel(actual)) : 'ningún bus'}</b>.`;
+    document.getElementById('busNuevo').innerHTML = opcionesBus(busPropuesto ?? e.bus_id, true, e.id);
+    document.querySelector('input[name="motivoBus"][value="reinstalado"]').checked = true;
+    pintarOpcionesHistorial();
+    document.getElementById('modalBus').classList.remove('hidden');
+  }
+
+  // Solo se pregunta qué hacer con el historial si el equipo ya tenía bus y se pasa a otro.
+  function pintarOpcionesHistorial() {
+    const e = equipoEnEdicion;
+    const nuevo = +document.getElementById('busNuevo').value || null;
+    const anterior = buses.find(b => b.id === e.bus_id);
+    const destino = buses.find(b => b.id === nuevo);
+    const preguntar = !!(anterior && destino && destino.id !== anterior.id);
+    document.getElementById('busHistorial').style.display = preguntar ? '' : 'none';
+    if (!preguntar) return;
+    const n = Number(e.paquetes || 0).toLocaleString('es-CO');
+    document.getElementById('txtReinstalado').textContent =
+      `Las posiciones que ya envió (${n}) se quedan en el historial del bus ${anterior.numero}; desde ahora se guardan en el bus ${destino.numero}.`;
+    document.getElementById('txtError').textContent =
+      `El equipo siempre estuvo en el bus ${destino.numero}: sus ${n} posiciones pasan también al bus ${destino.numero} (mapa y reportes).`;
+  }
+
+  async function guardarBus() {
+    const e = equipoEnEdicion;
+    const v = document.getElementById('busNuevo').value;
+    const nuevo = v ? +v : null;
+    if (nuevo === e.bus_id) { cerrarModal('modalBus'); return; }
+    const preguntar = document.getElementById('busHistorial').style.display !== 'none';
+    const mover = preguntar && document.querySelector('input[name="motivoBus"]:checked')?.value === 'error';
+    const btn = document.getElementById('btnCambiarBus');
+    btn.disabled = true;
     try {
-      await apiFetch(`/api/monitoreo/equipos/${id}`, { method: 'PUT', body: JSON.stringify({ bus_id: v ? +v : null }) });
-      toast(v ? 'Equipo asignado al bus' : 'Equipo sin bus');
-    } catch (e) { toast(e.message); }
+      const r = await apiFetch(`/api/monitoreo/equipos/${e.id}`, {
+        method: 'PUT', body: JSON.stringify({ bus_id: nuevo, mover_historial: mover }),
+      });
+      cerrarModal('modalBus');
+      const destino = buses.find(b => b.id === nuevo);
+      toast(!destino ? 'El equipo quedó sin bus'
+        : mover ? `Equipo y ${Number(r.posiciones_movidas || 0).toLocaleString('es-CO')} posiciones pasados al bus ${destino.numero}`
+        : `Equipo pasado al bus ${destino.numero}`);
+    } catch (err) { toast(err.message); }
+    finally { btn.disabled = false; }
+    cargar();
+  }
+
+  // ── Eliminar ──
+  function abrirEliminar(id) {
+    const e = equipos.find(x => x.id === id);
+    if (!e) return;
+    equipoEnEdicion = e;
+    const bus = buses.find(b => b.id === e.bus_id);
+    document.getElementById('elimSub').innerHTML =
+      `¿Eliminar el equipo <b class="mono">${esc(e.imei)}</b>${bus ? ` del <b>${esc(busLabel(bus))}</b>` : ''}?`;
+    document.getElementById('modalEliminar').classList.remove('hidden');
+  }
+
+  async function eliminar() {
+    const e = equipoEnEdicion;
+    const btn = document.getElementById('btnEliminar');
+    btn.disabled = true;
+    try {
+      await apiFetch(`/api/monitoreo/equipos/${e.id}`, { method: 'DELETE' });
+      cerrarModal('modalEliminar');
+      abiertos.delete(e.id);
+      toast(`Equipo ${e.imei} eliminado`);
+    } catch (err) { toast(err.message); }
+    finally { btn.disabled = false; }
     cargar();
   }
 

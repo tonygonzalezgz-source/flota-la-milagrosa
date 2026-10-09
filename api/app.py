@@ -115,7 +115,7 @@ PG_SCHEMA    = os.path.join(os.path.dirname(__file__), "supabase_schema.sql")
 SCHEMA_VERSION = 15
 
 ROLE_VIEWS = {
-    "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho", "historial-despacho", "gastos", "tecnologia", "chequeo", "eds", "lavada", "mapa", "relojes", "mb-mapa", "mb-rutas", "mb-equipos"],
+    "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho", "historial-despacho", "gastos", "tecnologia", "chequeo", "eds", "lavada", "mapa", "relojes", "mb-mapa", "mb-reportes", "mb-rutas", "mb-equipos"],
     "Analista":       ["historial", "dashboard", "tecnologia", "despacho", "historial-despacho", "chequeo", "alistamiento"],
     "Técnico Mant.":  ["mant"],
     "Técnico Cámaras":       ["tecnologia"],
@@ -123,8 +123,8 @@ ROLE_VIEWS = {
     "Operador EDS":   ["eds"],
     "Operador Lavada": ["lavada"],
     "Propietario":    ["propietario", "gastos", "tecnologia", "lavada", "mb-mapa"],
-    "Despachador":    ["despacho", "historial-despacho", "chequeo", "mapa", "relojes", "mb-mapa"],
-    "Jefe de Ruta":   ["dashboard", "despacho", "historial-despacho", "chequeo", "alistamiento", "relojes", "mb-mapa"],
+    "Despachador":    ["despacho", "historial-despacho", "chequeo", "mapa", "relojes", "mb-mapa", "mb-reportes"],
+    "Jefe de Ruta":   ["dashboard", "despacho", "historial-despacho", "chequeo", "alistamiento", "relojes", "mb-mapa", "mb-reportes"],
     "Conductor":      ["alistamiento"],
 }
 
@@ -163,6 +163,7 @@ if DATABASE_URL:
         def __init__(self, raw_cur, last_id=None):
             self._c       = raw_cur
             self.lastrowid = last_id
+            self.rowcount  = raw_cur.rowcount
 
         def fetchall(self):
             try:
