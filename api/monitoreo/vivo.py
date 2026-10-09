@@ -13,7 +13,7 @@ from flask import jsonify, request
 
 from . import bp, geo, motor
 from .comun import ahora_utc, db, desde_bd, iso, rol
-from .reportes import _cargar_ruta, _posiciones
+from .reportes import _cargar_ruta, _dia_utc, _posiciones
 from .rutas import CONFIG_POR_DEFECTO, configs_rutas, zonas_encierro
 
 VER = ("Administrador", "Jefe de Ruta", "Despachador", "Propietario")
@@ -27,6 +27,7 @@ CACHE_ANALISIS_S = 60
 
 _rutas = {}      # ruta_id → (instante, motor.Ruta)
 _analisis = {}   # bus_id → ((ruta_id, ultimo_reporte_at), resultado, instante)
+_dias = {}       # bus_id → (clave, resultado, instante): novedades del día para el popup
 
 
 def hoy_bogota(ahora):
@@ -92,8 +93,12 @@ def _estado_ruta(res):
     ultimo = None
     if pasos:
         p = pasos[-1]
+        # Sigue dentro del punto si la visita llega hasta la última posición.
+        dentro = (res["resumen"]["ultima"] - p["salida"]).total_seconds() <= 45
+        terminal = p["punto"]["tipo"] == "terminal"
         ultimo = {"alias": p["punto"].get("alias"), "nombre": p["punto"]["nombre"], "tipo": p["punto"]["tipo"],
-                  "hora": iso(p["salida"] if p["punto"]["tipo"] == "terminal" else p["paso"]),
+                  "dentro": dentro,
+                  "hora": iso(p["entrada"] if dentro else (p["salida"] if terminal else p["paso"])),
                   "desvio_min": p["desvio_min"]}
     return {"sentido": res["resumen"]["sentido_actual"], "en_ruta": res["resumen"]["en_ruta_actual"],
             "ultimo_punto": ultimo}
@@ -172,3 +177,47 @@ def vivo():
         buses.append(f)
     return jsonify({"servidor_utc": iso(ahora), "buses": buses,
                     "desconexion_por_defecto_s": CONFIG_POR_DEFECTO["desconexion_min"] * 60})
+
+
+@bp.route("/api/monitoreo/vivo/<int:bus_id>/dia", methods=["GET"])
+@rol(*VER)
+def novedades_dia(bus_id):
+    """Abandonos y atajos del día de un bus, con la vuelta en que ocurrieron
+    (el estado en vivo solo mira la última hora y media). Se pide al abrir el
+    bus en el mapa; se recalcula a lo sumo una vez por minuto."""
+    ahora = ahora_utc()
+    hoy = hoy_bogota(ahora)
+    conn = db()
+    try:
+        if getattr(request, "jwt_user_rol", None) == "Propietario" and not conn.execute(
+                "SELECT 1 FROM usuario_buses WHERE usuario_id = ? AND bus_id = ?",
+                (request.jwt_user_id, bus_id)).fetchone():
+            return jsonify({"error": "Sin acceso a este bus"}), 403
+        fila = conn.execute(
+            "SELECT u.ultimo_reporte_at, d.ruta_id FROM gps_ultima_posicion u "
+            "LEFT JOIN despacho_diario d ON d.bus_id = u.bus_id AND d.fecha = ? WHERE u.bus_id = ?",
+            (hoy, bus_id)).fetchone()
+        fila = dict(fila) if fila else {}
+        clave = (hoy, fila.get("ruta_id"), fila.get("ultimo_reporte_at"))
+        hit = _dias.get(bus_id)
+        if hit and hit[0] == clave and time.monotonic() - hit[2] < CACHE_ANALISIS_S:
+            return jsonify(hit[1])
+        inicio, fin = _dia_utc((ahora - timedelta(hours=5)).date())
+        pos = _posiciones(conn, inicio, fin, bus_id).get(bus_id, [])
+        rid = fila.get("ruta_id")
+        r = _ruta(conn, rid) if rid else None
+        res = motor.analizar(pos, r, configs_rutas(conn).get(rid, CONFIG_POR_DEFECTO), zonas_encierro(conn))
+    finally:
+        conn.close()
+    out = {
+        "fecha": hoy,
+        "vueltas": len(res["vueltas"]),
+        "abandonos": [{"vuelta": a["vuelta"], "tipo": a["tipo"], "inicio": iso(a["inicio"]), "fin": iso(a["fin"]),
+                       "duracion_s": a["duracion_s"], "distancia_max_m": a["distancia_max_m"],
+                       "saltado_m": a["saltado_m"], "regreso": a["regreso"]}
+                      for a in res["abandonos"] if a["tipo"] != "encierro"],
+        "excesos": len(res["excesos"]),
+        "excesos_criticos": sum(1 for e in res["excesos"] if e["nivel"] == "critico"),
+    }
+    _dias[bus_id] = (clave, out, time.monotonic())
+    return jsonify(out)

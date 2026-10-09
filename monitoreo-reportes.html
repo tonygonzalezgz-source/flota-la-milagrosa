@@ -117,6 +117,15 @@
     .desv.adelanto { background:rgba(245,158,11,.16); color:#b45309; }
     .desv.atiempo { background:rgba(34,197,94,.14); color:#16a34a; }
     .no-paso { color:#c4c4cc; }
+    table.planilla tr.con-abandono td.vta { box-shadow:inset 3px 0 0 #dc2626; color:#dc2626; }
+    table.planilla td.novedades { text-align:left; min-width:150px; }
+    .tag-ab { display:inline-flex; gap:5px; align-items:center; margin:2px 4px 2px 0; border:none; cursor:pointer;
+      background:rgba(239,68,68,.12); color:#dc2626; border-radius:6px; padding:3px 7px; font-family:inherit;
+      font-size:11.5px; font-weight:700; white-space:nowrap; }
+    .tag-ab span { font-weight:600; opacity:.8; }
+    .tag-ab:hover { background:rgba(239,68,68,.2); }
+    .tag-ex { display:inline-block; margin:2px 0; background:rgba(245,158,11,.16); color:#b45309; border-radius:6px;
+      padding:3px 7px; font-size:11.5px; font-weight:700; white-space:nowrap; }
     .leyenda { font-size:11.5px; color:var(--txt3); margin:8px 0 2px; display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
     .nota { font-size:11.5px; color:var(--txt3); margin:8px 0 2px; line-height:1.55; }
     details { margin-top:10px; }
@@ -413,6 +422,18 @@
     ${g.avisos.map(a => `<div class="aviso">${esc(a)}</div>`).join('')}`;
   }
 
+  // Abandonos y excesos de una vuelta, como etiquetas que abren el mapa.
+  function novedadesVuelta(g, gi, n) {
+    const ab = g.abandonos.map((a, i) => ({ a, i })).filter(x => x.a.vuelta === n && x.a.tipo !== 'encierro');
+    const ex = g.excesos.filter(e => e.vuelta === n);
+    const etiquetas = ab.map(({ a, i }) =>
+      `<button class="tag-ab" onclick="verAbandono(${gi}, ${i})" title="Ver en el mapa">
+        ${a.tipo === 'atajo' ? `Atajo ${fmtKm(a.saltado_m)}` : a.regreso ? `Abandono ${fmtDur(a.duracion_s)}` : 'Abandono sin regreso'}
+        <span>${fmtHora(a.inicio)}</span></button>`);
+    if (ex.length) etiquetas.push(`<span class="tag-ex">${ex.length} exceso(s)${ex.some(e => e.nivel === 'critico') ? ' · crítico' : ''}</span>`);
+    return etiquetas.join('') || '<span class="sub">—</span>';
+  }
+
   // ── Puntos de control: planilla de vueltas por bus ──
   function pintarPasos() {
     const cont = document.getElementById('panel-pasos');
@@ -425,8 +446,8 @@
         h += `<div class="planilla-wrap"><table class="planilla"><thead><tr><th>Vuelta</th><th>Salida</th>
           ${puntos.map(p => `<th title="${esc(p.nombre)}">${esc(p.alias || p.nombre)}
             <span class="obj">${p.minutos_objetivo != null ? p.minutos_objetivo + ' min' : 'sin obj.'}</span></th>`).join('')}
-          <th>Llegada</th><th>Duración</th></tr></thead><tbody>
-          ${g.vueltas.map(v => `<tr>
+          <th>Llegada</th><th>Duración</th><th>Novedades</th></tr></thead><tbody>
+          ${g.vueltas.map(v => `<tr class="${g.abandonos.some(a => a.vuelta === v.n && a.tipo !== 'encierro') ? 'con-abandono' : ''}">
             <td class="vta">${v.n}</td>
             <td class="celda"><span class="hora">${fmtHora(v.salida)}</span>
               <span class="sub">${esc(v.terminal_salida?.alias || '')}</span></td>
@@ -439,6 +460,7 @@
             <td class="celda">${v.llegada ? `<span class="hora">${fmtHora(v.llegada)}</span>${desvio(v.desvio_llegada_min)}`
               : '<span class="sub">sin llegada</span>'}</td>
             <td>${v.duracion_min != null ? fmtMin(Math.round(v.duracion_min)) : '—'}</td>
+            <td class="novedades">${novedadesVuelta(g, gi, v.n)}</td>
           </tr>`).join('')}
           </tbody></table></div>
           <div class="leyenda"><span>Desvío frente a los minutos objetivo desde la salida del terminal:</span>
@@ -486,7 +508,7 @@
       <div class="card" style="padding:6px 10px;"><div style="overflow-x:auto;"><table class="responsive">
       <thead><tr><th>Fecha</th><th>Bus</th><th>Hora</th><th>Duración</th><th>Vel. máx.</th><th>Límite</th><th>Nivel</th><th>Dónde</th><th></th></tr></thead>
       <tbody>${lista.map(e => `<tr>
-        <td data-label="Fecha">${fmtFecha(e.g.fecha)}</td>
+        <td data-label="Fecha">${fmtFecha(e.g.fecha)}<div class="sub">${e.vuelta ? 'Vuelta ' + e.vuelta : 'Fuera de vuelta'}</div></td>
         <td data-label="Bus" class="bus"><b>${esc(busTxt(e.g))}</b><div class="sub">${esc(e.g.conductor || '')}</div></td>
         <td data-label="Hora" class="hora">${fmtHora(e.inicio, true)}</td>
         <td data-label="Duración">${e.posiciones > 1 ? `${fmtDur(e.duracion_s)}<div class="sub">${e.posiciones} reportes</div>`
@@ -518,7 +540,7 @@
           : a.regreso ? '<span class="pill abandono">Abandono</span>' : '<span class="pill sinregreso">No regresó</span>';
         const saltado = a.saltado_m ? `<div class="sub">se saltó ${fmtKm(a.saltado_m)} de ruta</div>` : '';
         return `<tr class="${a.tipo === 'encierro' ? 'gris' : ''}">
-        <td data-label="Fecha">${fmtFecha(a.g.fecha)}</td>
+        <td data-label="Fecha">${fmtFecha(a.g.fecha)}<div class="sub">${a.vuelta ? 'Vuelta ' + a.vuelta : 'Fuera de vuelta'}</div></td>
         <td data-label="Bus" class="bus"><b>${esc(busTxt(a.g))}</b><div class="sub">${esc(a.g.conductor || '')}</div></td>
         <td data-label="Salió de la ruta"><span class="hora">${fmtHora(a.inicio, true)}</span>
           <div class="sub">${a.fin ? 'regresó ' + fmtHora(a.fin, true) : 'no regresó'}</div></td>
@@ -842,6 +864,7 @@
         { h: 'Desvío llegada', w: 10, v: v => txtDesvio(v.desvio_llegada_min) },
       ], todos('vueltas'), periodo);
       hoja(wb, 'Excesos', 'EXCESOS DE VELOCIDAD', [...base,
+        { h: 'Vuelta', w: 8, v: x => x.vuelta ?? '' },
         { h: 'Inicio', w: 10, v: e => fmtHora(e.inicio, true) },
         { h: 'Fin', w: 10, v: e => fmtHora(e.fin, true) },
         { h: 'Reportes', w: 9, v: e => e.posiciones },
@@ -853,6 +876,7 @@
         { h: 'Ubicación', w: 24, v: e => `${e.lat.toFixed(6)}, ${e.lon.toFixed(6)}` },
       ], todos('excesos'), periodo);
       hoja(wb, 'Abandonos', 'ABANDONOS DE RUTA', [...base,
+        { h: 'Vuelta', w: 8, v: x => x.vuelta ?? '' },
         { h: 'Salió de la ruta', w: 11, v: a => fmtHora(a.inicio, true) },
         { h: 'Regresó', w: 10, v: a => a.fin ? fmtHora(a.fin, true) : 'No regresó' },
         { h: 'Duración (min)', w: 10, v: a => Math.round(a.duracion_s / 6) / 10 },
