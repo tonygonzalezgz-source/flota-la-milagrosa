@@ -7,7 +7,7 @@ from flask import jsonify, request
 from . import bp
 from .comun import (EMPRESA_POR_DEFECTO, a_bd, ahora_utc, db, desde_bd, hash_token, iso,
                     nuevo_token, rol)
-from .esquema import asegurar_particiones
+from .esquema import asegurar_indices, asegurar_particiones
 from .ingesta import _RE_IMEI, invalidar_cache_equipo
 
 ADMIN = ("Administrador",)
@@ -38,6 +38,21 @@ def _validar_bus(conn, bus_id, excluir_equipo=None):
         return (f"El bus {dict(bus)['numero']} ya tiene el equipo {dict(otro)['imei']}. "
                 "Desactívalo o quítale el bus primero.")
     return None
+
+
+def _equipo_por_imei(conn, imei):
+    fila = conn.execute(
+        "SELECT e.id, e.bus_id, e.activo, b.numero AS bus_numero FROM gps_equipos e "
+        "LEFT JOIN buses b ON b.id = e.bus_id WHERE e.imei = ?", (imei,)).fetchone()
+    return dict(fila) if fila else None
+
+
+def _error_imei_existente(e):
+    """Un IMEI ya registrado no se vuelve a registrar: se le cambia el bus."""
+    donde = f"en el bus {e['bus_numero']}" if e["bus_numero"] is not None else "sin bus"
+    return {"error": f"Ese IMEI ya está registrado ({donde}). Para pasarlo a otro bus usa "
+                     "«Cambiar bus» en la lista de equipos.",
+            "equipo_id": e["id"], "bus_id": e["bus_id"]}
 
 
 def _fila_equipo(r):
@@ -80,9 +95,10 @@ def crear_equipo():
         return jsonify({"error": str(e)}), 400
 
     conn = db()
-    if conn.execute("SELECT id FROM gps_equipos WHERE imei = ?", (imei,)).fetchone():
+    existente = _equipo_por_imei(conn, imei)
+    if existente:
         conn.close()
-        return jsonify({"error": "Ya hay un equipo registrado con ese IMEI"}), 409
+        return jsonify(_error_imei_existente(existente)), 409
     error = _validar_bus(conn, bus_id)
     if error:
         conn.close()
@@ -107,6 +123,10 @@ def crear_equipo():
 @bp.route("/api/monitoreo/equipos/<int:equipo_id>", methods=["PUT"])
 @rol(*ADMIN)
 def editar_equipo(equipo_id):
+    """Cambia bus / activo / notas. Al cambiar de bus, `mover_historial: true`
+    (el equipo se registró en el bus equivocado) pasa también todas sus
+    posiciones al bus nuevo; si no, el historial queda en el bus anterior
+    (el equipo se reinstaló en otro bus)."""
     data = request.get_json(silent=True) or {}
     conn = db()
     actual = conn.execute("SELECT * FROM gps_equipos WHERE id = ?", (equipo_id,)).fetchone()
@@ -129,14 +149,66 @@ def editar_equipo(equipo_id):
             conn.close()
             return jsonify({"error": error}), 409
 
-    conn.execute(
-        "UPDATE gps_equipos SET bus_id = ?, activo = ?, notas = ?, updated_at = ? WHERE id = ?",
-        (bus_id, activo, notas, a_bd(ahora_utc()), equipo_id),
-    )
-    conn.commit()
+    movidas = 0
+    try:
+        conn.execute(
+            "UPDATE gps_equipos SET bus_id = ?, activo = ?, notas = ?, updated_at = ? WHERE id = ?",
+            (bus_id, activo, notas, a_bd(ahora_utc()), equipo_id),
+        )
+        if bus_id != actual["bus_id"]:
+            movidas = _mover_bus(conn, equipo_id, actual["bus_id"], bus_id,
+                                 bool(data.get("mover_historial")))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        conn.close()
+        raise
     conn.close()
     invalidar_cache_equipo(actual["imei"])
-    return jsonify({"ok": True})
+    return jsonify({"ok": True, "posiciones_movidas": movidas})
+
+
+def _mover_bus(conn, equipo_id, bus_anterior, bus_nuevo, mover_historial):
+    """Deja la última posición y (opcional) el historial del equipo en el bus nuevo.
+    Devuelve cuántas posiciones se movieron."""
+    movidas = 0
+    if mover_historial and bus_nuevo:
+        cur = conn.execute("UPDATE gps_posiciones SET bus_id = ? WHERE equipo_id = ?",
+                           (bus_nuevo, equipo_id))
+        movidas = max(getattr(cur, "rowcount", 0) or 0, 0)
+    if bus_nuevo:
+        # Una fila vieja del bus nuevo es de otro equipo ya retirado
+        # (_validar_bus impide dos equipos activos en el mismo bus).
+        conn.execute("DELETE FROM gps_ultima_posicion WHERE bus_id = ?", (bus_nuevo,))
+    if bus_anterior:
+        if mover_historial and bus_nuevo:
+            # Aparece en el mapa ya, sin esperar el próximo paquete.
+            conn.execute("UPDATE gps_ultima_posicion SET bus_id = ? WHERE bus_id = ? AND equipo_id = ?",
+                         (bus_nuevo, bus_anterior, equipo_id))
+        else:
+            conn.execute("DELETE FROM gps_ultima_posicion WHERE bus_id = ? AND equipo_id = ?",
+                         (bus_anterior, equipo_id))
+    return movidas
+
+
+@bp.route("/api/monitoreo/equipos/<int:equipo_id>", methods=["DELETE"])
+@rol(*ADMIN)
+def eliminar_equipo(equipo_id):
+    """Borra el registro y el token del equipo. Las posiciones ya recibidas se
+    conservan en el historial del bus. Si el equipo sigue transmitiendo,
+    vuelve a aparecer en pendientes y se puede asignar de nuevo."""
+    conn = db()
+    fila = conn.execute("SELECT imei FROM gps_equipos WHERE id = ?", (equipo_id,)).fetchone()
+    if not fila:
+        conn.close()
+        return jsonify({"error": "Equipo no encontrado"}), 404
+    imei = dict(fila)["imei"]
+    conn.execute("DELETE FROM gps_ultima_posicion WHERE equipo_id = ?", (equipo_id,))
+    conn.execute("DELETE FROM gps_equipos WHERE id = ?", (equipo_id,))
+    conn.commit()
+    conn.close()
+    invalidar_cache_equipo(imei)
+    return jsonify({"ok": True, "imei": imei})
 
 
 @bp.route("/api/monitoreo/equipos/<int:equipo_id>/token", methods=["POST"])
@@ -227,9 +299,10 @@ def asignar_pendiente(imei):
         conn.close()
         return jsonify({"error": "Ese IMEI ya no está en pendientes"}), 404
     pend = dict(pend)
-    if conn.execute("SELECT id FROM gps_equipos WHERE imei = ?", (imei,)).fetchone():
+    existente = _equipo_por_imei(conn, imei)
+    if existente:
         conn.close()
-        return jsonify({"error": "Ya hay un equipo registrado con ese IMEI"}), 409
+        return jsonify(_error_imei_existente(existente)), 409
     error = _validar_bus(conn, bus_id)
     if error:
         conn.close()
@@ -267,10 +340,12 @@ def descartar_pendiente(imei):
 # ── Mantenimiento diario (cron de Vercel) ──
 
 def cron_monitoreo():
-    """Crea las particiones de posiciones del mes actual y los 2 siguientes."""
+    """Crea las particiones de posiciones del mes actual y los 2 siguientes, y
+    asegura los índices que se agregaron después de crear la tabla."""
     conn = db()
     try:
         creadas = asegurar_particiones(conn)
+        indices = asegurar_indices(conn)
     finally:
         conn.close()
-    return {"ok": True, "particiones": creadas}
+    return {"ok": True, "particiones": creadas, "indices": indices}
