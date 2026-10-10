@@ -57,9 +57,10 @@ SOLO_ADMIN = True
 _deps = {}
 
 
-def configurar(get_db, require_role, database_url, hoy_bogota, sync_pax_movilidad):
+def configurar(get_db, require_role, database_url, hoy_bogota, sync_pax_movilidad, relevos_por_bus):
     _deps.update(get_db=get_db, require_role=require_role, database_url=database_url or "",
-                 hoy_bogota=hoy_bogota, sync_pax_movilidad=sync_pax_movilidad)
+                 hoy_bogota=hoy_bogota, sync_pax_movilidad=sync_pax_movilidad,
+                 relevos_por_bus=relevos_por_bus)
 
 
 def db():
@@ -76,6 +77,11 @@ def hoy_bogota():
 
 def sync_pax_movilidad(conn, fecha, pax_por_bus):
     return _deps["sync_pax_movilidad"](conn, fecha, pax_por_bus)
+
+
+def relevos_por_bus(conn, fecha, bus_id=None):
+    """Relevos que anotó el despachador: {bus_id: [{orden, conductor_id, ruta_id, registradora, viajes}]}."""
+    return _deps["relevos_por_bus"](conn, fecha, bus_id)
 
 
 def rol(*roles):

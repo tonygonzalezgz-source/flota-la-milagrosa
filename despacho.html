@@ -333,6 +333,50 @@
     .reg-pax strong { color: var(--primary); font-weight: 700; }
     .reg-pax.err    { color: var(--red); }
 
+    /* Relevo de conductor (conductores 2 y 3 del bus en el día) */
+    .cond-wrap { flex: 1; min-width: 0; }
+    .relevo-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 5px; }
+    .relevo-chip {
+      display: inline-flex; align-items: center; gap: 3px; max-width: 100%;
+      font-size: 11px; font-weight: 600; color: #7c3aed; background: #f3e8ff;
+      border-radius: 5px; padding: 2px 7px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .btn-relevo {
+      font: 600 11px/1 inherit; color: var(--primary); background: none; cursor: pointer;
+      border: 1px dashed var(--primary); border-radius: 5px; padding: 4px 8px; white-space: nowrap;
+    }
+    .btn-relevo:hover { background: var(--primary2); }
+    input.viajes-inp.con-relevo { border-color: #c4b5fd; background: #faf5ff; color: #7c3aed; cursor: pointer; }
+    .rel-card { border: 1px solid var(--border); border-radius: var(--radius-s); padding: 12px 14px; margin-bottom: 10px; }
+    .rel-card.sale { background: #fafafb; }
+    .rel-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .rel-titulo { font-size: 13px; font-weight: 800; }
+    .rel-titulo small { font-weight: 600; color: var(--txt3); margin-left: 4px; }
+    .rel-quitar { background: none; border: none; color: var(--red); font: 600 12px inherit; cursor: pointer; padding: 2px 4px; }
+    .rel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .rel-grid label { display: block; font-size: 11px; font-weight: 700; color: var(--txt2); margin-bottom: 4px; }
+    .rel-grid label b { color: var(--red); }
+    .rel-grid select, .rel-grid input {
+      width: 100%; padding: 8px 10px; border: 1px solid var(--border2); border-radius: var(--radius-s);
+      font: 14px inherit; background: var(--white); color: var(--txt); box-sizing: border-box;
+    }
+    .rel-grid input:focus, .rel-grid select:focus { outline: none; border-color: var(--primary); }
+    .rel-dato { font-size: 13px; color: var(--txt2); line-height: 1.6; }
+    .rel-dato b { color: var(--txt); }
+    .rel-nota { font-size: 11.5px; color: var(--txt3); margin-top: 7px; }
+    .rel-nota.err { color: var(--red); }
+    .rel-agregar {
+      width: 100%; padding: 10px; border: 1px dashed var(--primary); border-radius: var(--radius-s);
+      background: none; color: var(--primary); font: 700 13px inherit; cursor: pointer; margin-bottom: 10px;
+    }
+    .rel-agregar:hover { background: var(--primary2); }
+    .rel-resumen { background: #f5f3ff; border-radius: var(--radius-s); padding: 10px 14px; font-size: 13px; line-height: 1.7; }
+    .rel-resumen .fila { display: flex; justify-content: space-between; gap: 10px; }
+    .rel-resumen .fila span:last-child { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .rel-error { display: none; margin-top: 10px; padding: 9px 12px; border-radius: var(--radius-s);
+      background: #fef2f2; color: #b91c1c; font-size: 12.5px; font-weight: 600; }
+    .rel-error.show { display: block; }
+
     /* Botones de exportación (verde Excel, rojo PDF) — mismo patrón que en el resto de módulos */
     .btn-excel, .btn-pdf {
       display: inline-flex; align-items: center; gap: 6px;
@@ -398,8 +442,12 @@
 
       tbody td.cell-alist { justify-content: flex-start; }
 
+      /* Relevo: un campo por renglón; 16px para que el iPhone no haga zoom al escribir */
+      .rel-grid { grid-template-columns: 1fr; }
+      .rel-grid select, .rel-grid input { font-size: 16px; }
+
       /* Modal casi a pantalla completa */
-      .modal-overlay { padding: 12px; }
+      .modal-overlay { padding: 12px; padding-top: 64px; }
       .modal-body    { max-height: 70vh; }
       .check-radios  { gap: 8px; }
     }
@@ -452,6 +500,24 @@
       <div class="modal-footer">
         <button class="btn-cancel" onclick="cerrarModal()">Cancelar</button>
         <button class="btn-save" id="btnGuardar" onclick="guardarAlistamiento()">Guardar alistamiento</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Relevo de conductor -->
+  <div class="modal-overlay hidden" id="relevoOverlay">
+    <div class="modal-box" style="max-width:560px">
+      <div class="modal-header">
+        <div>
+          <div class="modal-title">Relevo de conductor</div>
+          <div class="modal-subtitle" id="relevoSub"></div>
+        </div>
+        <button class="modal-close" onclick="cerrarRelevo()">✕</button>
+      </div>
+      <div class="modal-body" id="relevoBody"></div>
+      <div class="modal-footer">
+        <button class="btn-cancel" onclick="cerrarRelevo()">Cancelar</button>
+        <button class="btn-save" id="btnGuardarRelevo" onclick="guardarRelevo()">Guardar relevo</button>
       </div>
     </div>
   </div>
@@ -636,13 +702,36 @@
     const condNombre = b.conductor_id ? (conductores.find(c => c.id === b.conductor_id)?.nombre || '') : '';
     const condOpts = `<div class="cond-opt" data-id="" onclick="selectCond(${b.id},'',this)">— Sin conductor —</div>`
       + conductores.map(c => `<div class="cond-opt" data-id="${c.id}" onclick="selectCond(${b.id},'${c.id}',this)">${escapeHtml(c.nombre)}</div>`).join('');
-    return `<div class="cond-combo" id="combo-${b.id}">
+    return `<div class="cond-wrap">
+        <div class="cond-combo" id="combo-${b.id}">
           <input class="cond-input" type="text" autocomplete="off"
                  value="${escapeHtml(condNombre)}" placeholder="— Sin conductor —"
                  onclick="abrirCombo(${b.id},this)" oninput="filtrarCombo(${b.id},this)">
           <div class="cond-drop" id="cdrop-${b.id}">${condOpts}</div>
-        </div>`;
+        </div>
+        <div class="relevo-row" id="relevo-${b.id}">${relevoHtml(b)}</div>
+      </div>`;
   }
+
+  /* Relevo bajo el conductor: quién recibió el bus y con qué lectura de la
+     registradora. El botón aparece cuando el bus trabaja y ya tiene conductor. */
+  function relevoHtml(b) {
+    const estado = b.estado || (b._sugerido ? '' : 'trabajando');
+    if (estado !== 'trabajando' || b._sugerido || !b.conductor_id) return '';
+    const rel = b.relevos || [];
+    const chips = rel.map(r => `<span class="relevo-chip" title="Conductor ${r.orden}: recibe con la registradora en ${fmtNum(r.registradora)}">↻ ${escapeHtml(nombreConductor(r.conductor_id) || 'Conductor ' + r.orden)} · ${fmtNum(r.registradora)}</span>`).join('');
+    return chips + `<button class="btn-relevo" onclick="abrirRelevo(${b.id})">${rel.length ? 'Editar relevo' : '+ Relevo'}</button>`;
+  }
+
+  function pintarRelevo(busId) {
+    const b = buses.find(x => x.id === busId);
+    const el = document.getElementById(`relevo-${busId}`);
+    if (b && el) el.innerHTML = relevoHtml(b);
+    const cellViajes = document.getElementById(`viajes-cell-${busId}`);
+    if (b && cellViajes) cellViajes.innerHTML = viajesCellHtml(b);
+  }
+
+  const fmtNum = n => (n == null || n === '') ? '—' : Number(n).toLocaleString('es-CO');
 
   function rowHtml(b) {
     /* Fila sugerida: conductor/ruta copiados del día anterior, sin guardar.
@@ -685,6 +774,14 @@
     const estado = b.estado || (b._sugerido ? '' : 'trabajando');
     const activo = estado === 'trabajando';
     const val    = (b.viajes_realizados == null) ? '' : b.viajes_realizados;
+    // Con relevo, los viajes son el total del bus (suma de los conductores):
+    // se editan en la ventana del relevo, por conductor.
+    if (activo && (b.relevos || []).length) {
+      return `<input type="number" class="viajes-inp con-relevo" value="${val}" readonly placeholder="0"
+                     title="Total del bus con relevo: los viajes se editan por conductor en el relevo"
+                     onclick="abrirRelevo(${b.id})">
+              <div class="reg-pax">total con relevo</div>`;
+    }
     return `<input type="number" min="0" step="1" inputmode="numeric"
                    class="viajes-inp" value="${val}"
                    ${activo ? '' : 'disabled'}
@@ -890,6 +987,9 @@
       bus.registradora_inicio = null;
       bus.registradora_fin    = null;
     }
+    // Un bus que no trabaja tampoco tiene relevo (el servidor también lo borra).
+    const relevosPrevios = bus.relevos || [];
+    if (campo === 'estado' && valor !== 'trabajando') bus.relevos = [];
 
     // refrescar color del selector de estado, la celda de alistamiento y el resumen
     if (campo === 'estado') {
@@ -934,6 +1034,7 @@
         const cellIni = document.getElementById(`reg-ini-cell-${busId}`);
         if (cellIni) cellIni.innerHTML = regCellHtml(bus, 'inicio');
       }
+      pintarRelevo(busId);
       showToast(`Bus ${bus.numero} actualizado`);
     } catch (e) {
       // El backend también rechaza 'trabajando' con docs vencidos: revertir.
@@ -952,6 +1053,7 @@
           bus.registradora_inicio = regIniPrevio;
           bus.registradora_fin    = regFinPrevio;
         }
+        bus.relevos = relevosPrevios;
       }
       showToast(e.message, 'error');
       render();
@@ -1059,6 +1161,186 @@
       inp.value  = (previo == null) ? '' : previo;
       if (cellFin) cellFin.innerHTML = regCellHtml(bus, 'fin');
       showToast(e.message, 'error');
+    }
+  }
+
+  /* ─── Relevo de conductor ───
+     El conductor 1 es el del despacho (sale con el bus). Cada relevo anota quién
+     recibe el bus, su ruta, la lectura de la registradora al recibirlo (la misma
+     con la que entrega el anterior: el torniquete lleva consecutivo) y sus viajes.
+     Recaudo precarga estos datos al liquidar. */
+  const MAX_RELEVOS = 2;   // 3 conductores por bus en el día
+  let relevoBusId = null;
+  let relevoForm  = null;  // { viajes1, relevos: [{conductor_id, ruta_id, registradora, viajes}] }
+
+  function abrirRelevo(busId) {
+    const b = buses.find(x => x.id === busId);
+    if (!b) return;
+    if (!b.conductor_id) { showToast('Primero asigna el conductor que sale con el bus', 'error'); return; }
+    const rel = (b.relevos || []).map(r => ({ conductor_id: r.conductor_id, ruta_id: r.ruta_id,
+                                              registradora: r.registradora, viajes: r.viajes }));
+    // Viajes del conductor 1 = total del bus − los de los relevos
+    const viajesRel = rel.reduce((t, r) => t + (r.viajes || 0), 0);
+    const v1 = b.viajes_realizados == null ? null : b.viajes_realizados - viajesRel;
+    relevoBusId = busId;
+    relevoForm = { viajes1: v1 != null && v1 >= 0 ? v1 : null, relevos: rel };
+    if (!rel.length) relevoForm.relevos.push(nuevoRelevo(b));
+    document.getElementById('relevoSub').textContent =
+      `${b.grupo === 'B' ? 'Micro' : 'Bus'} ${b.numero}${b.placa ? ' · ' + b.placa : ''} · ${formatoFecha(HOY)}`;
+    document.getElementById('relevoOverlay').classList.remove('hidden');
+    renderRelevo();
+  }
+
+  function nuevoRelevo(b) {
+    // La ruta suele ser la misma: se propone la del conductor anterior.
+    const previo = relevoForm && relevoForm.relevos.length ? relevoForm.relevos[relevoForm.relevos.length - 1] : null;
+    return { conductor_id: null, ruta_id: (previo ? previo.ruta_id : b.ruta_id) || null, registradora: null, viajes: null };
+  }
+
+  function cerrarRelevo() {
+    document.getElementById('relevoOverlay').classList.add('hidden');
+    relevoBusId = null;
+    relevoForm = null;
+  }
+
+  function renderRelevo() {
+    const b = buses.find(x => x.id === relevoBusId);
+    if (!b || !relevoForm) return;
+    const opcRutas = sel => `<option value="">— Sin ruta —</option>` + rutas
+      .filter(r => r.grupo === b.grupo)
+      .map(r => `<option value="${r.id}" ${sel === r.id ? 'selected' : ''}>${escapeHtml(r.nombre)}</option>`).join('');
+    const opcConductores = sel => `<option value="">— Elige el conductor —</option>` + conductores
+      .filter(c => c.id !== b.conductor_id)
+      .map(c => `<option value="${c.id}" ${sel === c.id ? 'selected' : ''}>${escapeHtml(c.nombre)}</option>`).join('');
+    const val = v => v == null ? '' : v;
+
+    const sale = `<div class="rel-card sale">
+        <div class="rel-head"><div class="rel-titulo">1 · ${escapeHtml(nombreConductor(b.conductor_id))}<small>sale con el bus</small></div></div>
+        <div class="rel-grid">
+          <div class="rel-dato">Ruta: <b>${escapeHtml(nombreRuta(b.ruta_id) || '—')}</b><br>
+               REG inicio: <b>${fmtNum(b.registradora_inicio)}</b></div>
+          <div><label>Viajes del conductor 1</label>
+               <input type="number" min="0" step="1" inputmode="numeric" value="${val(relevoForm.viajes1)}"
+                      placeholder="0" oninput="setRelevo(-1, 'viajes', this.value)"></div>
+        </div>
+      </div>`;
+
+    const cards = relevoForm.relevos.map((r, i) => {
+      const n = i + 2;
+      const ultimo = i === relevoForm.relevos.length - 1;
+      return `<div class="rel-card">
+        <div class="rel-head">
+          <div class="rel-titulo">${n} · Recibe el bus</div>
+          ${ultimo ? `<button class="rel-quitar" onclick="quitarRelevo()">Quitar</button>` : ''}
+        </div>
+        <div class="rel-grid">
+          <div><label>Conductor <b>*</b></label>
+               <select onchange="setRelevo(${i}, 'conductor_id', this.value)">${opcConductores(r.conductor_id)}</select></div>
+          <div><label>Ruta</label>
+               <select onchange="setRelevo(${i}, 'ruta_id', this.value)">${opcRutas(r.ruta_id)}</select></div>
+          <div><label>Registradora al recibir <b>*</b></label>
+               <input type="number" min="0" step="1" inputmode="numeric" value="${val(r.registradora)}"
+                      placeholder="Lectura del torniquete" oninput="setRelevo(${i}, 'registradora', this.value)"></div>
+          <div><label>Viajes del conductor ${n}</label>
+               <input type="number" min="0" step="1" inputmode="numeric" value="${val(r.viajes)}"
+                      placeholder="0" oninput="setRelevo(${i}, 'viajes', this.value)"></div>
+        </div>
+        <div class="rel-nota" id="rel-nota-${i}"></div>
+      </div>`;
+    }).join('');
+
+    const agregar = relevoForm.relevos.length < MAX_RELEVOS
+      ? `<button class="rel-agregar" onclick="agregarRelevo()">+ Agregar ${relevoForm.relevos.length ? 'otro relevo' : 'relevo'}</button>` : '';
+
+    document.getElementById('relevoBody').innerHTML = sale + cards + agregar +
+      `<div class="rel-resumen" id="relResumen"></div><div class="rel-error" id="relError"></div>`;
+    document.getElementById('btnGuardarRelevo').textContent =
+      relevoForm.relevos.length ? 'Guardar relevo' : 'Guardar sin relevo';
+    pintarResumenRelevo();
+  }
+
+  function setRelevo(i, campo, raw) {
+    const v = raw === '' || raw == null ? null : Number(raw);
+    if (i < 0) relevoForm.viajes1 = v;
+    else relevoForm.relevos[i][campo] = v;
+    pintarResumenRelevo();
+  }
+
+  function agregarRelevo() {
+    const b = buses.find(x => x.id === relevoBusId);
+    if (!b || relevoForm.relevos.length >= MAX_RELEVOS) return;
+    relevoForm.relevos.push(nuevoRelevo(b));
+    renderRelevo();
+  }
+
+  function quitarRelevo() {
+    relevoForm.relevos.pop();
+    renderRelevo();
+  }
+
+  /* Tramo de registradora de cada conductor (consecutivo) y total de viajes */
+  function pintarResumenRelevo() {
+    const b = buses.find(x => x.id === relevoBusId);
+    if (!b || !relevoForm) return;
+    const lecturas = [b.registradora_inicio, ...relevoForm.relevos.map(r => r.registradora), b.registradora_fin];
+    const nombres  = [nombreConductor(b.conductor_id), ...relevoForm.relevos.map((r, i) => nombreConductor(r.conductor_id) || `Conductor ${i + 2}`)];
+    relevoForm.relevos.forEach((r, i) => {
+      const nota = document.getElementById(`rel-nota-${i}`);
+      if (!nota) return;
+      const previa = lecturas[i];
+      let txt = '', err = false;
+      if (r.registradora != null && previa != null) {
+        if (r.registradora <= previa) { txt = `Debe ser mayor que ${fmtNum(previa)} (lectura anterior)`; err = true; }
+        else txt = `El conductor ${i + 1} entrega con ${fmtNum(r.registradora - previa)} pasajeros (${fmtNum(previa)} → ${fmtNum(r.registradora)})`;
+      } else if (previa != null) {
+        txt = `Sigue el consecutivo: mayor que ${fmtNum(previa)}`;
+      }
+      nota.textContent = txt;
+      nota.className = 'rel-nota' + (err ? ' err' : '');
+    });
+
+    const viajes = [relevoForm.viajes1, ...relevoForm.relevos.map(r => r.viajes)].filter(v => v != null);
+    const total  = viajes.length ? viajes.reduce((t, v) => t + v, 0) : null;
+    let filas = '';
+    if (relevoForm.relevos.length) {
+      nombres.forEach((nom, i) => {
+        const ini = lecturas[i], fin = lecturas[i + 1];
+        const pax = ini != null && fin != null && fin > ini ? `${fmtNum(fin - ini)} pax` : '—';
+        filas += `<div class="fila"><span>${i + 1}. ${escapeHtml(nom || '—')}</span><span>${pax}</span></div>`;
+      });
+      if (b.registradora_fin == null) {
+        filas += `<div style="font-size:11.5px;color:var(--txt3)">El último conductor termina en la REG fin del bus (aún sin anotar).</div>`;
+      }
+    }
+    document.getElementById('relResumen').innerHTML = filas +
+      `<div class="fila" style="${filas ? 'border-top:1px solid #e9e3ff;margin-top:4px;padding-top:4px' : ''}">
+         <span>Total de viajes del bus</span><span>${total == null ? '—' : total}</span></div>`;
+  }
+
+  async function guardarRelevo() {
+    const b = buses.find(x => x.id === relevoBusId);
+    if (!b || !relevoForm) return;
+    const errEl = document.getElementById('relError');
+    errEl.classList.remove('show');
+    const btn = document.getElementById('btnGuardarRelevo');
+    btn.disabled = true;
+    try {
+      const res = await apiFetch('/api/despacho/relevos', {
+        method: 'PUT',
+        body: JSON.stringify({ fecha: HOY, bus_id: b.id, viajes: relevoForm.viajes1, relevos: relevoForm.relevos }),
+      });
+      b.relevos = res.relevos || [];
+      b.viajes_realizados = res.viajes_realizados;
+      pintarRelevo(b.id);
+      cerrarRelevo();
+      showToast(b.relevos.length
+        ? `Bus ${b.numero}: relevo guardado (${b.relevos.length + 1} conductores)`
+        : `Bus ${b.numero}: sin relevo`);
+    } catch (e) {
+      errEl.textContent = e.message;
+      errEl.classList.add('show');
+    } finally {
+      btn.disabled = false;
     }
   }
 
@@ -1358,6 +1640,12 @@
     const c = conductores.find(x => x.id === id);
     return c ? c.nombre : '';
   }
+  // Conductor para la planilla: con relevo, "Juan → Pedro (REG 1.150)".
+  function conductoresExport(b) {
+    const base = nombreConductor(b.conductor_id);
+    if (!base) return '';
+    return [base, ...(b.relevos || []).map(r => `${nombreConductor(r.conductor_id)} (REG ${fmtNum(r.registradora)})`)].join(' → ');
+  }
   function nombreRuta(id) {
     if (!id) return '';
     const r = rutas.find(x => x.id === id);
@@ -1448,7 +1736,7 @@
           b.placa || '',
           grupoLabel(b.grupo),
           nombreRuta(b.ruta_id) || '—',
-          nombreConductor(b.conductor_id) || '—',
+          conductoresExport(b) || '—',
           ESTADO_LABEL[estado] || estado,
           viajes,
         ]);
@@ -1530,7 +1818,7 @@
           b.placa || '',
           grupoLabel(b.grupo),
           nombreRuta(b.ruta_id) || '—',
-          nombreConductor(b.conductor_id) || '—',
+          conductoresExport(b) || '—',
           ESTADO_LABEL[estado] || estado,
           viajes === '' ? '—' : String(viajes),
         ];

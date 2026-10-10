@@ -25,7 +25,7 @@ import auditoria
 
 from . import bp
 from .comun import (EMPRESA_POR_DEFECTO, MAX_CONDUCTORES, ROLES_RECAUDO, db, es_pg, hoy_bogota,
-                    rol, sync_pax_movilidad)
+                    relevos_por_bus, rol, sync_pax_movilidad)
 
 ADMIN = ("Administrador",)
 _RE_FECHA = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -243,11 +243,13 @@ def recaudo_dia():
     tarifas = _tarifas(conn)
     tipos = _tipos_gasto(conn)
     vigentes, anuladas = _liquidaciones_del_dia(conn, fecha)
+    relevos = relevos_por_bus(conn, fecha)
     conn.close()
 
     salida = []
     for b in buses:
         b = dict(b)
+        b["relevos"] = relevos.get(b["id"], [])   # los anotó el despachador; el formulario los precarga
         b["recaudo"] = vigentes.get(b["id"])
         b["anulados"] = anuladas.get(b["id"], [])
         salida.append(b)

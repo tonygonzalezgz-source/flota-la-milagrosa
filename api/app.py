@@ -114,7 +114,7 @@ PG_SCHEMA    = os.path.join(os.path.dirname(__file__), "supabase_schema.sql")
 # Versión del esquema. IMPORTANTE: incrementar en 1 cada vez que se agregue
 # una migración (ALTER/CREATE) a migrate_db(); si no se incrementa, la
 # migración nueva NO corre en las BD ya versionadas.
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 17
 
 ROLE_VIEWS = {
     "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho", "historial-despacho", "gastos", "tecnologia", "chequeo", "eds", "lavada", "mapa", "relojes", "mb-mapa", "mb-reportes", "mb-rutas", "mb-equipos", "recaudo-diario", "recaudo-caja", "auditoria"],
@@ -1093,6 +1093,9 @@ def migrate_db():
         auditoria.migrar(db)
     except Exception as e:
         print(f"[migrate_db] auditoria: {e}")
+
+    # Relevos del despacho (conductores 2 y 3 del bus en el día) — SCHEMA_VERSION 17
+    _migrar_relevos(db)
 
     # Pasajeros de movilidad desde la registradora del despacho — SCHEMA_VERSION 15
     # Backfill de los días desde PAX_REGISTRADORA_DESDE que ya tenían movilidad
@@ -2211,9 +2214,15 @@ def get_despacho():
            ORDER BY b.numero""",
         (fecha, fecha, fecha),
     ).fetchall()
+    relevos = _relevos_por_bus(db, fecha)
 
     db.close()
-    return jsonify({"fecha": fecha, "rutas": rutas, "buses": [dict(b) for b in buses]})
+    salida = []
+    for b in buses:
+        b = dict(b)
+        b["relevos"] = relevos.get(b["id"], [])
+        salida.append(b)
+    return jsonify({"fecha": fecha, "rutas": rutas, "buses": salida})
 
 
 @app.route("/api/despacho/historial", methods=["GET"])
@@ -2273,6 +2282,7 @@ def batch_upsert_despacho():
     db    = get_db()
     saved = 0
     pax_por_bus = {}   # bus_id → pasajeros según la registradora (fin - inicio)
+    relevos = _relevos_por_bus(db, fecha)
 
     # Validación previa: si algún bus queda en 'trabajando' pero tiene
     # documentos vencidos (SOAT / Tecnomecánica / Tarjeta de Operación), se
@@ -2351,6 +2361,14 @@ def batch_upsert_despacho():
             viajes = None
             reg_inicio = None
             reg_fin = None
+            # Un bus que no trabaja tampoco tiene relevo.
+            if relevos.get(bus_id):
+                db.execute("DELETE FROM despacho_relevos WHERE bus_id = ? AND fecha = ?", (bus_id, fecha))
+        elif relevos.get(bus_id):
+            err = _validar_lecturas_relevo(reg_inicio, reg_fin, [r["registradora"] for r in relevos[bus_id]])
+            if err:
+                db.close()
+                return jsonify({"error": "No cuadra con el relevo: " + err}), 400
 
         db.execute(
             """INSERT INTO despacho_diario
@@ -2380,6 +2398,185 @@ def batch_upsert_despacho():
     db.commit()
     db.close()
     return jsonify({"ok": True, "saved": saved})
+
+
+# ──────────────────────────────────────────
+#  Relevos del despacho
+# ──────────────────────────────────────────
+# Cuando otro conductor recibe el bus en el día, el despachador anota quién lo
+# recibe, en qué ruta y la lectura de la registradora en ese momento (la misma
+# con la que entrega el conductor anterior: el torniquete lleva consecutivo).
+# El conductor 1 sigue siendo el de despacho_diario y viajes_realizados es el
+# total del bus, así que los viajes del conductor 1 = total − los de los relevos.
+# El Recaudo precarga estos relevos al liquidar; si el despachador no los anotó,
+# el recaudador los arma allá.
+
+MAX_RELEVOS = 2   # conductores 2 y 3: el recaudo admite hasta 3 conductores por bus
+
+_RELEVOS_DDL = """CREATE TABLE IF NOT EXISTS despacho_relevos (
+    id            {pk},
+    fecha         DATE    NOT NULL,
+    bus_id        INTEGER NOT NULL REFERENCES buses(id),
+    orden         INTEGER NOT NULL CHECK (orden BETWEEN 2 AND 3),
+    conductor_id  INTEGER NOT NULL REFERENCES conductores(id),
+    ruta_id       INTEGER REFERENCES rutas(id),
+    registradora  INTEGER NOT NULL,
+    viajes        INTEGER,
+    usuario_id    INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+    updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (bus_id, fecha, orden)
+)"""
+
+
+def _migrar_relevos(db):
+    if DATABASE_URL:
+        sentencias = [_RELEVOS_DDL.format(pk="SERIAL PRIMARY KEY"),
+                      # Tabla nueva: RLS sin políticas y sin privilegios para los roles públicos
+                      "ALTER TABLE despacho_relevos ENABLE ROW LEVEL SECURITY",
+                      "REVOKE ALL ON despacho_relevos FROM anon, authenticated"]
+    else:
+        sentencias = [_RELEVOS_DDL.format(pk="INTEGER PRIMARY KEY AUTOINCREMENT")]
+    for sql in sentencias:
+        try:
+            db.execute(sql)
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            print(f"[migrate_db] despacho_relevos: {e}")
+
+
+def _relevos_por_bus(db, fecha, bus_id=None):
+    """{bus_id: [{orden, conductor_id, ruta_id, registradora, viajes}, ...]} en orden."""
+    sql = ("SELECT bus_id, orden, conductor_id, ruta_id, registradora, viajes "
+           "FROM despacho_relevos WHERE fecha = ?")
+    params = [fecha]
+    if bus_id is not None:
+        sql += " AND bus_id = ?"
+        params.append(bus_id)
+    out = {}
+    for r in db.execute(sql + " ORDER BY bus_id, orden", params).fetchall():
+        r = dict(r)
+        out.setdefault(r.pop("bus_id"), []).append(r)
+    return out
+
+
+def _validar_lecturas_relevo(reg_inicio, reg_fin, lecturas):
+    """Las lecturas van en consecutivo: REG inicio < relevo(s) < REG fin, porque
+    cada conductor tiene que haber movido al menos un pasajero. Devuelve el
+    mensaje de error o None."""
+    previa, cual = reg_inicio, "la REG inicio"
+    for i, lectura in enumerate(lecturas):
+        if previa is not None and lectura <= previa:
+            return (f"la registradora con la que recibe el conductor {i + 2} ({lectura}) "
+                    f"debe ser mayor que {cual} ({previa})")
+        previa, cual = lectura, f"la del conductor {i + 2}"
+    if lecturas and reg_fin is not None and reg_fin <= previa:
+        return f"la REG fin ({reg_fin}) debe ser mayor que {cual} ({previa})"
+    return None
+
+
+@app.route("/api/despacho/relevos", methods=["PUT"])
+@require_auth
+def guardar_relevos_despacho():
+    """Guarda los relevos de un bus en el día (reemplaza los que tenía) y el total
+    de viajes del bus = viajes del conductor 1 + los de cada relevo."""
+    if getattr(request, "jwt_user_rol", None) == "Conductor":
+        return jsonify({"error": "No autorizado"}), 403
+
+    data = request.get_json(silent=True) or {}
+    fecha = data.get("fecha")
+    try:
+        date.fromisoformat(str(fecha))
+    except ValueError:
+        return jsonify({"error": "Fecha inválida (use AAAA-MM-DD)"}), 400
+    relevos_in = data.get("relevos") or []
+    if not isinstance(relevos_in, list) or len(relevos_in) > MAX_RELEVOS:
+        return jsonify({"error": "Máximo 2 relevos: 3 conductores por bus en el día"}), 400
+
+    def entero(raw, etiqueta, requerido=False):
+        if raw in (None, "", "null"):
+            if requerido:
+                raise ValueError(f"Falta llenar: {etiqueta}")
+            return None
+        try:
+            n = int(raw)
+        except (TypeError, ValueError):
+            raise ValueError(f"{etiqueta[0].upper()}{etiqueta[1:]} debe ser un número entero")
+        if n < 0:
+            raise ValueError(f"{etiqueta[0].upper()}{etiqueta[1:]} no puede ser negativo")
+        return n
+
+    db = get_db()
+    try:
+        bus_id = entero(data.get("bus_id"), "el bus", requerido=True)
+        desp = db.execute(
+            """SELECT d.id, d.estado, d.conductor_id, d.registradora_inicio, d.registradora_fin,
+                      b.numero
+                 FROM despacho_diario d JOIN buses b ON b.id = d.bus_id
+                WHERE d.bus_id = ? AND d.fecha = ?""",
+            (bus_id, fecha),
+        ).fetchone()
+        if not desp or desp["estado"] != "trabajando":
+            raise ValueError("Primero marca el bus como Trabajando en el despacho")
+        desp = dict(desp)
+        if not desp["conductor_id"]:
+            raise ValueError("Primero asigna el conductor que sale con el bus")
+        if db.execute("SELECT 1 FROM recaudos WHERE bus_id = ? AND fecha = ? AND anulado_at IS NULL",
+                      (bus_id, fecha)).fetchone():
+            raise ValueError(f"El bus {desp['numero']} ya fue liquidado en Recaudo: el relevo "
+                             "quedó en la liquidación y no se cambia desde el despacho")
+
+        viajes1 = entero(data.get("viajes"), "los viajes del conductor 1")
+        relevos, vistos = [], {desp["conductor_id"]}
+        for i, r in enumerate(relevos_in):
+            n = i + 2
+            r = r if isinstance(r, dict) else {}
+            conductor_id = entero(r.get("conductor_id"), f"el conductor {n}", requerido=True)
+            if conductor_id in vistos:
+                raise ValueError(f"El conductor {n} ya maneja este bus hoy: elige otro")
+            vistos.add(conductor_id)
+            if not db.execute("SELECT 1 FROM conductores WHERE id = ?", (conductor_id,)).fetchone():
+                raise ValueError(f"El conductor {n} no existe")
+            ruta_id = entero(r.get("ruta_id"), f"la ruta del conductor {n}")
+            if ruta_id and not db.execute("SELECT 1 FROM rutas WHERE id = ?", (ruta_id,)).fetchone():
+                raise ValueError(f"La ruta del conductor {n} no existe")
+            relevos.append({
+                "orden": n, "conductor_id": conductor_id, "ruta_id": ruta_id,
+                "registradora": entero(r.get("registradora"),
+                                       f"la registradora con la que recibe el conductor {n}",
+                                       requerido=True),
+                "viajes": entero(r.get("viajes"), f"los viajes del conductor {n}"),
+            })
+        err = _validar_lecturas_relevo(desp["registradora_inicio"], desp["registradora_fin"],
+                                       [r["registradora"] for r in relevos])
+        if err:
+            raise ValueError(err[0].upper() + err[1:])
+    except ValueError as e:
+        db.close()
+        return jsonify({"error": str(e)}), 400
+
+    viajes = [v for v in [viajes1] + [r["viajes"] for r in relevos] if v is not None]
+    total = sum(viajes) if viajes else None
+    uid = getattr(request, "jwt_user_id", None)
+    db.execute("DELETE FROM despacho_relevos WHERE bus_id = ? AND fecha = ?", (bus_id, fecha))
+    for r in relevos:
+        db.execute(
+            """INSERT INTO despacho_relevos
+                   (fecha, bus_id, orden, conductor_id, ruta_id, registradora, viajes, usuario_id)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            (fecha, bus_id, r["orden"], r["conductor_id"], r["ruta_id"], r["registradora"],
+             r["viajes"], uid),
+        )
+    db.execute(
+        """UPDATE despacho_diario
+              SET viajes_realizados = ?, despachador_id = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?""",
+        (total, uid, desp["id"]),
+    )
+    db.commit()
+    guardados = _relevos_por_bus(db, fecha, bus_id).get(bus_id, [])
+    db.close()
+    return jsonify({"ok": True, "relevos": guardados, "viajes_realizados": total})
 
 
 @app.route("/api/cron/cierre-despacho", methods=["GET", "POST"])
@@ -5061,7 +5258,8 @@ app.register_blueprint(auditoria.bp)
 import recaudo  # noqa: E402
 
 recaudo.configurar(get_db=get_db, require_role=require_role, database_url=DATABASE_URL,
-                   hoy_bogota=hoy_bogota, sync_pax_movilidad=_sync_pax_movilidad)
+                   hoy_bogota=hoy_bogota, sync_pax_movilidad=_sync_pax_movilidad,
+                   relevos_por_bus=_relevos_por_bus)
 app.register_blueprint(recaudo.bp)
 
 # Mientras el recaudo esté en prueba solo para el Administrador, el Recaudador
