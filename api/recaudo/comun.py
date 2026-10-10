@@ -62,10 +62,11 @@ CONFIG_CONTABLE_INICIAL = {"nit_compania": "890901489", "tipo_comprobante": "CU"
 # Máximo de conductores que pueden liquidar un mismo bus en el día (relevos).
 MAX_CONDUCTORES = 3
 
-# Puesta en marcha (2026-10-10): mientras se prueba con datos reales, todo el
-# recaudo responde solo al Administrador; Recaudador y Propietario reciben 403 y
-# no ven las vistas. Para abrirlo a los demás roles basta con ponerlo en False.
-SOLO_ADMIN = True
+# Puesta en marcha por etapas: el recaudo solo responde a estos roles; los demás
+# reciben 403. Desde el 2026-10-10: el Administrador y el Propietario (ve la
+# liquidación real de SUS buses en Mis Buses, web y app). El Recaudador todavía
+# no: queda sin vistas. Para abrírselo, agregar "Recaudador".
+ROLES_HABILITADOS = ("Administrador", "Propietario")
 
 _deps = {}
 
@@ -102,7 +103,7 @@ def rol(*roles):
     def wrapper(f):
         @wraps(f)
         def inner(*args, **kwargs):
-            permitidos = tuple(r for r in roles if r == "Administrador") if SOLO_ADMIN else roles
+            permitidos = tuple(r for r in roles if r in ROLES_HABILITADOS)
             return _deps["require_role"](*permitidos)(f)(*args, **kwargs)
         return inner
     return wrapper

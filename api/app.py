@@ -5262,9 +5262,9 @@ recaudo.configurar(get_db=get_db, require_role=require_role, database_url=DATABA
                    relevos_por_bus=_relevos_por_bus)
 app.register_blueprint(recaudo.bp)
 
-# Mientras el recaudo esté en prueba solo para el Administrador, el Recaudador
-# no tiene vistas (ver recaudo.comun.SOLO_ADMIN).
-if recaudo.comun.SOLO_ADMIN:
+# Mientras el recaudo no esté habilitado para el Recaudador, no tiene vistas
+# (ver recaudo.comun.ROLES_HABILITADOS).
+if "Recaudador" not in recaudo.comun.ROLES_HABILITADOS:
     ROLE_VIEWS["Recaudador"] = []
 
 
