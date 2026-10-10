@@ -125,7 +125,7 @@ def _tarifas(conn):
 def _tipos_gasto(conn, solo_activos=True):
     filtro = " AND activo = 1" if solo_activos else ""
     filas = conn.execute(
-        f"""SELECT id, nombre, orden, activo FROM recaudo_tipos_gasto
+        f"""SELECT id, nombre, orden, activo, fijo, requiere_detalle FROM recaudo_tipos_gasto
              WHERE empresa_id = ?{filtro} ORDER BY orden, nombre""",
         (EMPRESA_POR_DEFECTO,),
     ).fetchall()
@@ -278,14 +278,14 @@ def _armar_gastos(conn, gastos_in, n_conductores):
         return []
     if not isinstance(gastos_in, list) or len(gastos_in) > 40:
         raise _Rechazo("Lista de gastos inválida")
-    tipos = {t["id"]: t["nombre"] for t in _tipos_gasto(conn)}
+    tipos = {t["id"]: t for t in _tipos_gasto(conn)}
     gastos, vistos = [], set()
     for g in gastos_in:
         g = g if isinstance(g, dict) else {}
         tipo_id = _entero(g.get("tipo_gasto_id"), "El tipo de gasto")
         if tipo_id not in tipos:
             raise _Rechazo("Hay un tipo de gasto que no existe o está desactivado")
-        nombre = tipos[tipo_id]
+        nombre = tipos[tipo_id]["nombre"]
         orden = _entero(g.get("orden_conductor"), "El conductor del gasto", requerido=False) or 1
         if not 1 <= orden <= n_conductores:
             raise _Rechazo(f"El gasto {nombre} apunta a un conductor que no está en la liquidación")
@@ -297,8 +297,11 @@ def _armar_gastos(conn, gastos_in, n_conductores):
             continue   # un gasto en cero es lo mismo que no reportarlo
         if valor > _GASTO_MAXIMO:
             raise _Rechazo(f"El valor de {nombre} es demasiado alto")
+        observacion = _texto(g.get("observacion"), 200)
+        if tipos[tipo_id]["requiere_detalle"] and not observacion:
+            raise _Rechazo(f"Falta llenar: la descripción del gasto {nombre}")
         gastos.append({"orden_conductor": orden, "tipo_gasto_id": tipo_id, "tipo_nombre": nombre,
-                       "valor": valor, "observacion": _texto(g.get("observacion"), 200)})
+                       "valor": valor, "observacion": observacion})
     return gastos
 
 
@@ -752,6 +755,14 @@ def _nombre_tipo(valor):
     return nombre
 
 
+def _si_no(v):
+    return 1 if v in (1, True, "1", "true") else 0
+
+
+_ETQ_TIPO = {"nombre": "Nombre", "activo": "Activo", "orden": "Orden",
+             "fijo": "Siempre a la vista", "requiere_detalle": "Pide descripción"}
+
+
 def _nombre_repetido(conn, nombre, excluir_id=0):
     for t in _tipos_gasto(conn, solo_activos=False):
         if t["id"] != excluir_id and t["nombre"].lower() == nombre.lower():
@@ -781,13 +792,15 @@ def crear_tipo_gasto():
         conn.close()
         return jsonify({"error": str(e)}), e.status
     orden = max([t["orden"] for t in _tipos_gasto(conn, solo_activos=False)] or [0]) + 1
+    fijo, detalle = _si_no(data.get("fijo")), _si_no(data.get("requiere_detalle"))
     cur = conn.execute(
-        "INSERT INTO recaudo_tipos_gasto (empresa_id, nombre, orden) VALUES (?,?,?)",
-        (EMPRESA_POR_DEFECTO, nombre, orden),
+        "INSERT INTO recaudo_tipos_gasto (empresa_id, nombre, orden, fijo, requiere_detalle) VALUES (?,?,?,?,?)",
+        (EMPRESA_POR_DEFECTO, nombre, orden, fijo, detalle),
     )
     tipo_id = cur.lastrowid
     auditoria.registrar(conn, "recaudo", "tipo_gasto", tipo_id, "crear",
-                        f"Creó el tipo de gasto «{nombre}»", {"nombre": nombre})
+                        f"Creó el tipo de gasto «{nombre}»",
+                        {"nombre": nombre, "fijo": fijo, "requiere_detalle": detalle})
     conn.commit()
     conn.close()
     return jsonify({"ok": True, "id": tipo_id}), 201
@@ -796,7 +809,7 @@ def crear_tipo_gasto():
 @bp.route("/api/recaudo/tipos-gasto/<int:tipo_id>", methods=["PUT"])
 @rol(*ADMIN)
 def editar_tipo_gasto(tipo_id):
-    """Body: {nombre?, activo?, orden?}. No se borran: se desactivan."""
+    """Body: {nombre?, activo?, orden?, fijo?, requiere_detalle?}. No se borran: se desactivan."""
     data = request.get_json(silent=True) or {}
     conn = db()
     actual = next((t for t in _tipos_gasto(conn, solo_activos=False) if t["id"] == tipo_id), None)
@@ -809,19 +822,23 @@ def editar_tipo_gasto(tipo_id):
             nuevo["nombre"] = _nombre_tipo(data["nombre"])
             if _nombre_repetido(conn, nuevo["nombre"], excluir_id=tipo_id):
                 raise _Rechazo(f"Ya existe un gasto llamado «{nuevo['nombre']}»", 409)
-        if "activo" in data:
-            nuevo["activo"] = 1 if data["activo"] in (1, True, "1", "true") else 0
+        for campo in ("activo", "fijo", "requiere_detalle"):
+            if campo in data:
+                nuevo[campo] = _si_no(data[campo])
         if "orden" in data:
             nuevo["orden"] = _entero(data["orden"], "El orden")
     except _Rechazo as e:
         conn.close()
         return jsonify({"error": str(e)}), e.status
 
-    cambios = auditoria.diferencias(actual, nuevo, ("nombre", "activo", "orden"))
+    cambios = auditoria.diferencias(actual, nuevo, tuple(_ETQ_TIPO))
     if cambios:
         conn.execute(
-            "UPDATE recaudo_tipos_gasto SET nombre = ?, activo = ?, orden = ? WHERE id = ?",
-            (nuevo["nombre"], nuevo["activo"], nuevo["orden"], tipo_id),
+            """UPDATE recaudo_tipos_gasto
+                  SET nombre = ?, activo = ?, orden = ?, fijo = ?, requiere_detalle = ?
+                WHERE id = ?""",
+            (nuevo["nombre"], nuevo["activo"], nuevo["orden"], nuevo["fijo"],
+             nuevo["requiere_detalle"], tipo_id),
         )
         if set(cambios) == {"activo"}:
             accion = "activar" if nuevo["activo"] else "desactivar"
@@ -829,7 +846,7 @@ def editar_tipo_gasto(tipo_id):
         else:
             accion = "editar"
             texto = (f"Editó el tipo de gasto «{actual['nombre']}»: "
-                     f"{auditoria.describir(cambios, {'nombre': 'Nombre', 'activo': 'Activo', 'orden': 'Orden'})}")
+                     f"{auditoria.describir(cambios, _ETQ_TIPO)}")
         auditoria.registrar(conn, "recaudo", "tipo_gasto", tipo_id, accion, texto, cambios)
         conn.commit()
     conn.close()

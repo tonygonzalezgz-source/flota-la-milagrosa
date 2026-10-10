@@ -14,7 +14,20 @@ ROLES_RECAUDO = ("Administrador", "Recaudador")
 TARIFAS_INICIALES = {"A": 3050, "B": 3200}
 
 # Gastos que el conductor reporta al liquidar (el Administrador agrega más desde Recaudo).
-TIPOS_GASTO_INICIALES = ("ACPM", "Varios", "Taller", "Auxilio de transporte")
+# fijo: siempre a la vista en el formulario (los más frecuentes); los demás se agregan
+# desde la lista "+ Agregar otro gasto". detalle: exige escribir la descripción.
+TIPOS_GASTO_INICIALES = (
+    {"nombre": "ACPM", "fijo": 1},
+    {"nombre": "Varios", "fijo": 1},
+    {"nombre": "Taller"},
+    {"nombre": "Auxilio de transporte"},
+    # Pedidos por el usuario el 2026-10-10
+    {"nombre": "Extras", "fijo": 1},
+    {"nombre": "Patio"},
+    {"nombre": "Anticipo propietario"},
+    {"nombre": "Bonificación"},
+    {"nombre": "Otros", "detalle": 1},
+)
 
 # Conceptos contables de la caja (tabla que pasó el usuario el 2026-10-09).
 # tercero: PROPIETARIO (del vehículo, según la tarjeta de propiedad), PAGADOR (quien

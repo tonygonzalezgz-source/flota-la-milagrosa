@@ -67,11 +67,29 @@ _SEMILLA_TARIFAS = (
     + " ON CONFLICT DO NOTHING"
 )
 
+# Va después de las columnas `fijo` y `requiere_detalle` (ver migrar).
 _SEMILLA_TIPOS = (
-    "INSERT INTO recaudo_tipos_gasto (empresa_id, nombre, orden) VALUES "
-    + ", ".join(f"({EMPRESA_POR_DEFECTO}, '{n}', {i})" for i, n in enumerate(TIPOS_GASTO_INICIALES, 1))
+    "INSERT INTO recaudo_tipos_gasto (empresa_id, nombre, orden, fijo, requiere_detalle) VALUES "
+    + ", ".join(f"({EMPRESA_POR_DEFECTO}, {_sql_txt(t['nombre'])}, {i}, {t.get('fijo', 0)}, {t.get('detalle', 0)})"
+                for i, t in enumerate(TIPOS_GASTO_INICIALES, 1))
     + " ON CONFLICT DO NOTHING"
 )
+
+# Los tipos que ya existían (ACPM, Varios…) se marcan como fijos UNA sola vez: después
+# el Administrador decide desde "Tipos de gasto" y una migración futura no lo pisa.
+_MARCA_TIPOS = "tipos_gasto_fijos_v1"
+
+
+def _ajustar_tipos(db):
+    if db.execute("SELECT 1 FROM recaudo_config WHERE empresa_id = ? AND clave = ?",
+                  (EMPRESA_POR_DEFECTO, _MARCA_TIPOS)).fetchone():
+        return
+    for t in TIPOS_GASTO_INICIALES:
+        db.execute("UPDATE recaudo_tipos_gasto SET fijo = ?, requiere_detalle = ? "
+                   "WHERE empresa_id = ? AND nombre = ?",
+                   (t.get("fijo", 0), t.get("detalle", 0), EMPRESA_POR_DEFECTO, t["nombre"]))
+    db.execute("INSERT INTO recaudo_config (empresa_id, clave, valor) VALUES (?, ?, '1')",
+               (EMPRESA_POR_DEFECTO, _MARCA_TIPOS))
 
 # Una sola liquidación vigente por bus y día; las anuladas se conservan aparte.
 _UNICA_ACTIVA = ("CREATE UNIQUE INDEX IF NOT EXISTS uq_recaudos_bus_fecha_vigente "
@@ -108,7 +126,6 @@ def _tablas(serial, ts, ts_default, ref_empresa):
             created_at  {ts} {ts_default},
             UNIQUE (empresa_id, nombre)
         )""",
-        _SEMILLA_TIPOS,
 
         f"""CREATE TABLE IF NOT EXISTS recaudo_cierres (
             id                      {serial},
@@ -214,15 +231,20 @@ def _tablas(serial, ts, ts_default, ref_empresa):
 
 # Columnas agregadas después: cierre de caja en `recaudos` y propietario según la
 # tarjeta de propiedad en `buses` (tercero de las líneas de recaudo del archivo plano).
+# Tipos de gasto fijos (siempre a la vista) y que piden descripción — SCHEMA_VERSION 18.
 _COLUMNAS_PG = [
     "ALTER TABLE recaudos ADD COLUMN IF NOT EXISTS cierre_id INTEGER REFERENCES recaudo_cierres(id)",
     "ALTER TABLE buses ADD COLUMN IF NOT EXISTS tp_propietario_nombre TEXT",
     "ALTER TABLE buses ADD COLUMN IF NOT EXISTS tp_propietario_documento TEXT",
+    "ALTER TABLE recaudo_tipos_gasto ADD COLUMN IF NOT EXISTS fijo INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE recaudo_tipos_gasto ADD COLUMN IF NOT EXISTS requiere_detalle INTEGER NOT NULL DEFAULT 0",
 ]
 _COLUMNAS_SQLITE = [
     "ALTER TABLE recaudos ADD COLUMN cierre_id INTEGER REFERENCES recaudo_cierres(id)",
     "ALTER TABLE buses ADD COLUMN tp_propietario_nombre TEXT",
     "ALTER TABLE buses ADD COLUMN tp_propietario_documento TEXT",
+    "ALTER TABLE recaudo_tipos_gasto ADD COLUMN fijo INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE recaudo_tipos_gasto ADD COLUMN requiere_detalle INTEGER NOT NULL DEFAULT 0",
 ]
 _INDICES = ["CREATE INDEX IF NOT EXISTS idx_recaudos_caja ON recaudos(usuario_id, cierre_id)"]
 
@@ -249,16 +271,24 @@ def migrar(db):
                 pass   # la columna ya existe
         for sql in _INDICES:
             db.execute(sql)
+        db.execute(_SEMILLA_TIPOS)
+        _ajustar_tipos(db)
         db.commit()
         return
 
-    for sql in _PG + _COLUMNAS_PG + _INDICES:
+    for sql in _PG + _COLUMNAS_PG + _INDICES + [_SEMILLA_TIPOS]:
         try:
             db.execute(sql)
             db.commit()
         except Exception as e:
             db.rollback()
             print(f"[recaudo.migrar] {e}")
+    try:
+        _ajustar_tipos(db)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        print(f"[recaudo.migrar] tipos de gasto: {e}")
     for tabla in TABLAS_PROTEGIDAS:
         try:
             _proteger(db, tabla)
