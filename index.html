@@ -1390,6 +1390,17 @@
               Mapa en vivo
             </button>
           </li>
+          <!-- Reportes de recorrido -->
+          <li>
+            <button class="sb-link" id="nav-mb-reportes" data-view="mb-reportes" data-src="monitoreo-reportes.html" onclick="switchView(this)">
+              <span class="sb-icon">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                  <path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/>
+                </svg>
+              </span>
+              Reportes de recorrido
+            </button>
+          </li>
           <!-- Rutas Geográficas -->
           <li>
             <button class="sb-link" id="nav-mb-rutas" data-view="mb-rutas" data-src="monitoreo-rutas.html" onclick="switchView(this)">
@@ -1681,6 +1692,15 @@
               onload="iframeLoaded('mb-mapa')"></iframe>
     </div>
 
+    <div class="view-panel" id="view-mb-reportes">
+      <div class="iframe-loader" id="loader-mb-reportes">
+        <div class="loader-ring"></div>
+        <div class="loader-text">Cargando Reportes de recorrido…</div>
+      </div>
+      <iframe id="iframe-mb-reportes" src="" title="Reportes de recorrido"
+              onload="iframeLoaded('mb-reportes')"></iframe>
+    </div>
+
     <div class="view-panel" id="view-mb-rutas">
       <div class="iframe-loader" id="loader-mb-rutas">
         <div class="loader-ring"></div>
@@ -1776,6 +1796,7 @@
     mapa:                 { label: 'Config GPS',            icon: 'map',    src: 'mapa.html' },
     relojes:              { label: 'Puntos de Control',      icon: 'map',    src: 'relojes.html' },
     'mb-mapa':            { label: 'Mapa en vivo',           icon: 'map',    src: 'monitoreo-mapa.html' },
+    'mb-reportes':        { label: 'Reportes de recorrido',  icon: 'map',    src: 'monitoreo-reportes.html' },
     'mb-rutas':           { label: 'Rutas Geográficas',      icon: 'map',    src: 'monitoreo-rutas.html' },
     'mb-equipos':         { label: 'Equipos GPS',            icon: 'map',    src: 'monitoreo-equipos.html' },
     'recaudo-diario':     { label: 'Recaudo diario',         icon: 'receipt', src: 'recaudo-diario.html' },
@@ -2142,6 +2163,7 @@
     mapa:                 { bg: '#0a2a1a', svg: `<svg width="18" height="18" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>` },
     relojes:              { bg: '#0a2a1a', svg: `<svg width="18" height="18" fill="none" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>` },
     'mb-mapa':            { bg: '#2a0f0f', svg: `<svg width="18" height="18" fill="none" stroke="#f87171" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>` },
+    'mb-reportes':        { bg: '#2a0f0f', svg: `<svg width="18" height="18" fill="none" stroke="#f87171" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg>` },
     'mb-rutas':           { bg: '#2a0f0f', svg: `<svg width="18" height="18" fill="none" stroke="#f87171" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="6" cy="19" r="3"/><circle cx="18" cy="5" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/></svg>` },
     'mb-equipos':         { bg: '#2a0f0f', svg: `<svg width="18" height="18" fill="none" stroke="#f87171" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="2" y="14" width="20" height="7" rx="2"/><path d="M6 17.5h.01M10 17.5h.01"/><path d="M8.5 10.5a5 5 0 0 1 7 0M6 8a8.5 8.5 0 0 1 12 0"/></svg>` },
     auditoria:            { bg: '#1f1530', svg: `<svg width="18" height="18" fill="none" stroke="#c084fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><polyline points="3 3 3 8 8 8"/><polyline points="12 7 12 12 15 14"/></svg>` },
