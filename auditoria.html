@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <link rel="icon" type="image/png" href="favicon.png" />
+  <link rel="apple-touch-icon" href="favicon.png" />
+  <script>
+    (function() {
+      if (window.location === window.parent.location) {
+        const token = localStorage.getItem('authToken');
+        if (!token) { window.location.href = '/index.html'; }
+      }
+    })();
+  </script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>La Milagrosa — Historial de modificaciones</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg:#f4f4f6; --white:#fff; --border:#e5e5eb; --border2:#d0d0d8;
+      --txt:#111; --txt2:#555; --txt3:#888; --primary:#6366f1; --green:#22c55e;
+      --red:#ef4444; --yellow:#f59e0b; --radius:12px; --radius-s:8px;
+      --shadow:0 1px 4px rgba(0,0,0,.07);
+    }
+    body {
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+      background:var(--bg); color:var(--txt); padding:24px; font-size:14px;
+    }
+    .page-header { margin-bottom:16px; }
+    .page-title { font-size:22px; font-weight:800; letter-spacing:-.4px; }
+    .page-sub   { font-size:13px; color:var(--txt2); margin-top:3px; max-width:720px; line-height:1.5; }
+    .candado { display:inline-flex; align-items:center; gap:6px; margin-top:8px; background:#eef2ff; color:#3730a3;
+      border:1px solid #c7d2fe; border-radius:999px; padding:4px 12px; font-size:12px; font-weight:700; }
+
+    .card { background:var(--white); border:1px solid var(--border); border-radius:var(--radius);
+      box-shadow:var(--shadow); padding:16px 18px; margin-bottom:16px; }
+    .filtros { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; align-items:end; }
+    .campo label { display:block; font-size:11.5px; font-weight:700; color:var(--txt2); margin-bottom:5px; }
+    .campo input, .campo select { width:100%; padding:8px 10px; border:1.5px solid var(--border2); border-radius:var(--radius-s);
+      font-family:inherit; font-size:14px; background:var(--white); color:var(--txt); }
+    .campo input:focus, .campo select:focus { outline:none; border-color:var(--primary); }
+    .campo.ancho { grid-column:span 2; }
+    .btn-primary { border:none; background:var(--primary); color:#fff; border-radius:var(--radius-s);
+      padding:10px 18px; font-family:inherit; font-size:14px; font-weight:700; cursor:pointer; white-space:nowrap; }
+    .btn { border:1px solid var(--border2); background:var(--white); color:var(--txt); border-radius:var(--radius-s);
+      padding:9px 14px; font-family:inherit; font-size:13px; font-weight:700; cursor:pointer; }
+    .btn:hover { border-color:var(--primary); color:var(--primary); }
+
+    .resumen { font-size:12.5px; color:var(--txt3); margin:0 2px 10px; }
+    table { width:100%; border-collapse:collapse; }
+    th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.4px; color:var(--txt3);
+      padding:8px; border-bottom:1px solid var(--border); white-space:nowrap; }
+    td { padding:10px 8px; border-bottom:1px solid var(--border); font-size:13px; vertical-align:top; }
+    tr.fila { cursor:pointer; }
+    tr.fila:hover td { background:#fafafd; }
+    tr.detalle td { background:#f8f8fb; padding:10px 14px 14px; }
+    .hora { white-space:nowrap; font-weight:700; }
+    .hora small { display:block; font-weight:500; color:var(--txt3); font-size:11.5px; }
+    .quien { white-space:nowrap; }
+    .quien small { display:block; color:var(--txt3); font-size:11.5px; }
+    .desc { line-height:1.5; }
+    .pill { display:inline-flex; align-items:center; border-radius:999px; padding:3px 9px;
+      font-size:11px; font-weight:700; white-space:nowrap; }
+    .a-crear, .a-activar, .a-cerrar { background:rgba(34,197,94,.12); color:#15803d; }
+    .a-reabrir { background:rgba(245,158,11,.15); color:#b45309; }
+    .a-editar   { background:rgba(99,102,241,.12); color:#4338ca; }
+    .a-asignar  { background:rgba(245,158,11,.15); color:#b45309; }
+    .a-eliminar, .a-anular { background:rgba(239,68,68,.12); color:#b91c1c; }
+    .a-desactivar { background:rgba(136,136,136,.15); color:#555; }
+    .mod { font-size:11.5px; color:var(--txt3); font-weight:600; margin-top:3px; }
+    .cambios { display:grid; grid-template-columns:max-content 1fr; gap:4px 14px; font-size:12.5px; }
+    .cambios .k { color:var(--txt3); font-weight:700; }
+    .cambios .v { word-break:break-word; }
+    .cambios .antes { color:#b91c1c; text-decoration:line-through; text-decoration-color:rgba(185,28,28,.4); }
+    .cambios .despues { color:#15803d; font-weight:700; }
+    .meta-det { font-size:11.5px; color:var(--txt3); margin-top:8px; }
+    .vacio { text-align:center; color:var(--txt3); padding:30px; font-size:13.5px; }
+    .mas { text-align:center; margin-top:12px; }
+
+    @media (max-width:760px) {
+      body { padding:16px; padding-top:64px; }
+      input, select { font-size:16px !important; }
+      .campo.ancho { grid-column:1 / -1; }
+      table thead { display:none; }
+      table, tbody, tr, td { display:block; width:100%; }
+      tr.fila { border:1px solid var(--border); border-radius:10px; margin-bottom:8px; padding:6px 10px; background:var(--white); }
+      tr.fila td { border:none; padding:5px 0; }
+      tr.fila td::before { content:attr(data-label); display:block; font-size:10.5px; font-weight:700;
+        text-transform:uppercase; color:var(--txt3); margin-bottom:2px; }
+      tr.detalle { margin:-8px 0 8px; }
+      tr.detalle td { border:1px solid var(--border); border-top:none; border-radius:0 0 10px 10px; }
+      .hora small, .quien small { display:inline; margin-left:6px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page-header">
+    <div class="page-title">Historial de modificaciones</div>
+    <div class="page-sub">Quién cambió qué y cuándo en el Catálogo y en Recaudo. Toca una fila para ver el detalle del cambio (antes → después).</div>
+    <div class="candado">
+      <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+      Este registro no se puede editar ni borrar, ni siquiera por el administrador
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="filtros">
+      <div class="campo"><label>Desde</label><input type="date" id="fDesde" /></div>
+      <div class="campo"><label>Hasta</label><input type="date" id="fHasta" /></div>
+      <div class="campo"><label>Módulo</label>
+        <select id="fModulo">
+          <option value="">Todos</option>
+          <option value="catalogo">Catálogo</option>
+          <option value="recaudo">Recaudo</option>
+        </select></div>
+      <div class="campo"><label>Usuario</label><select id="fUsuario"><option value="">Todos</option></select></div>
+      <div class="campo ancho"><label>Buscar en el detalle</label>
+        <input id="fQ" placeholder="Ej: bus 12, placa, nombre del conductor…" onkeydown="if (event.key === 'Enter') buscar()" /></div>
+      <div><button class="btn-primary" onclick="buscar()">Buscar</button></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="resumen" id="resumen"></div>
+    <table>
+      <thead><tr><th>Fecha y hora</th><th>Usuario</th><th>Acción</th><th>Detalle</th></tr></thead>
+      <tbody id="tbody"><tr><td colspan="4" class="vacio">Cargando…</td></tr></tbody>
+    </table>
+    <div class="mas" id="mas"></div>
+  </div>
+
+<script>
+  const API = (window.location.port === '3030') ? 'http://localhost:8001' : window.location.origin;
+  const MODULOS = { catalogo: 'Catálogo', recaudo: 'Recaudo' };
+  const ENTIDADES = {
+    bus: 'Bus', ruta: 'Ruta', conductor: 'Conductor', tarifa: 'Tarifa', puesto: 'Puesto',
+    usuario: 'Cuenta', usuario_buses: 'Buses de una cuenta', usuario_rutas: 'Rutas de una cuenta',
+    liquidacion: 'Liquidación', tipo_gasto: 'Tipo de gasto', cierre: 'Cierre de caja',
+  };
+  const CAMPOS = {
+    numero: 'Número', placa: 'Placa', modelo: 'Modelo', grupo: 'Grupo', estado: 'Estado',
+    km_actuales: 'Km actuales', propietario_id: 'Propietario', soat_vencimiento: 'SOAT',
+    tecno_vencimiento: 'Tecnomecánica', tarjeta_op_vencimiento: 'Tarjeta de operación',
+    nombre: 'Nombre', descripcion: 'Descripción', color: 'Color', activa: 'Activa', activo: 'Activo',
+    cedula: 'Cédula', telefono: 'Teléfono', label: 'Nombre', valor: 'Valor', username: 'Usuario',
+    iniciales: 'Iniciales', puesto_id: 'Puesto', rol: 'Rol', 'contraseña': 'Contraseña',
+    fecha: 'Fecha', bus: 'Bus', registradora: 'Registradora', pasajeros: 'Pasajeros', tarifa: 'Tarifa',
+    liquidacion: 'Liquidación', recaudado: 'Recaudado', diferencia: 'Diferencia',
+    producido: 'Producido', gastos: 'Gastos', total_gastos: 'Total gastos', neto: 'Por entregar', orden: 'Orden',
+    liquidaciones: 'Liquidaciones', efectivo: 'Efectivo entregado', diferencia_caja: 'Diferencia de caja',
+    planilla: 'Planilla / precinto', observacion: 'Observación',
+    despacho_antes: 'Registradora en el despacho (antes)', conductores: 'Conductores', motivo: 'Motivo',
+    agregados: 'Agregados', quitados: 'Quitados',
+  };
+  const etiqueta = k => CAMPOS[k] || k;
+  const ACCIONES = { crear: 'Creó', editar: 'Editó', eliminar: 'Eliminó', desactivar: 'Desactivó',
+                     activar: 'Activó', asignar: 'Asignó', anular: 'Anuló', cerrar: 'Cerró', reabrir: 'Reabrió' };
+
+  async function apiFetch(path) {
+    const token = localStorage.getItem('authToken');
+    const res = await fetch(API + path, { headers: token ? { 'Authorization': `Bearer ${token}` } : {} });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error || 'Error del servidor');
+    return json;
+  }
+
+  function hoyBogota() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date()); }
+  function shiftIso(iso, delta) {
+    const d = new Date(iso + 'T12:00:00Z');
+    d.setUTCDate(d.getUTCDate() + delta);
+    return d.toISOString().slice(0, 10);
+  }
+  function esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+  }
+  const fmtFecha = iso => new Date(iso).toLocaleDateString('es-CO', { timeZone: 'America/Bogota', day: 'numeric', month: 'short', year: 'numeric' });
+  const fmtHora  = iso => new Date(iso).toLocaleTimeString('es-CO', { timeZone: 'America/Bogota', hour: 'numeric', minute: '2-digit', second: '2-digit' });
+
+  let items = [], hayMas = false;
+  const abiertos = new Set();
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const hoy = hoyBogota();
+    document.getElementById('fHasta').value = hoy;
+    document.getElementById('fDesde').value = shiftIso(hoy, -7);
+    cargarUsuarios();
+    buscar();
+  });
+  window.addEventListener('message', e => { if (e.data?.type === 'VIEW_SHOWN') { cargarUsuarios(); buscar(); } });
+
+  async function cargarUsuarios() {
+    try {
+      const us = await apiFetch('/api/auditoria/usuarios');
+      const sel = document.getElementById('fUsuario');
+      const actual = sel.value;
+      sel.innerHTML = '<option value="">Todos</option>' + us.map(u =>
+        `<option value="${u.usuario_id}">${esc(u.nombre || '#' + u.usuario_id)} — ${esc(u.rol || '')} (${u.cambios})</option>`).join('');
+      sel.value = actual;
+    } catch (_) {}
+  }
+
+  function parametros(antesDe) {
+    const p = new URLSearchParams();
+    const v = id => document.getElementById(id).value.trim();
+    if (v('fDesde')) p.set('desde', v('fDesde'));
+    if (v('fHasta')) p.set('hasta', v('fHasta'));
+    if (v('fModulo')) p.set('modulo', v('fModulo'));
+    if (v('fUsuario')) p.set('usuario_id', v('fUsuario'));
+    if (v('fQ')) p.set('q', v('fQ'));
+    if (antesDe) p.set('antes_de', antesDe);
+    p.set('limite', 100);
+    return p.toString();
+  }
+
+  async function buscar() {
+    abiertos.clear();
+    try {
+      const r = await apiFetch('/api/auditoria?' + parametros());
+      items = r.items; hayMas = r.hay_mas;
+      render();
+    } catch (e) {
+      document.getElementById('tbody').innerHTML = `<tr><td colspan="4" class="vacio">${esc(e.message)}</td></tr>`;
+    }
+  }
+
+  async function cargarMas() {
+    try {
+      const r = await apiFetch('/api/auditoria?' + parametros(items[items.length - 1].id));
+      items = items.concat(r.items); hayMas = r.hay_mas;
+      render();
+    } catch (e) { alert(e.message); }
+  }
+
+  function render() {
+    document.getElementById('resumen').textContent = items.length
+      ? `${items.length}${hayMas ? '+' : ''} cambio${items.length === 1 ? '' : 's'} en el período`
+      : '';
+    document.getElementById('mas').innerHTML = hayMas ? `<button class="btn" onclick="cargarMas()">Cargar más</button>` : '';
+    if (!items.length) {
+      document.getElementById('tbody').innerHTML = `<tr><td colspan="4" class="vacio">No hay cambios registrados con esos filtros.</td></tr>`;
+      return;
+    }
+    document.getElementById('tbody').innerHTML = items.map(it => {
+      const abierto = abiertos.has(it.id);
+      return `<tr class="fila" onclick="alternar(${it.id})">
+        <td data-label="Fecha y hora"><div class="hora">${fmtFecha(it.creado_at)}<small>${fmtHora(it.creado_at)}</small></div></td>
+        <td data-label="Usuario"><div class="quien">${esc(it.usuario_nombre || 'Desconocido')}<small>${esc(it.usuario_rol || '')}</small></div></td>
+        <td data-label="Acción"><span class="pill a-${esc(it.accion)}">${ACCIONES[it.accion] || esc(it.accion)}</span>
+          <div class="mod">${MODULOS[it.modulo] || esc(it.modulo)} · ${ENTIDADES[it.entidad] || esc(it.entidad)}</div></td>
+        <td data-label="Detalle"><div class="desc">${esc(it.descripcion)}</div></td>
+      </tr>` + (abierto ? `<tr class="detalle"><td colspan="4">${detalle(it)}</td></tr>` : '');
+    }).join('');
+  }
+
+  function alternar(id) {
+    abiertos.has(id) ? abiertos.delete(id) : abiertos.add(id);
+    render();
+  }
+
+  const DINERO = new Set(['tarifa', 'liquidacion', 'producido', 'total_gastos', 'neto', 'recaudado', 'diferencia', 'efectivo', 'diferencia_caja']);
+  const pesos = n => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString('es-CO');
+  function valor(v, campo) {
+    if (v === null || v === undefined || v === '') return '—';
+    if (typeof v === 'number' && DINERO.has(campo)) return pesos(v);
+    if (typeof v === 'object') return esc(JSON.stringify(v));
+    return esc(v);
+  }
+
+  /* Cambios campo por campo: [antes, después] se muestra tachado → resaltado */
+  function detalle(it) {
+    let html = '';
+    const c = it.cambios;
+    if (c && typeof c === 'object') {
+      html = '<div class="cambios">' + Object.entries(c).map(([k, v]) => {
+        if (k === 'conductores' && Array.isArray(v)) {
+          return `<div class="k">${etiqueta(k)}</div><div class="v">${v.map(x =>
+            `${esc(x.conductor_nombre)}: ${x.pasajeros} pax, producido ${pesos(x.producido ?? x.liquidacion)}, gastos ${pesos(x.total_gastos || 0)}, recaudado ${pesos(x.recaudado)}`).join('<br>')}</div>`;
+        }
+        if (Array.isArray(v) && v.length === 2 && !['registradora', 'despacho_antes', 'agregados', 'quitados', 'gastos'].includes(k)) {
+          return `<div class="k">${esc(etiqueta(k))}</div><div class="v"><span class="antes">${valor(v[0], k)}</span> → <span class="despues">${valor(v[1], k)}</span></div>`;
+        }
+        return `<div class="k">${esc(etiqueta(k))}</div><div class="v">${Array.isArray(v) ? v.map(x => valor(x, k)).join(', ') : valor(v, k)}</div>`;
+      }).join('') + '</div>';
+    } else {
+      html = '<div class="meta-det">Sin detalle adicional.</div>';
+    }
+    return html + `<div class="meta-det">Registro #${it.id} · usuario ${esc(it.usuario_login || '')} · ${MODULOS[it.modulo] || ''} · ${ENTIDADES[it.entidad] || it.entidad} ${esc(it.entidad_id || '')}${it.ip ? ' · IP ' + esc(it.ip) : ''}</div>`;
+  }
+</script>
+</body>
+</html>
