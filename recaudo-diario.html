@@ -107,7 +107,7 @@
       font-family:inherit; font-size:15px; background:var(--white); color:var(--txt); }
     .campo input:focus, .campo select:focus { outline:none; border-color:var(--primary); }
     .campo input:disabled, .campo select:disabled { background:#f6f6f8; color:var(--txt2); }
-    .campo input.err, .campo select.err { border-color:var(--red); background:#fff5f5; }
+    .campo input.err, .campo select.err, .gasto-row input.err { border-color:var(--red); background:#fff5f5; }
     .req { color:var(--red); margin-left:2px; }
     .opcional { font-weight:600; text-transform:none; letter-spacing:0; color:var(--txt3); }
     .oblig-nota { font-size:12px; color:var(--txt3); margin:-4px 0 12px; }
@@ -173,12 +173,21 @@
     .gasto-row .g-nota { font-size:12.5px; color:var(--txt2); }
     .gasto-row.total .g-nombre, .gasto-row.total .g-valor { font-weight:800; }
     .sin-gastos { font-size:12.5px; color:var(--txt3); padding:10px 0; }
+    .g-quitar { border:none; background:none; color:var(--txt3); font-size:16px; line-height:1; cursor:pointer;
+      padding:0 4px; margin-left:4px; vertical-align:middle; }
+    .g-quitar:hover { color:#dc2626; }
+    .gasto-row input.nota.requerido::placeholder { color:#dc2626; opacity:.75; }
+    .gasto-agregar { padding:8px 0; border-bottom:1px dashed var(--border); }
+    .gasto-agregar select { width:100%; max-width:320px; padding:8px 10px; border:1.5px dashed var(--primary);
+      border-radius:var(--radius-s); background:var(--white); color:var(--primary); font:700 13.5px inherit; cursor:pointer; }
+    .tipo-row .tipo-op { display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:600;
+      color:var(--txt2); white-space:nowrap; cursor:pointer; }
 
     /* Tipos de gasto (admin) */
     .tipo-row { display:flex; gap:8px; align-items:center; padding:6px 0; border-bottom:1px solid var(--border); }
-    .tipo-row input { flex:1; padding:8px 10px; border:1.5px solid var(--border2); border-radius:var(--radius-s);
+    .tipo-row > input { flex:1; padding:8px 10px; border:1.5px solid var(--border2); border-radius:var(--radius-s);
       font-family:inherit; font-size:14px; }
-    .tipo-row.inactivo input { color:var(--txt3); background:#f6f6f8; }
+    .tipo-row.inactivo > input { color:var(--txt3); background:#f6f6f8; }
     .nuevo-tipo { display:flex; gap:8px; margin-top:12px; }
     .nuevo-tipo input { flex:1; padding:9px 10px; border:1.5px solid var(--border2); border-radius:var(--radius-s);
       font-family:inherit; font-size:14px; }
@@ -262,27 +271,32 @@
       .gasto-row .g-nota, .gasto-row input.nota { grid-column:1 / -1; }
       .gasto-row { padding:5px 0; row-gap:6px; }
       .gasto-row input.nota { padding:6px 10px; }
+      .gasto-agregar select { max-width:none; font-size:16px; }
+      .tipo-row { flex-wrap:wrap; }
+      .tipo-row > input { flex-basis:100%; }
     }
 
     /* Tirilla de liquidación: fuera de la pantalla (así se puede medir) y sola al imprimir */
     #tirilla { position:absolute; left:-10000px; top:0; background:#fff; color:#000; }
-    #tirilla .copia { font-family:'Courier New', ui-monospace, monospace; font-size:12px; line-height:1.35; padding:3mm 0 5mm; }
-    #tirilla.papel-80 .copia { width:72mm; margin:0 4mm; }
-    #tirilla.papel-58 .copia { width:48mm; margin:0 5mm; font-size:10.5px; }
+    /* Impresora de matriz de punto con rollo de 76 mm: imprime unos 63 mm del centro del
+       papel, así que el texto va en una columna angosta y centrada, en Arial (las letras
+       finas o monoespaciadas salen borrosas con los puntos). */
+    #tirilla .copia { font-family:Arial, Helvetica, sans-serif; font-size:14px; line-height:1.25; padding:2mm 0 3mm; }
+    #tirilla.papel-76 .copia { width:56mm; margin:0 10mm; }
+    #tirilla.papel-58 .copia { width:44mm; margin:0 7mm; font-size:12px; }
     .t-centro { text-align:center; }
-    .t-titulo { font-weight:800; font-size:1.1em; }
-    .t-bus { font-weight:800; font-size:1.1em; }
-    .t-anulada { font-weight:800; font-size:1.2em; margin:4px 0; }
-    .t-linea { border-top:1px dashed #000; margin:5px 0; }
-    .t-sec { text-align:center; font-weight:800; margin:6px 0 2px; }
+    .t-titulo { font-weight:700; }
+    .t-bus { font-weight:700; font-size:1.1em; }
+    .t-anulada { font-weight:700; font-size:1.15em; margin:2px 0; }
+    .t-linea { border-top:1px dashed #000; margin:3px 0; }
+    .t-sec { text-align:center; font-weight:700; margin:3px 0 1px; }
     .t-fila { display:flex; justify-content:space-between; gap:6px; }
     .t-fila span:first-child { white-space:nowrap; }
     .t-fila span:last-child { text-align:right; overflow-wrap:anywhere; }
-    .t-fila.fuerte { font-weight:800; }
-    .t-fila.grande { font-weight:800; font-size:1.2em; }
-    .t-nota { font-size:.9em; padding-left:8px; }
-    .t-firma { margin-top:30px; border-top:1px solid #000; text-align:center; font-size:.9em; padding-top:2px; }
-    .t-copia { margin-top:8px; font-weight:800; }
+    .t-fila.fuerte { font-weight:700; }
+    .t-fila.grande { font-weight:700; font-size:1.15em; }
+    .t-nota { font-size:.85em; padding-left:6px; }
+    .t-firma { margin-top:20px; border-top:1px solid #000; text-align:center; font-size:.85em; padding-top:1px; }
     #tirilla .fuerte { font-weight:800; }
     @media print {
       body { padding:0 !important; background:#fff !important; }
@@ -303,7 +317,7 @@
         <div class="tarifas-chip" id="tarifasChip">Tarifas: —</div>
         <button class="chip-btn" id="btnTiposGasto" onclick="abrirTiposGasto()" hidden>Tipos de gasto</button>
         <label class="chip-papel" title="Ancho del papel de la impresora de tirillas en este computador">Tirilla
-          <select id="papel" onchange="cambiarPapel(this.value)"><option value="80">80 mm</option><option value="58">58 mm</option></select>
+          <select id="papel" onchange="cambiarPapel(this.value)"><option value="76">76 mm</option><option value="58">58 mm</option></select>
         </label>
       </div>
     </div>
@@ -390,7 +404,7 @@
   <div class="modal-bg hidden" id="modalTipos">
     <div class="modal">
       <h3>Tipos de gasto</h3>
-      <div class="modal-sub">Los gastos que el conductor puede reportar al liquidar. Desactivar o renombrar un tipo no cambia las liquidaciones que ya lo usaron.</div>
+      <div class="modal-sub">Los gastos que el conductor puede reportar al liquidar. <b>Fijo</b>: siempre a la vista en el formulario (los más frecuentes); los demás se eligen en "+ Agregar otro gasto". <b>Pide descripción</b>: no deja guardar el gasto sin escribir qué fue. Desactivar o renombrar un tipo no cambia las liquidaciones que ya lo usaron.</div>
       <div id="listaTipos"></div>
       <div class="nuevo-tipo">
         <input id="nuevoTipo" maxlength="60" placeholder="Nuevo gasto (ej: Peajes)" onkeydown="if (event.key === 'Enter') crearTipo()" />
@@ -402,7 +416,7 @@
 
   <div class="toast hidden" id="toast"></div>
 
-  <!-- Tirilla que se imprime al liquidar (dos copias) -->
+  <!-- Tirilla que se imprime al liquidar (copia empresa, una por conductor) -->
   <div id="tirilla" aria-hidden="true"></div>
 
 <script>
@@ -459,11 +473,13 @@
   let filtro = null;       // null = elegir según el día (Pendientes si hay)
   let q = '';
 
-  /* Ancho del papel de la impresora de tirillas: preferencia de cada computador */
-  const PAPEL_KEY = 'recaudo.papelTirilla';
-  let papel = (() => { try { return localStorage.getItem(PAPEL_KEY) === '58' ? '58' : '80'; } catch (_) { return '80'; } })();
+  /* Ancho del papel de la impresora de tirillas: preferencia de cada computador.
+     76 mm = la impresora de matriz de punto de la oficina (sirve también en rollos de 80 mm);
+     58 mm = rollos angostos. */
+  const PAPEL_KEY = 'recaudo.papelTirilla76';
+  let papel = (() => { try { return localStorage.getItem(PAPEL_KEY) === '58' ? '58' : '76'; } catch (_) { return '76'; } })();
   function cambiarPapel(v) {
-    papel = v === '58' ? '58' : '80';
+    papel = v === '58' ? '58' : '76';
     try { localStorage.setItem(PAPEL_KEY, papel); } catch (_) {}
   }
 
@@ -854,8 +870,9 @@
     </div>`;
   }
 
-  /* Gastos: una fila por tipo activo para digitarlos rápido; si ya está guardada,
-     los gastos tal como se liquidaron (con el nombre que tenían ese día). */
+  /* Gastos: los tipos fijos (los más frecuentes) siempre a la vista para digitarlos
+     rápido; los demás se agregan desde "+ Agregar otro gasto". Si ya está guardada, los
+     gastos tal como se liquidaron (con el nombre que tenían ese día). */
   function htmlGastos(b, i, soloLectura) {
     if (b.recaudo) {
       const lista = b.recaudo.gastos.filter(g => g.orden_conductor === i + 1);
@@ -872,18 +889,43 @@
     }
     const ro = soloLectura ? 'disabled' : '';
     const gastos = form.conductores[i].gastos;
-    return D.tipos_gasto.map(t => {
+    const visibles = D.tipos_gasto.filter(t => t.fijo || t.id in gastos);
+    const otros = D.tipos_gasto.filter(t => !t.fijo && !(t.id in gastos));
+    const filas = visibles.map(t => {
       const g = gastos[t.id] || {};
       return `<div class="gasto-row">
-        <label for="g-${i}-${t.id}">${esc(t.nombre)}</label>
+        <label for="g-${i}-${t.id}">${esc(t.nombre)}${t.fijo || soloLectura ? ''
+          : `<button class="g-quitar" title="Quitar este gasto" onclick="quitarGasto(${i}, ${t.id})">×</button>`}</label>
         <input class="valor" id="g-${i}-${t.id}" inputmode="numeric" placeholder="$0" ${ro}
                value="${g.valor ? fmtNum(g.valor) : ''}"
                oninput="formatearDinero(this); setGasto(${i}, ${t.id}, 'valor', leerEntero(this.value))" />
-        <input class="nota" maxlength="200" placeholder="Nota (opcional)" ${ro} value="${esc(g.observacion || '')}"
-               oninput="setGasto(${i}, ${t.id}, 'observacion', this.value)" />
+        <input class="nota${t.requiere_detalle ? ' requerido' : ''}" id="gn-${i}-${t.id}" maxlength="200" ${ro}
+               placeholder="${t.requiere_detalle ? 'Descripción (obligatoria)' : 'Nota (opcional)'}"
+               value="${esc(g.observacion || '')}" oninput="setGasto(${i}, ${t.id}, 'observacion', this.value)" />
       </div>`;
-    }).join('') + `<div class="gasto-row total"><div class="g-nombre">Total gastos</div>
+    }).join('');
+    const agregar = otros.length && !soloLectura ? `<div class="gasto-agregar">
+        <select onchange="agregarGasto(${i}, this.value)" aria-label="Agregar otro gasto">
+          <option value="">+ Agregar otro gasto…</option>
+          ${otros.map(t => `<option value="${t.id}">${esc(t.nombre)}</option>`).join('')}
+        </select></div>` : '';
+    return filas + agregar + `<div class="gasto-row total"><div class="g-nombre">Total gastos</div>
         <div class="g-valor" id="cGastos-${i}">$0</div><div></div></div>`;
+  }
+
+  /* Agrega a la vista un gasto de la lista (no fijo) y deja el cursor en su valor */
+  function agregarGasto(i, tipoId) {
+    if (!tipoId) return;
+    const gastos = form.conductores[i].gastos;
+    if (!(tipoId in gastos)) gastos[tipoId] = { valor: null, observacion: '' };
+    renderForm();
+    document.getElementById(`g-${i}-${tipoId}`)?.focus();
+  }
+
+  function quitarGasto(i, tipoId) {
+    delete form.conductores[i].gastos[tipoId];
+    dirty = true;
+    renderForm();
   }
 
   function setGasto(i, tipoId, campo, valor) {
@@ -1145,6 +1187,11 @@
         else if (fin != null && c.registradora_fin >= fin) faltan.push([`fRelevo-${k}`, 'registradora al relevo' + cual + ' menor que la final del bus', k]);
       }
       if (c.recaudado == null) faltan.push([`fRec-${k}`, 'recaudo entregado' + cual, k]);
+      // Gastos que piden descripción (p. ej. "Otros"): con valor, hay que decir qué fue
+      gastosDe(k).forEach(g => {
+        const t = D.tipos_gasto.find(x => x.id === g.tipo_gasto_id);
+        if (t?.requiere_detalle && !g.observacion) faltan.push([`gn-${k}-${t.id}`, `descripción del gasto ${t.nombre}` + cual, k]);
+      });
     });
     if (n > 1 && !faltan.length) {
       const ids = form.conductores.map(c => c.conductor_id);
@@ -1174,7 +1221,7 @@
       ${n > 1 ? `<div class="sub"><span>Conductor ${k + 1} · ${nombre(k)}</span><span>${fmtNum(t.registradora_inicio)} → ${fmtNum(t.registradora_fin)}</span></div>` : ''}
       <div><span>Pasajeros × tarifa</span><span>${fmtNum(t.pasajeros)} × ${fmtMoney(tarifa)}</span></div>
       <div><span>Producido</span><span>${fmtMoney(t.producido)}</span></div>
-      ${gastosDe(k).map(g => `<div><span>− ${esc(g.nombre)}</span><span>${fmtMoney(g.valor)}</span></div>`).join('')}
+      ${gastosDe(k).map(g => `<div><span>− ${esc(g.nombre)}${g.observacion ? ` <small style="color:var(--txt3)">(${esc(g.observacion)})</small>` : ''}</span><span>${fmtMoney(g.valor)}</span></div>`).join('')}
       <div><span>Total gastos</span><span>${fmtMoney(t.total_gastos)}</span></div>
       <div><span>Por entregar</span><span>${fmtMoney(t.neto)}</span></div>
       <div><span>Recaudo entregado</span><span>${fmtMoney(t.recaudado)}</span></div>
@@ -1216,7 +1263,7 @@
       const dif = r.recaudo.diferencia;
       toast(`Bus ${b.numero} liquidado` + (dif ? ' — ' + textoDif(dif).toLowerCase() : ''));
       await cargar();
-      imprimirTirilla(r.recaudo.id, false);   // por cada conductor: copia conductor y copia empresa
+      imprimirTirilla(r.recaudo.id, false);   // una tirilla (copia empresa) por conductor
     } catch (e) {
       toast(e.message, true);
       btn.disabled = false;
@@ -1253,7 +1300,7 @@
     }
   }
 
-  /* ── Tirilla de liquidación (impresora térmica de 80 o 58 mm) ── */
+  /* ── Tirilla de liquidación (impresora de tirillas de 76 o 58 mm) ── */
   function liquidacionPorId(id) {
     for (const b of D.buses) {
       if (b.recaudo && b.recaudo.id === id) return b.recaudo;
@@ -1264,21 +1311,21 @@
   }
 
   /* Tirilla de UN conductor: con relevo, cada conductor recibe la suya solo con su parte. */
-  function htmlCopia(r, c, copia, reimpresion) {
+  function htmlCopia(r, c, reimpresion) {
     const fila = (k, v, cls = '') => `<div class="t-fila ${cls}"><span>${k}</span><span>${v}</span></div>`;
     const total = r.conductores.length;
     const gastos = r.gastos.filter(g => g.orden_conductor === c.orden);
     const dif = c.diferencia;
     const ahora = new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota', day: '2-digit', month: '2-digit',
-      year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+      year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).replace(',', '');
     const obs = [c.observacion, c.orden === 1 ? r.observacion : null].filter(Boolean).join(' · ');
     return `<div class="copia">
       <div class="t-centro t-titulo">TIQUETE DE LIQUIDACIÓN</div>
-      <div class="t-centro">N° ${String(r.id).padStart(6, '0')}${reimpresion ? ' · REIMPRESIÓN' : ''}</div>
+      <div class="t-centro">N° ${String(r.id).padStart(6, '0')} · Del ${esc(r.fecha)}</div>
+      ${reimpresion ? '<div class="t-centro fuerte">REIMPRESIÓN</div>' : ''}
       ${total > 1 ? `<div class="t-centro fuerte">RELEVO · CONDUCTOR ${c.orden} DE ${total}</div>` : ''}
       ${r.anulado_at ? '<div class="t-centro t-anulada">*** ANULADA ***</div>' : ''}
-      <div class="t-centro">Del ${esc(r.fecha)}</div>
-      <div class="t-centro t-bus">Vehículo: ${r.bus_numero}${r.bus_placa ? ' · ' + esc(r.bus_placa) : ''}</div>
+      <div class="t-centro t-bus">Vehículo ${r.bus_numero}${r.bus_placa ? ' · ' + esc(r.bus_placa) : ''}</div>
       <div class="t-linea"></div>
       ${fila('Ruta', esc(c.ruta_nombre || '—'))}
       ${fila('Viajes', c.viajes ?? '—')}
@@ -1299,17 +1346,16 @@
       <div>${esc(c.conductor_cedula || '')}</div><div class="fuerte">${esc((c.conductor_nombre || '').toUpperCase())}</div>
       ${obs ? `<div class="t-nota">Obs: ${esc(obs)}</div>` : ''}
       <div class="t-linea"></div>
-      <div>Fecha impresión: ${ahora}</div>
-      <div>Atendido por: ${esc((r.usuario_nombre || '').toUpperCase())}</div>
-      ${reimpresion ? `<div>Reimpreso por: ${esc((CU.nombre || CU.name || '').toUpperCase())}</div>` : ''}
-      ${copia === 'COPIA EMPRESA' ? '<div class="t-firma">Firma del conductor</div>' : ''}
-      <div class="t-centro t-copia">*** ${copia} ***</div>
+      <div>Impreso: ${ahora}</div>
+      <div>Atendió: ${esc((r.usuario_nombre || '').toUpperCase())}</div>
+      ${reimpresion ? `<div>Reimprimió: ${esc((CU.nombre || CU.name || '').toUpperCase())}</div>` : ''}
+      <div class="t-firma">Firma del conductor</div>
     </div>`;
   }
 
-  /* Por cada conductor, dos copias (conductor y empresa), cada una en su propia "página"
-     del rollo para que la impresora corte entre ellas; el alto se ajusta a la tirilla.
-     `soloOrden` reimprime solo la tirilla de un conductor. */
+  /* Una tirilla por conductor (la copia de la empresa, con la firma del conductor), cada
+     una en su propia "página" del rollo; el alto de la página es el de la tirilla para no
+     gastar papel en blanco. `soloOrden` reimprime solo la tirilla de un conductor. */
   function imprimirTirilla(id, reimpresion, soloOrden = null) {
     const r = liquidacionPorId(id);
     if (!r) return toast('No se encontró la liquidación para imprimir', true);
@@ -1317,7 +1363,7 @@
     cont.className = 'papel-' + papel;
     cont.innerHTML = r.conductores
       .filter(c => soloOrden == null || c.orden === soloOrden)
-      .map(c => htmlCopia(r, c, 'COPIA CONDUCTOR', reimpresion) + htmlCopia(r, c, 'COPIA EMPRESA', reimpresion))
+      .map(c => htmlCopia(r, c, reimpresion))
       .join('');
     const altoPx = Math.max(...[...cont.querySelectorAll('.copia')].map(c => c.offsetHeight));
     const altoMm = Math.ceil(altoPx * 25.4 / 96) + 2;
@@ -1337,6 +1383,10 @@
       const tipos = await apiFetch('/api/recaudo/tipos-gasto');
       cont.innerHTML = tipos.map(t => `<div class="tipo-row ${t.activo ? '' : 'inactivo'}">
           <input value="${esc(t.nombre)}" maxlength="60" onchange="editarTipo(${t.id}, { nombre: this.value })" />
+          <label class="tipo-op" title="Siempre a la vista en el formulario"><input type="checkbox" ${t.fijo ? 'checked' : ''}
+                 onchange="editarTipo(${t.id}, { fijo: this.checked ? 1 : 0 })" /> Fijo</label>
+          <label class="tipo-op" title="No deja guardar el gasto sin escribir qué fue"><input type="checkbox" ${t.requiere_detalle ? 'checked' : ''}
+                 onchange="editarTipo(${t.id}, { requiere_detalle: this.checked ? 1 : 0 })" /> Pide descripción</label>
           <button class="btn" onclick="editarTipo(${t.id}, { activo: ${t.activo ? 0 : 1} })">${t.activo ? 'Desactivar' : 'Activar'}</button>
         </div>`).join('') || '<div class="sin-gastos">Todavía no hay tipos de gasto.</div>';
     } catch (e) { cont.innerHTML = `<div class="sin-gastos">${esc(e.message)}</div>`; }
