@@ -237,6 +237,7 @@ _SQLITE = [
     )""",
     "CREATE INDEX IF NOT EXISTS idx_gps_pos_bus_hora ON gps_posiciones (bus_id, hora_gps)",
     "CREATE INDEX IF NOT EXISTS idx_gps_pos_equipo_rec ON gps_posiciones (equipo_id, recibido_at)",
+    "CREATE INDEX IF NOT EXISTS idx_gps_pos_rec ON gps_posiciones (recibido_at)",
     f"""CREATE TABLE IF NOT EXISTS gps_ultima_posicion (
         bus_id            INTEGER PRIMARY KEY REFERENCES buses(id) ON DELETE CASCADE,
         empresa_id        INTEGER NOT NULL DEFAULT {EMPRESA_POR_DEFECTO},
@@ -363,6 +364,31 @@ def migrar(db):
             db.rollback()
             print(f"[monitoreo.migrar] RLS {tabla}: {e}")
     asegurar_particiones(db)
+    asegurar_indices(db)
+
+
+# Índices agregados después de crear la tabla. Van aquí (no en _PG) porque esto
+# corre también a diario desde el cron: así aparecen sin subir SCHEMA_VERSION.
+# En una tabla particionada se crean en todas las particiones, presentes y futuras.
+_INDICES_PG = [
+    # Reportes de recorrido: posiciones de un día de toda la flota.
+    "CREATE INDEX IF NOT EXISTS idx_gps_pos_rec ON gps_posiciones (recibido_at)",
+]
+
+
+def asegurar_indices(db):
+    if not es_pg():
+        return []
+    creados = []
+    for sql in _INDICES_PG:
+        try:
+            db.execute(sql)
+            db.commit()
+            creados.append(sql.split(" ON ")[0].rsplit(" ", 1)[-1])
+        except Exception as e:
+            db.rollback()
+            print(f"[monitoreo.indices] {e}")
+    return creados
 
 
 def _sumar_meses(d, n):

@@ -894,6 +894,32 @@
     .hbt-val  { font-size: 16px; font-weight: 700; color: #111; }
     .hbt-lbl  { font-size: 10px; color: #aaa; }
 
+    /* ── Recaudo (módulo Recaudo): botón y vista "Ver liquidación" en el detalle del bus ── */
+    .bus-stat-value.dinero { font-size: 15px; }
+    /* El detalle del bus lleva conductor, ruta, recaudo y "Ver liquidación": necesita más ancho */
+    #modalContent { width: 800px; }
+    .btn-liq { border: 1px solid #c7d2fe; background: #eef2ff; color: #4338ca; border-radius: 8px;
+      padding: 5px 10px; font-size: 11.5px; font-weight: 700; cursor: pointer; white-space: nowrap; font-family: inherit; }
+    .btn-liq:hover { background: #e0e7ff; }
+    .sin-liq { font-size: 11px; color: #bbb; white-space: nowrap; }
+    .liq-card { border: 1px solid #f0f0f0; border-radius: 12px; padding: 16px 18px; margin-top: 10px; }
+    .liq-card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .liq-titulo { font-size: 15px; font-weight: 800; }
+    .liq-meta { font-size: 12px; color: #777; margin: 4px 0 10px; line-height: 1.5; }
+    .liq-fila { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; padding: 3px 0; }
+    .liq-fila > span:last-child { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .liq-fila.fuerte { font-weight: 700; }
+    .liq-fila.total { font-weight: 800; font-size: 15px; border-top: 1px solid #eee; margin-top: 4px; padding-top: 7px; }
+    .liq-fila.gasto { color: #555; padding-left: 10px; }
+    .liq-fila .nota { display: block; font-size: 11px; color: #999; }
+    .liq-sub { font-size: 10.5px; font-weight: 700; text-transform: uppercase; color: #999; margin: 8px 0 2px; letter-spacing: .4px; }
+    .liq-pie { font-size: 11px; color: #aaa; margin-top: 10px; }
+    .liq-chip { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+    .liq-chip.ok { background: #dcfce7; color: #16a34a; }
+    .liq-chip.bad { background: #fee2e2; color: #dc2626; }
+    .liq-chip.warn { background: #fef3c7; color: #d97706; }
+    .c-bad { color: #dc2626; } .c-warn { color: #d97706; } .c-ok { color: #16a34a; }
+
     @media (max-width: 1100px) {
       .kpi-row { grid-template-columns: repeat(2, 1fr); }
       .hist-kpi-row { grid-template-columns: repeat(2, 1fr); }
@@ -1403,9 +1429,145 @@
     }
     let currentUser = null;
     let busesData   = [];
-    let movMesData  = [];  // movilidad del mes actual, reutilizada por cargarVueltasParaTodos
     let modalBusId  = null;
     let chartInst   = null;
+
+    // ── RECAUDO (módulo Recaudo): totales del mes en cada tarjeta y la liquidación
+    // de cada día en el detalle del bus. La API solo devuelve los buses de la cuenta.
+    const liqPesos = n => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n || 0)).toLocaleString('es-CO');
+    const liqEsc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+    /* Fecha calendario en Colombia (toISOString daría el día siguiente después de las 7 pm) */
+    function liqHoy() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date()); }
+    function liqMover(iso, delta) {
+      const d = new Date(iso + 'T12:00:00Z');
+      d.setUTCDate(d.getUTCDate() + delta);
+      return d.toISOString().slice(0, 10);
+    }
+    function liqDif(dif) {
+      if (dif < 0) return ['bad', 'Faltante ' + liqPesos(-dif)];
+      if (dif > 0) return ['warn', 'Sobrante ' + liqPesos(dif)];
+      return ['ok', 'Cuadrado'];
+    }
+
+    async function cargarRecaudoMes(lista) {
+      const hoy = liqHoy();
+      try {
+        const res = await apiFetch(`${API}/recaudo/propietario/resumen?desde=${hoy.slice(0, 8)}01&hasta=${hoy}`);
+        if (res.status === 403) {
+          // El recaudo todavía no está habilitado para esta cuenta: sin cajas de recaudo
+          document.querySelectorAll('.stat-recaudo').forEach(el => el.remove());
+          return;
+        }
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const porBus = Object.fromEntries((await res.json()).buses.map(b => [b.bus_id, b]));
+        lista.forEach(bus => {
+          const r = porBus[bus.id];
+          const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+          set(`recaudo-${bus.id}`, liqPesos(r ? r.recaudado : 0));
+          set(`gastos-${bus.id}`, liqPesos(r ? r.total_gastos : 0));
+          set(`recaudo-dias-${bus.id}`, r ? `${r.dias} día${r.dias === 1 ? '' : 's'} liquidado${r.dias === 1 ? '' : 's'}` : 'sin liquidar este mes');
+        });
+      } catch (e) {
+        document.querySelectorAll('[id^="recaudo-"], [id^="gastos-"]').forEach(el => {
+          if (!el.id.startsWith('recaudo-dias-')) el.textContent = '—';
+        });
+      }
+    }
+
+    /* Liquidaciones del bus abierto en el detalle (caché corto, como la movilidad) */
+    let _liqCache = {};   // bus_id → { ts, liqs }
+    async function _fetchLiquidacionesBus(busId, forzar) {
+      const c = _liqCache[busId];
+      if (!forzar && c && (Date.now() - c.ts) < MODAL_CACHE_MS) return c.liqs;
+      const hoy = liqHoy();
+      const res = await apiFetch(`${API}/recaudo/propietario?bus_id=${busId}&desde=${liqMover(hoy, -30)}&hasta=${hoy}`);
+      let liqs;
+      if (res.status === 403) liqs = null;   // recaudo aún no habilitado: el detalle usa la tarifa estimada
+      else if (!res.ok) throw new Error('HTTP ' + res.status);
+      else liqs = (await res.json()).liquidaciones;
+      _liqCache[busId] = { ts: Date.now(), liqs };
+      return liqs;
+    }
+
+    /* Sin recaudo habilitado para la cuenta, el detalle muestra la tarifa estimada
+       (promedio de las tarifas activas × pasajeros), como antes del módulo */
+    let _tarifaProm = null;
+    async function _tarifaPromedio() {
+      if (_tarifaProm !== null) return _tarifaProm;
+      const res = await apiFetch(`${API}/tarifas`);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const activas = (await res.json()).filter(t => t.activa);
+      _tarifaProm = activas.length ? activas.reduce((s, t) => s + t.valor, 0) / activas.length : 0;
+      return _tarifaProm;
+    }
+
+    /* "Ver liquidación": cómo se liquidó el bus ese día, igual que la tirilla */
+    function verLiquidacion(id) {
+      const bus = busesData.find(b => b.id === modalBusId);
+      const l = (_liqCache[modalBusId]?.liqs || []).find(x => x.id === id);
+      if (!bus || !l) return;
+      const [cls, txt] = liqDif(l.diferencia);
+      const relevo = l.conductores.length > 1;
+      const nombreCond = c => liqEsc(c.conductor_nombre) + (c.conductor_cedula ? ` <span style="color:#aaa">(${liqEsc(c.conductor_cedula)})</span>` : '');
+      const rutas = [...new Set(l.conductores.map(c => c.ruta_nombre).filter(Boolean))].map(liqEsc).join(', ');
+      const conViajes = l.conductores.filter(c => c.viajes != null);
+      const viajes = conViajes.reduce((t, c) => t + c.viajes, 0);
+      const liquidado = l.created_at ? new Date(l.created_at).toLocaleString('es-CO', { timeZone: 'America/Bogota',
+        day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }) : '';
+      const filaGasto = g => `<div class="liq-fila gasto"><span>${liqEsc(g.tipo_nombre)}${g.observacion ? `<span class="nota">${liqEsc(g.observacion)}</span>` : ''}</span><span>−${liqPesos(g.valor)}</span></div>`;
+      const filaDif = (d, c) => `<div class="liq-fila"><span>${d < 0 ? 'Faltante' : d > 0 ? 'Sobrante' : 'Diferencia'}</span><span class="c-${c}">${liqPesos(Math.abs(d))}</span></div>`;
+
+      // Relevo: cada conductor con su tramo de registradora, sus gastos y lo que entregó
+      const porConductor = relevo ? `
+          <div class="liq-sub" style="margin-top:14px">Detalle por conductor (relevo)</div>
+          ${l.conductores.map(c => {
+            const [cc, tt] = liqDif(c.diferencia);
+            const gastos = l.gastos.filter(g => g.orden_conductor === c.orden);
+            return `<div class="liq-card" style="margin-top:8px">
+              <div class="liq-card-head">
+                <div class="liq-titulo" style="font-size:13.5px">${c.orden}. ${nombreCond(c)}</div>
+                <span class="liq-chip ${cc}">${tt}</span>
+              </div>
+              <div class="liq-meta">${c.ruta_nombre ? 'Ruta: ' + liqEsc(c.ruta_nombre) : ''}${c.viajes != null ? ` · ${c.viajes} viajes` : ''}</div>
+              <div class="liq-fila"><span>Registradora</span><span>${c.registradora_inicio.toLocaleString('es-CO')} → ${c.registradora_fin.toLocaleString('es-CO')}</span></div>
+              <div class="liq-fila"><span>Pasajeros × tarifa</span><span>${c.pasajeros.toLocaleString('es-CO')} × ${liqPesos(l.tarifa)}</span></div>
+              <div class="liq-fila fuerte"><span>Producido</span><span>${liqPesos(c.producido)}</span></div>
+              ${gastos.length ? gastos.map(filaGasto).join('') : '<div class="liq-fila gasto"><span>Sin gastos</span><span>$0</span></div>'}
+              <div class="liq-fila"><span>Por entregar</span><span>${liqPesos(c.neto)}</span></div>
+              <div class="liq-fila fuerte"><span>Entregó</span><span>${liqPesos(c.recaudado)}</span></div>
+              ${filaDif(c.diferencia, cc)}
+            </div>`;
+          }).join('')}` : '';
+
+      document.getElementById('modalBody').innerHTML = `
+        <button class="modal-refresh-btn" onclick="volverDetalleBus()">← Volver a la movilidad</button>
+        <div class="liq-card">
+          <div class="liq-card-head">
+            <div class="liq-titulo">Liquidación del ${fmtFecha(l.fecha)}</div>
+            <span class="liq-chip ${cls}">${txt}</span>
+          </div>
+          <div class="liq-meta">
+            ${relevo ? 'Conductores' : 'Conductor'}: ${l.conductores.map(nombreCond).join(', ') || '—'}<br>
+            ${rutas ? 'Ruta: ' + rutas : ''}${conViajes.length ? ` · ${viajes} viajes` : ''}
+          </div>
+          <div class="liq-fila"><span>Registradora</span><span>${l.registradora_inicio.toLocaleString('es-CO')} → ${l.registradora_fin.toLocaleString('es-CO')}</span></div>
+          <div class="liq-fila"><span>Pasajeros × tarifa</span><span>${l.pasajeros.toLocaleString('es-CO')} × ${liqPesos(l.tarifa)}</span></div>
+          <div class="liq-fila fuerte"><span>Producido</span><span>${liqPesos(l.producido)}</span></div>
+          ${relevo ? '' : `<div class="liq-sub">Gastos del día</div>
+          ${l.gastos.length ? l.gastos.map(filaGasto).join('') : '<div class="liq-fila gasto"><span>Sin gastos</span><span>$0</span></div>'}`}
+          <div class="liq-fila fuerte"><span>Total gastos</span><span>−${liqPesos(l.total_gastos)}</span></div>
+          <div class="liq-fila"><span>Por entregar</span><span>${liqPesos(l.neto)}</span></div>
+          <div class="liq-fila total"><span>Recaudado</span><span>${liqPesos(l.recaudado)}</span></div>
+          ${filaDif(l.diferencia, cls)}
+          ${porConductor}
+          <div class="liq-pie">Liquidación N° ${String(l.id).padStart(6, '0')}${liquidado ? ' · ' + liquidado : ''}${l.usuario_nombre ? ' · atendido por ' + liqEsc(l.usuario_nombre) : ''}</div>
+        </div>`;
+    }
+
+    function volverDetalleBus() {
+      const bus = busesData.find(b => b.id === modalBusId);
+      if (bus) cargarContenidoModal(bus);   // sale de la caché: es instantáneo
+    }
 
     // ── INIT ──
     document.addEventListener('DOMContentLoaded', async () => {
@@ -1451,12 +1613,15 @@
         busesData = await busesRes.json();
         const dash = await dashRes.json();
         const movMes = await movRes.json();
-        movMesData = Array.isArray(movMes) ? movMes : [];
         const docsAlerts = docsRes.ok ? await docsRes.json() : [];
 
-        const paxMes = {};
-        movMes.forEach(r => { paxMes[r.bus_id] = (paxMes[r.bus_id]||0) + (r.pasajeros||0); });
-        busesData.forEach(b => { b._paxMes = paxMes[b.id] || 0; });
+        // Pasajeros y vueltas acumulados del mes por bus
+        const paxMes = {}, vueltasMes = {};
+        movMes.forEach(r => {
+          paxMes[r.bus_id]     = (paxMes[r.bus_id]||0)     + (r.pasajeros||0);
+          vueltasMes[r.bus_id] = (vueltasMes[r.bus_id]||0) + (parseInt(r.vueltas)||0);
+        });
+        busesData.forEach(b => { b._paxMes = paxMes[b.id] || 0; b._vueltasMes = vueltasMes[b.id] || 0; });
 
         // KPIs
         const statusMap = {};
@@ -1546,9 +1711,19 @@
                 <div class="bus-stat-sub">acumulado este mes</div>
               </div>
               <div class="bus-stat">
-                <div class="bus-stat-label">Vueltas</div>
-                <div class="bus-stat-value" id="vueltas-${bus.id}">—</div>
-                <div class="bus-stat-sub">día anterior</div>
+                <div class="bus-stat-label">Vueltas Mes</div>
+                <div class="bus-stat-value">${(bus._vueltasMes||0).toLocaleString()}</div>
+                <div class="bus-stat-sub">acumulado este mes</div>
+              </div>
+              <div class="bus-stat stat-recaudo">
+                <div class="bus-stat-label">Recaudo Mes</div>
+                <div class="bus-stat-value dinero c-ok" id="recaudo-${bus.id}">—</div>
+                <div class="bus-stat-sub" id="recaudo-dias-${bus.id}">días liquidados</div>
+              </div>
+              <div class="bus-stat stat-recaudo">
+                <div class="bus-stat-label">Gastos Mes</div>
+                <div class="bus-stat-value dinero" id="gastos-${bus.id}">—</div>
+                <div class="bus-stat-sub">reportados al liquidar</div>
               </div>
             </div>
           </div>
@@ -1567,8 +1742,8 @@
       // Cargar mantención de TODA la flota en una sola petición (antes era una por bus)
       cargarMantTodos(lista);
 
-      // Cargar vueltas UNA SOLA VEZ para todos los buses
-      cargarVueltasParaTodos(lista);
+      // Recaudo y gastos del mes (una sola petición para toda la flota)
+      cargarRecaudoMes(lista);
     }
 
     /* Normaliza la fecha de la API a ISO (llega como '2026-07-15' en SQLite
@@ -1576,51 +1751,6 @@
     function fechaISO(f) {
       const d = new Date(f);
       return isNaN(d.getTime()) ? String(f).slice(0, 10) : d.toISOString().slice(0, 10);
-    }
-
-    async function cargarVueltasParaTodos(buses) {
-      try {
-        let registros;
-        if (movMesData.length) {
-          // Reutilizar la movilidad del mes ya cargada en cargarDatos:
-          // los registros de la fecha más reciente (antes eran 2 peticiones más)
-          const ultima = movMesData.reduce((mx, r) => {
-            const f = fechaISO(r.fecha);
-            return f > mx ? f : mx;
-          }, '');
-          registros = movMesData.filter(r => fechaISO(r.fecha) === ultima);
-        } else {
-          // Sin datos este mes: buscar la última fecha con registros
-          const res = await apiFetch(`${API}/movilidad/fechas`);
-          const fechas = await res.json();
-          if (!fechas.length) {
-            document.querySelectorAll('[id^="vueltas-"]').forEach(el => el.textContent = '—');
-            return;
-          }
-          const movRes = await apiFetch(`${API}/movilidad?fecha=${fechaISO(fechas[0])}`);
-          registros = await movRes.json();
-        }
-
-        // SUMAR vueltas por bus_id
-        const vueltasPorBus = {};
-        registros.forEach(r => {
-          const bid = r.bus_id;
-          if (bid !== null && bid !== undefined) {
-            const vueltas = parseInt(r.vueltas) || 0;
-            vueltasPorBus[bid] = (vueltasPorBus[bid] || 0) + vueltas;
-          }
-        });
-
-        // Llenar cada bus
-        buses.forEach(bus => {
-          const vueltas = vueltasPorBus[bus.id] || 0;
-          const el = document.getElementById(`vueltas-${bus.id}`);
-          if (el) el.textContent = vueltas.toString();
-        });
-      } catch(e) {
-        console.error('Error cargarVueltasParaTodos:', e);
-        document.querySelectorAll('[id^="vueltas-"]').forEach(el => el.textContent = '—');
-      }
     }
 
     async function cargarMantTodos(lista) {
@@ -1755,85 +1885,104 @@
 
     /* Caché corto para que reabrir el modal sea instantáneo y no repita
        las mismas dos peticiones por cada bus consultado */
-    let _modalCache = { mov: null, tarifas: null, ts: 0 };
+    let _modalCache = { mov: null, ts: 0 };
     const MODAL_CACHE_MS = 2 * 60 * 1000;
 
     async function _fetchDatosModal(forzar) {
       if (!forzar && _modalCache.mov && (Date.now() - _modalCache.ts) < MODAL_CACHE_MS) {
         return _modalCache;
       }
-      const hoy    = new Date().toISOString().slice(0,10);
-      const hace30 = new Date(Date.now()-30*86400000).toISOString().slice(0,10);
+      const hoy    = liqHoy();
+      const hace30 = liqMover(hoy, -30);
       const uid    = currentUser ? '&user_id='+currentUser.id : '';
-      const [movRes, tarifasRes] = await Promise.all([
-        apiFetch(`${API}/movilidad/rango?desde=${hace30}&hasta=${hoy}${uid}`),
-        apiFetch(`${API}/tarifas`),
-      ]);
-      if (!movRes.ok || !tarifasRes.ok) {
-        throw new Error('HTTP ' + (movRes.ok ? tarifasRes.status : movRes.status));
-      }
-      _modalCache = { mov: await movRes.json(), tarifas: await tarifasRes.json(), ts: Date.now() };
+      const movRes = await apiFetch(`${API}/movilidad/rango?desde=${hace30}&hasta=${hoy}${uid}`);
+      if (!movRes.ok) throw new Error('HTTP ' + movRes.status);
+      _modalCache = { mov: await movRes.json(), ts: Date.now() };
       return _modalCache;
     }
 
     async function cargarContenidoModal(bus, opts = {}) {
       try {
-        let datos;
+        let datos, liqs;
         try {
-          datos = await _fetchDatosModal(!!opts.forzar);
+          [datos, liqs] = await Promise.all([_fetchDatosModal(!!opts.forzar), _fetchLiquidacionesBus(bus.id, !!opts.forzar)]);
         } catch (_) {
           /* Reintento automático: en Vercel una petición puede fallar de forma
              transitoria; esperar un momento y volver a intentar una vez */
           await new Promise(r => setTimeout(r, 1200));
-          datos = await _fetchDatosModal(!!opts.forzar);
+          [datos, liqs] = await Promise.all([_fetchDatosModal(!!opts.forzar), _fetchLiquidacionesBus(bus.id, !!opts.forzar)]);
         }
-        const movRows = datos.mov
-          .filter(r => r.bus_id === bus.id)
-          .sort((a,b) => new Date(b.fecha) - new Date(a.fecha));
-        const tarifas = datos.tarifas;
-        const tarifasActivas = tarifas.filter(t => t.activa);
-        const tarifaPromedio = tarifasActivas.length
-          ? tarifasActivas.reduce((s,t) => s + t.valor, 0) / tarifasActivas.length
-          : 0;
 
-        // Movilidad diaria
-        const totalPax      = movRows.reduce((s,r) => s + (r.pasajeros||0), 0);
-        const totalIngreso  = Math.round(totalPax * tarifaPromedio);
-        const fmtCOP = v => '$' + Math.round(v).toLocaleString('es-CO');
+        const conRecaudo = liqs !== null;
+        const tarifaProm = conRecaudo ? 0 : await _tarifaPromedio();
+        liqs = liqs || [];
 
-        const movHtml = movRows.length
+        // Un renglón por día: la movilidad del analista y la liquidación del recaudo
+        // (un día puede tener solo una de las dos).
+        const dias = new Map();
+        datos.mov.filter(r => r.bus_id === bus.id).forEach(r => {
+          const f = fechaISO(r.fecha);
+          dias.set(f, { ...(dias.get(f) || {}), fecha: f, mov: r });
+        });
+        liqs.forEach(l => dias.set(l.fecha, { ...(dias.get(l.fecha) || {}), fecha: l.fecha, liq: l }));
+        const filas = [...dias.values()].sort((a, b) => b.fecha.localeCompare(a.fecha));
+
+        const nombresLiq = (l, campo) => [...new Set(l.conductores.map(c => c[campo]).filter(Boolean))].map(liqEsc).join(', ');
+        const totalRecaudo = liqs.reduce((t, l) => t + l.recaudado, 0);
+        const totalGastos  = liqs.reduce((t, l) => t + l.total_gastos, 0);
+        const totalPax     = filas.reduce((t, f) => t + (f.mov ? (f.mov.pasajeros || 0) : 0), 0);
+
+        const movHtml = filas.length
           ? `<div style="overflow-x:auto;border-radius:10px;border:1px solid #f0f0f0">
                <table class="mov-table">
                  <thead><tr>
-                   <th>Fecha</th><th>Vueltas</th><th>Pasajeros</th><th>Km</th><th>Tarifa Est.</th>
+                   <th>Fecha</th><th>Conductor</th><th>Ruta</th><th>Vueltas</th><th>Pasajeros</th>${conRecaudo ? '<th>Recaudo</th><th></th>' : '<th>Tarifa Est.</th>'}
                  </tr></thead>
-                 <tbody>${movRows.map(r => `
+                 <tbody>${filas.map(({ fecha, mov, liq }) => {
+                   const conductor = liq ? nombresLiq(liq, 'conductor_nombre') : liqEsc(mov.conductor_nombre || mov.despacho_conductor_nombre || '');
+                   const ruta = liq ? nombresLiq(liq, 'ruta_nombre') : liqEsc(mov.ruta_nombre || mov.despacho_ruta_nombre || '');
+                   const vueltas = mov ? (mov.vueltas || 0) : liq.conductores.reduce((t, c) => t + (c.viajes || 0), 0);
+                   const pax = mov ? (mov.pasajeros || 0) : liq.pasajeros;
+                   return `
                    <tr>
-                     <td class="cell-fecha" style="font-weight:600;color:#333;white-space:nowrap">${fmtFecha(r.fecha)}</td>
-                     <td data-label="Vueltas" style="font-weight:700;font-size:14px">${r.vueltas||0}</td>
-                     <td data-label="Pasajeros" style="font-weight:700;font-size:15px;color:#111">${(r.pasajeros||0).toLocaleString()}</td>
-                     <td data-label="Km" style="color:#555">${(r.km_recorridos||0).toFixed(1)}</td>
-                     <td data-label="Tarifa Est." style="font-weight:700;color:#16a34a;font-size:13px">${fmtCOP((r.pasajeros||0) * tarifaPromedio)}</td>
-                   </tr>`).join('')}
+                     <td class="cell-fecha" style="font-weight:600;color:#333;white-space:nowrap">${fmtFecha(fecha)}</td>
+                     <td data-label="Conductor" style="color:#333">${conductor || '—'}</td>
+                     <td data-label="Ruta" style="color:#555">${ruta || '—'}</td>
+                     <td data-label="Vueltas" style="font-weight:700;font-size:14px">${vueltas}</td>
+                     <td data-label="Pasajeros" style="font-weight:700;font-size:15px;color:#111">${pax.toLocaleString()}</td>
+                     ${conRecaudo ? `
+                     <td data-label="Recaudo" style="font-weight:700;color:#16a34a;font-size:13px;white-space:nowrap">${liq ? liqPesos(liq.recaudado) : '<span class="sin-liq">Sin liquidar</span>'}</td>
+                     <td data-label="">${liq ? `<button class="btn-liq" onclick="verLiquidacion(${liq.id})">Ver liquidación</button>` : ''}</td>` : `
+                     <td data-label="Tarifa Est." style="font-weight:700;color:#16a34a;font-size:13px;white-space:nowrap">${liqPesos(pax * tarifaProm)}</td>`}
+                   </tr>`;
+                 }).join('')}
                  </tbody>
                </table>
              </div>
-             <div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;
+             <div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;
                          background:#f0fdf4;border-radius:8px;padding:10px 14px">
+               ${conRecaudo ? `
                <span style="font-size:11px;color:#16a34a;font-weight:600">
-                 Ingreso estimado del período
-                 <span style="font-size:10px;color:#86efac;font-weight:400">
-                   (tarifa prom. ${fmtCOP(tarifaPromedio)} × ${totalPax.toLocaleString()} pax)
+                 Recaudo real del período
+                 <span style="font-size:10px;color:#4ade80;font-weight:400">
+                   (${liqs.length} día${liqs.length === 1 ? '' : 's'} liquidado${liqs.length === 1 ? '' : 's'} · gastos ${liqPesos(totalGastos)})
                  </span>
                </span>
-               <span style="font-size:17px;font-weight:800;color:#15803d">${fmtCOP(totalIngreso)}</span>
+               <span style="font-size:17px;font-weight:800;color:#15803d">${liqPesos(totalRecaudo)}</span>` : `
+               <span style="font-size:11px;color:#16a34a;font-weight:600">
+                 Ingreso estimado del período
+                 <span style="font-size:10px;color:#4ade80;font-weight:400">
+                   (tarifa prom. ${liqPesos(tarifaProm)} × ${totalPax.toLocaleString()} pax)
+                 </span>
+               </span>
+               <span style="font-size:17px;font-weight:800;color:#15803d">${liqPesos(totalPax * tarifaProm)}</span>`}
              </div>
              <div style="margin-top:6px;font-size:10px;color:#bbb;text-align:right">
-               Últimos 30 días · ${movRows.length} registro${movRows.length!==1?'s':''}
+               Últimos 30 días · ${filas.length} día${filas.length !== 1 ? 's' : ''} con registros
              </div>`
           : `<div class="mov-empty">
-               Sin registros de movilidad en los últimos 30 días.<br>
-               <span style="font-size:11px;color:#ccc">Los datos aparecen cuando el analista ingresa información.</span>
+               Sin registros de movilidad ni liquidaciones en los últimos 30 días.<br>
+               <span style="font-size:11px;color:#ccc">Los datos aparecen cuando el analista ingresa la movilidad o se liquida el recaudo.</span>
              </div>`;
 
         document.getElementById('modalBody').innerHTML = `

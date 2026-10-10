@@ -72,8 +72,8 @@
     .item { display:flex; gap:10px; align-items:center; padding:10px 12px; border-bottom:1px solid var(--border); cursor:pointer; }
     .item:hover { background:#f8f8fb; }
     .item.sel { background:#eef2ff; }
-    .item-num { width:38px; height:38px; border-radius:50%; display:flex; align-items:center; justify-content:center;
-      color:#fff; font-weight:800; font-size:13px; flex-shrink:0; }
+    .item-num { width:38px; height:38px; border-radius:50%; display:flex; flex-direction:column; align-items:center;
+      justify-content:center; gap:1px; line-height:1; color:#fff; font-weight:800; font-size:13px; flex-shrink:0; }
     .item-info { flex:1; min-width:0; }
     .item-l1 { font-weight:700; font-size:13.5px; }
     .item-l2, .item-l3 { font-size:12px; color:var(--txt3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -91,10 +91,14 @@
     .mapa-wrap { position:relative; flex:1; display:flex; min-width:0; }
 
     /* ── Marcador de bus ── */
-    .bus-mk { position:relative; width:34px; height:34px; }
+    .bus-mk { position:relative; width:38px; height:38px; }
     .bus-mk .circ { position:absolute; inset:0; border-radius:50%; border:2.5px solid #fff; color:#fff;
-      display:flex; align-items:center; justify-content:center; font-weight:800; font-size:12px;
-      box-shadow:0 2px 6px rgba(0,0,0,.35); }
+      display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px;
+      font-weight:800; font-size:12px; line-height:1; box-shadow:0 2px 6px rgba(0,0,0,.35); }
+    /* Flecha de sentido dentro de la burbuja: ▼ bajando (ida), ▲ subiendo (regreso) */
+    .sent { display:block; width:12px; height:12px; flex-shrink:0; }
+    .item-num .sent { width:13px; height:13px; }
+    .leyenda .sent { display:inline-block; width:12px; height:12px; vertical-align:middle; }
     .bus-mk .rumbo { position:absolute; inset:-10px; pointer-events:none; }
     .bus-mk .rumbo::before { content:''; position:absolute; left:50%; top:0; transform:translateX(-50%);
       border-left:7px solid transparent; border-right:7px solid transparent; border-bottom:10px solid var(--flecha); }
@@ -115,6 +119,14 @@
     .pop .fila { display:flex; justify-content:space-between; gap:12px; }
     .pop .fila span:first-child { color:var(--txt3); }
     .pop .pend { color:var(--txt3); font-style:italic; }
+    .pop-alarma { background:rgba(220,38,38,.1); color:#b91c1c; border-radius:6px; padding:5px 8px;
+      font-weight:700; margin:4px 0 6px; }
+    .item-alarma { font-size:12px; color:#dc2626; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .pop-sec { font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.4px; color:var(--txt3);
+      border-top:1px solid var(--border); margin-top:7px; padding-top:6px; }
+    .pop-nov { display:flex; gap:6px; align-items:baseline; margin-top:3px; }
+    .pop-nov .vta { flex-shrink:0; font-weight:800; font-size:11px; background:#f1f1f5; border-radius:4px; padding:0 5px; }
+    .pop-nov .tipo { color:#dc2626; font-weight:700; }
 
     @media (max-width:760px) {
       body { padding-top:52px; }
@@ -370,7 +382,7 @@
 
   // Mismo código de colores que Rutas Geográficas.
   const COLOR_SENTIDO = { ida: '#2563eb', regreso: '#ea580c', ambos: '#7c3aed' };
-  const TXT_SENTIDO = { ida: 'Ida', regreso: 'Regreso', ambos: 'Ida y regreso' };
+  const TXT_SENTIDO = { ida: 'Ida (bajando)', regreso: 'Regreso (subiendo)', ambos: 'Ida y regreso' };
   const ZOOM_FLECHAS = 14;       // las flechas de sentido solo con zoom cercano
   const PASO_FLECHAS_M = 300;
   let capaFlechas = null;
@@ -475,14 +487,15 @@
   }
 
   function pintarLeyenda(una) {
-    const estados = ['movimiento', 'detenido', 'sin_fix', 'sin_senal', 'encierro']
-      .map(k => `<div><span class="dot" style="background:${ESTADOS[k].hex}"></span>${ESTADOS[k].txt}</div>`).join('');
+    const estados = ['movimiento', 'detenido', 'alarma', 'sin_fix', 'sin_senal', 'encierro']
+      .map(k => `<div><span class="dot" style="background:${ESTADOS[k].hex}"></span>${ESTADOS[k].txt}</div>`).join('')
+      + `<div>${flechaSentido('ida', '#333')} Bajando &nbsp; ${flechaSentido('regreso', '#333')} Subiendo</div>`;
     const rutasTxt = una
-      ? `<div><span class="linea" style="border-color:${COLOR_SENTIDO.ida}"></span>Ida</div>
-         <div><span class="linea dash" style="border-color:${COLOR_SENTIDO.regreso}"></span>Regreso</div>
+      ? `<div><span class="linea" style="border-color:${COLOR_SENTIDO.ida}"></span>Ida (bajando)</div>
+         <div><span class="linea dash" style="border-color:${COLOR_SENTIDO.regreso}"></span>Regreso (subiendo)</div>
          <div><span class="pc-mini" style="--c:${COLOR_SENTIDO.ambos}"></span>Punto en ambos sentidos</div>
          <div><span class="pc-mini cuadro" style="--c:#555"></span>Terminal</div>`
-      : `<div><span class="linea"></span>Ida (tono fuerte)</div><div><span class="linea dash" style="opacity:.55"></span>Regreso (tono claro)</div>
+      : `<div><span class="linea"></span>Ida, bajando (tono fuerte)</div><div><span class="linea dash" style="opacity:.55"></span>Regreso, subiendo (tono claro)</div>
          <div class="leyenda-nota">Cada ruta con su color</div>`;
     document.getElementById('leyenda').innerHTML = estados + '<hr>' + rutasTxt;
   }
@@ -499,6 +512,9 @@
     }
     pintarBuses();
     tic();
+    // Con un bus abierto, sus abandonos del día se mantienen al día (cada minuto).
+    const sel = buses.find(x => x.bus_id === seleccionado);
+    if (sel?.ruta_id) cargarNovedades(sel.bus_id);
   }
 
   function busesVisibles() {
@@ -536,13 +552,21 @@
     pintarLista();
   }
 
+  // Flecha de sentido: hacia abajo bajando (ida), hacia arriba subiendo (regreso).
+  function flechaSentido(sentido, color = '#fff') {
+    if (!TXT_SENTIDO_BUS[sentido]) return '';
+    const d = sentido === 'ida' ? 'M6 1.5v8.5M2 6.5l4 4 4-4' : 'M6 10.5V2M2 5.5l4-4 4 4';
+    return `<svg class="sent" viewBox="0 0 12 12" aria-label="${TXT_SENTIDO_BUS[sentido]}"><path d="${d}" fill="none"
+      stroke="${color}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  }
+
   function iconoBus(b) {
     const est = ESTADOS[b.estado] || ESTADOS.sin_senal;
     const flecha = b.rumbo != null && b.estado !== 'sin_senal'
       ? `<div class="rumbo" style="transform:rotate(${b.rumbo}deg);--flecha:${est.hex}"></div>` : '';
-    return L.divIcon({ className: '', iconSize: [34, 34], iconAnchor: [17, 17], popupAnchor: [0, -18],
+    return L.divIcon({ className: '', iconSize: [38, 38], iconAnchor: [19, 19], popupAnchor: [0, -20],
       html: `<div class="bus-mk ${seleccionado === b.bus_id ? 'sel' : ''}">${flecha}
-               <div class="circ" style="background:${est.hex}">${esc(b.numero)}</div></div>` });
+               <div class="circ" style="background:${est.hex}">${esc(b.numero)}${flechaSentido(b.sentido)}</div></div>` });
   }
 
   function hace(iso) {
@@ -559,18 +583,87 @@
       hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
   }
 
+  // Sentido del bus: la ida baja (del barrio al centro) y el regreso sube.
+  const TXT_SENTIDO_BUS = { ida: 'Bajando', regreso: 'Subiendo' };
+  function horaCorta(iso) {
+    return iso ? new Date(iso).toLocaleTimeString('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+  }
+  function txtAlarma(a) {
+    if (!a) return '';
+    if (a.tipo === 'abandono') return `Fuera de ruta desde ${horaCorta(a.desde)} · a ${a.distancia_m} m de la ruta`;
+    if (a.tipo === 'atajo') return `Se saltó ${a.saltado_m >= 1000 ? (a.saltado_m / 1000).toFixed(1).replace('.', ',') + ' km' : a.saltado_m + ' m'} de ruta (${horaCorta(a.hora)})`;
+    if (a.tipo === 'exceso') return `Exceso de velocidad: ${Math.round(a.vel_max)} km/h (${horaCorta(a.hora)})`;
+    return '';
+  }
+  function txtUltimoPunto(u) {
+    if (!u) return '<span class="pend">Sin pasos en la última hora</span>';
+    const d = u.desvio_min;
+    const desv = d == null ? '' : ` <b style="color:${d > 0 ? '#dc2626' : d < 0 ? '#b45309' : '#16a34a'}">${d > 0 ? '+' + d : d < 0 ? '−' + -d : '0'}</b>`;
+    if (u.dentro) return `En <b>${esc(u.alias || '')}</b> desde ${horaCorta(u.hora)}`;
+    return `${u.tipo === 'terminal' ? 'Salió de ' : ''}<b>${esc(u.alias || '')}</b> ${horaCorta(u.hora)}${desv}`;
+  }
+  function txtSentido(b) {
+    if (!b.ruta_id) return '<span class="pend">Sin despacho hoy</span>';
+    if (!b.sentido) return '<span class="pend">Sin determinar</span>';
+    return `<b>${TXT_SENTIDO_BUS[b.sentido]}</b>${b.en_ruta === false ? ' <span class="pend">(fuera de ruta)</span>' : ''}`;
+  }
+
+  // ── Abandonos del día por vuelta (se piden al abrir un bus; máx. 1 vez por minuto) ──
+  const novedades = new Map();   // bus_id → { datos, t, error }
+  const NOVEDADES_MS = 60000;
+
+  async function cargarNovedades(busId) {
+    const n = novedades.get(busId);
+    if (n && (n.cargando || Date.now() - n.t < NOVEDADES_MS)) return;
+    novedades.set(busId, { ...(n || {}), cargando: true });
+    try {
+      const datos = await apiFetch(`/api/monitoreo/vivo/${busId}/dia`);
+      novedades.set(busId, { datos, t: Date.now() });
+    } catch (e) {
+      novedades.set(busId, { error: e.message, t: Date.now() });
+    }
+    const b = buses.find(x => x.bus_id === busId), mk = marcadores.get(busId);
+    if (b && mk) mk.getPopup().setContent(popupBus(b));
+  }
+
+  function durCorta(s) {
+    if (s == null) return '';
+    return s < 60 ? `${s} s` : s < 3600 ? `${Math.round(s / 60)} min` : `${Math.floor(s / 3600)} h ${Math.round((s % 3600) / 60)} min`;
+  }
+  function htmlNovedades(busId) {
+    const n = novedades.get(busId);
+    let cuerpo;
+    if (!n || (!n.datos && !n.error)) cuerpo = '<div class="pend">Cargando…</div>';
+    else if (n.error) cuerpo = `<div class="pend">${esc(n.error)}</div>`;
+    else if (!n.datos.abandonos.length) cuerpo = '<div style="color:#16a34a;font-weight:700;">Sin abandonos ✓</div>';
+    else {
+      const lista = n.datos.abandonos.slice().reverse();
+      cuerpo = lista.slice(0, 6).map(a => {
+        const que = a.tipo === 'atajo'
+          ? `Atajo · se saltó ${a.saltado_m >= 1000 ? (a.saltado_m / 1000).toFixed(1).replace('.', ',') + ' km' : a.saltado_m + ' m'}`
+          : `Fuera de ruta · ${a.regreso ? durCorta(a.duracion_s) : 'sin regresar'} · hasta ${a.distancia_max_m} m`;
+        return `<div class="pop-nov"><span class="vta">${a.vuelta ? 'V' + a.vuelta : '—'}</span>
+          <span>${horaCorta(a.inicio)} <span class="tipo">${que}</span></span></div>`;
+      }).join('') + (lista.length > 6 ? `<div class="pend">y ${lista.length - 6} más (ver Reportes de recorrido)</div>` : '');
+    }
+    const total = n?.datos ? ` (${n.datos.abandonos.length})` : '';
+    return `<div class="pop-sec">Abandonos de hoy${total}${n?.datos ? ` · ${n.datos.vueltas} vuelta(s)` : ''}</div>${cuerpo}`;
+  }
+
   function popupBus(b) {
     const est = ESTADOS[b.estado] || ESTADOS.sin_senal;
     const ruta = b.ruta_nombre ? esc(b.ruta_nombre) : '<span class="pend">Sin despacho hoy</span>';
     const vel = b.velocidad_kmh != null ? `${Math.round(b.velocidad_kmh)} km/h` : '—';
     return `<div class="pop">
       <h4>Bus ${esc(b.numero)} · ${esc(b.placa || 's/p')}</h4>
+      ${b.alarma ? `<div class="pop-alarma">⚠ ${esc(txtAlarma(b.alarma))}</div>` : ''}
       <div class="fila"><span>Estado</span><b style="color:${est.hex}">${est.txt}</b></div>
       ${b.encierro ? `<div class="fila"><span>Zona</span><span>${esc(b.encierro)}</span></div>` : ''}
       <div class="fila"><span>Ruta</span><span>${ruta}</span></div>
       <div class="fila"><span>Velocidad</span><span>${vel}</span></div>
-      <div class="fila"><span>Sentido</span><span class="pend">${b.sentido ? esc(b.sentido) : 'Próximamente'}</span></div>
-      <div class="fila"><span>Último punto</span><span class="pend">${b.ultimo_punto ? esc(b.ultimo_punto) : 'Próximamente'}</span></div>
+      <div class="fila"><span>Sentido</span><span>${txtSentido(b)}</span></div>
+      ${b.ruta_id ? `<div class="fila"><span>Último punto</span><span>${txtUltimoPunto(b.ultimo_punto)}</span></div>` : ''}
+      ${b.ruta_id ? htmlNovedades(b.bus_id) : ''}
       <div class="fila"><span>Último reporte</span><span>${horaBogota(b.ultimo_reporte_at)}</span></div>
       <div class="fila"><span></span><span data-hace="${esc(b.ultimo_reporte_at || '')}">${hace(b.ultimo_reporte_at)}</span></div>
       ${b.precision_m != null ? `<div class="fila"><span>Precisión GPS</span><span>${b.precision_m} m</span></div>` : ''}
@@ -589,7 +682,7 @@
     const n = k => vis.filter(b => k === 'sin_despacho' ? !b.ruta_id : b.estado === k).length;
     const info = k => k === 'sin_despacho' ? SIN_DESPACHO : ESTADOS[k];
     document.getElementById('resumen').innerHTML =
-      ['movimiento', 'detenido', 'sin_fix', 'sin_senal', 'encierro', 'sin_despacho']
+      ['alarma', 'movimiento', 'detenido', 'sin_fix', 'sin_senal', 'encierro', 'sin_despacho']
       .filter(k => n(k) || filtroEstado === k)
       .map(k => `<span class="chip ${filtroEstado === k ? 'on' : ''}" style="color:${info(k).hex}"
           onclick="filtrarEstado('${k}')"><span class="dot" style="background:${info(k).hex}"></span>${info(k).txt}: ${n(k)}</span>`)
@@ -619,11 +712,13 @@
       const est = ESTADOS[b.estado] || ESTADOS.sin_senal;
       const vel = b.estado === 'movimiento' ? ` · ${Math.round(b.velocidad_kmh)} km/h` : '';
       const ruta = b.ruta_id ? `<span class="item-ruta" style="background:${colorRuta[b.ruta_id] || '#999'}"></span>${esc(b.ruta_nombre)}`
+                               + (b.sentido ? ` · ${TXT_SENTIDO_BUS[b.sentido]}` : '')
                              : 'Sin despacho hoy';
       return `<div class="item ${seleccionado === b.bus_id ? 'sel' : ''}" onclick="seleccionar(${b.bus_id}, true)">
-        <div class="item-num" style="background:${est.hex}">${esc(b.numero)}</div>
+        <div class="item-num" style="background:${est.hex}">${esc(b.numero)}${flechaSentido(b.sentido)}</div>
         <div class="item-info">
           <div class="item-l1">${esc(b.placa || 's/p')} <span style="color:${est.hex};font-size:12px;">· ${est.txt}${vel}</span></div>
+          ${b.alarma ? `<div class="item-alarma" title="${esc(txtAlarma(b.alarma))}">⚠ ${esc(txtAlarma(b.alarma))}</div>` : ''}
           <div class="item-l2">${ruta}</div>
           <div class="item-l3" data-hace="${esc(b.ultimo_reporte_at || '')}">${hace(b.ultimo_reporte_at)}</div>
         </div></div>`;
@@ -636,6 +731,7 @@
     marcadores.forEach((mk, id) => { const bb = buses.find(x => x.bus_id === id); if (bb) mk.setIcon(iconoBus(bb)); });
     pintarLista();
     if (!b) return;
+    if (b.ruta_id) cargarNovedades(busId);
     const mk = marcadores.get(busId);
     if (!mk) return;
     if (centrar) mapa.flyTo([b.lat, b.lon], Math.max(mapa.getZoom(), 16), { duration: .6 });

@@ -197,6 +197,20 @@
     /* Marca visual sutil cuando el input de vueltas fue prellenado desde despacho */
     .num-input.from-despacho { background: rgba(99, 102, 241, .06); border-style: dashed; }
 
+    /* Pasajeros calculados de la registradora del despacho (solo lectura) */
+    .pax-reg-wrap { display: inline-flex; align-items: center; gap: 5px; }
+    .num-input.from-registradora,
+    .num-input.from-registradora.touched,
+    .num-input.from-registradora:focus {
+      background: rgba(34, 197, 94, .08); border-color: rgba(34, 197, 94, .45);
+      color: var(--txt); font-weight: 600; cursor: default;
+    }
+    .pax-reg-tag {
+      font-size: 9px; font-weight: 800; letter-spacing: .4px;
+      padding: 2px 5px; border-radius: 5px;
+      background: rgba(34, 197, 94, .15); color: var(--green);
+    }
+
     /* ── STATS BAR ── */
     .stats-bar {
       background: var(--surface);
@@ -590,6 +604,7 @@
         text-transform: uppercase; letter-spacing: .4px;
       }
       tbody td input, tbody td select { flex: 1; min-width: 0; }
+      tbody td .pax-reg-wrap { flex: 1; min-width: 0; }
       tbody td.cell-unidad { display: block; background: rgba(0,0,0,.02); padding: 11px 14px; }
       tbody td.cell-unidad::before { display: none; }
       .bus-num { font-size: 16px; }
@@ -877,7 +892,7 @@
   let allConductores = [];
   let allPropietarios = [];
   let records        = {};   // bus_id → record
-  let despachoMap    = {};   // bus_id → {estado, conductor_id, ruta_id, viajes_realizados} del despacho de la fecha
+  let despachoMap    = {};   // bus_id → {estado, conductor_id, ruta_id, viajes_realizados, registradora_inicio, registradora_fin} del despacho de la fecha
   let grupoFiltro    = 'todos';
   let dirty          = new Set();
 
@@ -983,6 +998,20 @@
 
   function escHtml(s) { return (s || '').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
 
+  /* Desde esta fecha (inclusive) los pasajeros salen de la registradora que
+     anota el despachador (fin − inicio). Debe coincidir con
+     PAX_REGISTRADORA_DESDE en api/app.py, que aplica la misma regla al guardar. */
+  const PAX_REGISTRADORA_DESDE = '2026-10-05';
+  function usaRegistradora(fecha) { return fecha >= PAX_REGISTRADORA_DESDE; }
+
+  /* Pasajeros según la registradora del despacho, o null si falta una lectura
+     o el fin es menor que el inicio. */
+  function paxRegistradora(desp) {
+    if (!desp || desp.registradora_inicio == null || desp.registradora_fin == null) return null;
+    const ini = Number(desp.registradora_inicio), fin = Number(desp.registradora_fin);
+    return fin >= ini ? fin - ini : null;
+  }
+
   /* Rutas activas filtradas por grupo del bus */
   function rutasForGrupo(grupo) {
     return allRutas.filter(r => r.grupo === grupo);
@@ -1071,7 +1100,9 @@
             estado:            b.estado,
             conductor_id:      b.conductor_id,
             ruta_id:           b.ruta_id,
-            viajes_realizados: b.viajes_realizados,
+            viajes_realizados:   b.viajes_realizados,
+            registradora_inicio: b.registradora_inicio,
+            registradora_fin:    b.registradora_fin,
           };
         }
       });
@@ -1093,6 +1124,7 @@
      (se usa en refresh silencioso para animarlas con flash). */
   function renderTable(cambiadas) {
     cambiadas = cambiadas || new Set();
+    const fecha = document.getElementById('datePicker').value;
     const buses = grupoFiltro === 'todos' ? allBuses : allBuses.filter(b => b.grupo === grupoFiltro);
     const tbody = document.getElementById('tbody');
 
@@ -1182,6 +1214,27 @@
         : '';
       const vueltasAttrs     = vueltasFromDesp ? `data-from-despacho="1" title="${vueltasTitle}"` : '';
 
+      /* Pasajeros: desde PAX_REGISTRADORA_DESDE salen de la registradora que
+         anota el despachador (fin − inicio) y quedan de solo lectura; si la
+         lectura está mal se corrige en Despacho. Sin lecturas válidas se
+         mantiene la captura manual / importación BEA. */
+      const paxReg     = usaRegistradora(fecha) ? paxRegistradora(desp) : null;
+      const paxFromReg = paxReg != null;
+      let pasajerosCell;
+      if (paxFromReg) {
+        const paxTitle = `Registradora del despacho: ${Number(desp.registradora_fin).toLocaleString('es-CO')} − ${Number(desp.registradora_inicio).toLocaleString('es-CO')} = ${paxReg.toLocaleString('es-CO')}. Para corregirlo, edita la registradora en Despacho.`;
+        pasajerosCell = `<div class="pax-reg-wrap" title="${paxTitle}">
+                 <input class="num-input from-registradora" id="p-${b.id}" type="number" value="${paxReg}" readonly tabindex="-1" />
+                 <span class="pax-reg-tag">REG</span>
+               </div>`;
+      } else {
+        const paxTitle = usaRegistradora(fecha) && desp && desp.estado === 'trabajando'
+          ? 'title="Sin lectura válida de registradora en el despacho — captura manual"' : '';
+        pasajerosCell = `<input  class="num-input"   id="p-${b.id}"    type="number" min="0" inputmode="numeric"
+                    value="${rec ? rec.pasajeros : ''}" placeholder="0" ${paxTitle}
+                    oninput="markDirty(${b.id})" />`;
+      }
+
       const flashCls = cambiadas.has(b.id) ? ' flash' : '';
 
       return `
@@ -1195,9 +1248,7 @@
         <td data-label="Vueltas"><input  class="num-input${vueltasFromDesp ? ' from-despacho' : ''}"   id="v-${b.id}"    type="number" min="0" inputmode="numeric"
                     value="${vueltasValue}" placeholder="0" ${vueltasAttrs}
                     oninput="markDirty(${b.id}); this.classList.remove('from-despacho'); this.removeAttribute('data-from-despacho'); this.removeAttribute('title');" /></td>
-        <td data-label="Pasajeros"><input  class="num-input"   id="p-${b.id}"    type="number" min="0" inputmode="numeric"
-                    value="${rec ? rec.pasajeros : ''}" placeholder="0"
-                    oninput="markDirty(${b.id})" /></td>
+        <td data-label="Pasajeros">${pasajerosCell}</td>
         <td data-label="Km"><input  class="num-input"   id="k-${b.id}"    type="number" min="0" step="0.1" inputmode="decimal"
                     value="${rec && rec.km_recorridos != null ? Math.round(rec.km_recorridos * 10) / 10 : ''}" placeholder="0"
                     oninput="markDirty(${b.id})" /></td>
@@ -1520,13 +1571,19 @@
           const discrepancia = !!(despConductorNombre && beaNombre &&
                                   normNombre(despConductorNombre) !== normNombre([...a.nombres][0]));
 
+          /* Desde PAX_REGISTRADORA_DESDE los pasajeros del BEA no mandan: se
+             usan los de la registradora del despacho cuando está completa
+             (el servidor aplica la misma regla al guardar). */
+          const paxReg = usaRegistradora(a.fecha) ? paxRegistradora(desp) : null;
+
           return {
             busNum        : a.busNum,
             bus_id        : bus?.id   || null,
             busPlaca      : bus?.placa || '—',
             fecha         : a.fecha,
             vueltas       : a.vueltas,
-            pasajeros     : a.pasajeros,
+            pasajeros     : paxReg != null ? paxReg : a.pasajeros,
+            paxDeRegistradora: paxReg != null,
             km            : Math.round(a.km * 10) / 10,
             rutaLabel     : rutaDeDespacho ? rutaNombreById(rutaId) : (a.rutas.join(', ') || ''),
             rutaDeDespacho,
@@ -1566,6 +1623,7 @@
       <span class="imp-stat">Fecha(s) del archivo: <b>${fechas.join(', ')}</b></span>
       ${fechaDistinta ? `<span class="imp-stat" style="color:var(--yellow)">⚠ Distinta a la fecha seleccionada (${pickerFecha}): se importará con la fecha del ARCHIVO y su despacho de ese día.</span>` : ''}
       <span class="imp-stat" style="color:var(--txt2)">Solo se importan vueltas, pasajeros y km. Conductor y ruta se mantienen del despacho (aquí solo como referencia).</span>
+      ${fechas.some(usaRegistradora) ? `<span class="imp-stat" style="color:var(--txt2)">Desde el ${PAX_REGISTRADORA_DESDE} los pasajeros salen de la registradora del despacho (marcados <span class="pax-reg-tag">REG</span>); el BEA solo se usa si el despachador no anotó la registradora.</span>` : ''}
     `;
 
     document.getElementById('importTbody').innerHTML = data.map(d => {
@@ -1586,7 +1644,7 @@
         <td><b>${d.busNum}</b>${d.busPlaca !== '—' ? `<br><small style="color:var(--txt2);font-family:monospace">${d.busPlaca}</small>` : ''}</td>
         <td>${d.fecha}</td>
         <td style="text-align:right">${d.vueltas}</td>
-        <td style="text-align:right">${d.pasajeros.toLocaleString()}</td>
+        <td style="text-align:right">${d.pasajeros.toLocaleString()}${d.paxDeRegistradora ? ' <span class="pax-reg-tag" title="Tomado de la registradora del despacho">REG</span>' : ''}</td>
         <td style="text-align:right">${d.km}</td>
         <td style="color:var(--txt2)">${d.rutaLabel ? escHtml(d.rutaLabel) : '—'}${d.rutaDeDespacho ? '' : (d.rutaLabel ? ' <small style="color:var(--txt3)">(BEA)</small>' : '')}</td>
         <td style="font-size:11px">${conductorCell}</td>
