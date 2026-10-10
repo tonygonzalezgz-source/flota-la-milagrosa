@@ -18,6 +18,8 @@ from dotenv import load_dotenv
 import jwt as _jwt
 from werkzeug.security import generate_password_hash, check_password_hash
 
+import auditoria  # historial de modificaciones (api/auditoria/)
+
 load_dotenv()  # carga variables desde .env si existe
 
 FRONTEND_DIR = os.path.join(os.path.dirname(__file__), "..")
@@ -112,10 +114,10 @@ PG_SCHEMA    = os.path.join(os.path.dirname(__file__), "supabase_schema.sql")
 # Versión del esquema. IMPORTANTE: incrementar en 1 cada vez que se agregue
 # una migración (ALTER/CREATE) a migrate_db(); si no se incrementa, la
 # migración nueva NO corre en las BD ya versionadas.
-SCHEMA_VERSION = 15
+SCHEMA_VERSION = 16
 
 ROLE_VIEWS = {
-    "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho", "historial-despacho", "gastos", "tecnologia", "chequeo", "eds", "lavada", "mapa", "relojes", "mb-mapa", "mb-reportes", "mb-rutas", "mb-equipos"],
+    "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho", "historial-despacho", "gastos", "tecnologia", "chequeo", "eds", "lavada", "mapa", "relojes", "mb-mapa", "mb-reportes", "mb-rutas", "mb-equipos", "recaudo-diario", "recaudo-caja", "auditoria"],
     "Analista":       ["historial", "dashboard", "tecnologia", "despacho", "historial-despacho", "chequeo", "alistamiento"],
     "Técnico Mant.":  ["mant"],
     "Técnico Cámaras":       ["tecnologia"],
@@ -126,6 +128,7 @@ ROLE_VIEWS = {
     "Despachador":    ["despacho", "historial-despacho", "chequeo", "mapa", "relojes", "mb-mapa", "mb-reportes"],
     "Jefe de Ruta":   ["dashboard", "despacho", "historial-despacho", "chequeo", "alistamiento", "relojes", "mb-mapa", "mb-reportes"],
     "Conductor":      ["alistamiento"],
+    "Recaudador":     ["recaudo-diario", "recaudo-caja"],
 }
 
 # Roles que pueden operar el módulo de chequeo (llegada/salida en puestos)
@@ -147,6 +150,23 @@ def _pax_registradora(inicio, fin):
     except (TypeError, ValueError):
         return None
     return fin - inicio if fin >= inicio else None
+
+
+def _sync_pax_movilidad(db, fecha, pax_por_bus):
+    """Los pasajeros de movilidad diaria salen de la registradora (ver
+    PAX_REGISTRADORA_DESDE): si alguien corrige una lectura (despachador o
+    recaudador) después de que el analista guardó la movilidad, el dato guardado
+    se actualiza. Solo toca registros de movilidad existentes; no los crea.
+    `pax_por_bus`: {bus_id: pasajeros}. No hace commit."""
+    if fecha < PAX_REGISTRADORA_DESDE:
+        return
+    for bus_id, pax in pax_por_bus.items():
+        db.execute(
+            """UPDATE registros_movilidad
+                  SET pasajeros = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE bus_id = ? AND fecha = ? AND pasajeros <> ?""",
+            (pax, bus_id, fecha, pax),
+        )
 
 
 # ══════════════════════════════════════════
@@ -1063,6 +1083,17 @@ def migrate_db():
     except Exception as e:
         print(f"[migrate_db] monitoreo: {e}")
 
+    # Recaudo diario (tarifas, liquidaciones por bus y por conductor) e historial
+    # de modificaciones (auditoría inmutable) — SCHEMA_VERSION 16
+    try:
+        recaudo.migrar(db)
+    except Exception as e:
+        print(f"[migrate_db] recaudo: {e}")
+    try:
+        auditoria.migrar(db)
+    except Exception as e:
+        print(f"[migrate_db] auditoria: {e}")
+
     # Pasajeros de movilidad desde la registradora del despacho — SCHEMA_VERSION 15
     # Backfill de los días desde PAX_REGISTRADORA_DESDE que ya tenían movilidad
     # guardada antes del cambio. Idempotente: solo toca filas cuyo despacho
@@ -1402,6 +1433,42 @@ def get_bus(bus_id):
     return jsonify(dict(row))
 
 
+# ── Historial de modificaciones del catálogo: etiquetas legibles por campo ──
+_ETQ_BUS = {
+    "numero": "Número", "placa": "Placa", "modelo": "Modelo", "grupo": "Grupo",
+    "estado": "Estado", "km_actuales": "Km actuales", "propietario_id": "Propietario",
+    "soat_vencimiento": "SOAT", "tecno_vencimiento": "Tecnomecánica",
+    "tarjeta_op_vencimiento": "Tarjeta de operación",
+    "tp_propietario_nombre": "Propietario (tarjeta de propiedad)",
+    "tp_propietario_documento": "Documento del propietario (tarjeta de propiedad)",
+}
+_ETQ_RUTA = {"nombre": "Nombre", "descripcion": "Descripción", "grupo": "Grupo",
+             "color": "Color", "activa": "Activa"}
+_ETQ_CONDUCTOR = {"nombre": "Nombre", "cedula": "Cédula", "telefono": "Teléfono", "activo": "Activo"}
+_ETQ_PUESTO = {"nombre": "Nombre", "descripcion": "Descripción", "activo": "Activo"}
+_ETQ_USUARIO = {"nombre": "Nombre", "username": "Usuario", "iniciales": "Iniciales",
+                "color": "Color", "activo": "Activo", "puesto_id": "Puesto", "rol": "Rol"}
+
+
+def _bus_txt(b):
+    return f"bus {b.get('numero')} ({b.get('placa') or 's/placa'})"
+
+
+def _usuario_txt(u):
+    return f"{u.get('nombre')} ({u.get('username')}, {u.get('rol')})"
+
+
+def _nombres_por_id(db, tabla, campo, cambios, clave):
+    """Reemplaza ids por nombres legibles en cambios[clave] = [antes, después]."""
+    if clave not in cambios:
+        return
+    nombres = []
+    for v in cambios[clave]:
+        fila = db.execute(f"SELECT {campo} FROM {tabla} WHERE id = ?", (v,)).fetchone() if v else None
+        nombres.append(dict(fila)[campo] if fila else v)
+    cambios[clave] = nombres
+
+
 @app.route("/api/buses", methods=["POST"])
 @require_role("Administrador")
 def create_bus():
@@ -1416,6 +1483,9 @@ def create_bus():
     soat       = data.get("soat_vencimiento") or None
     tecno      = data.get("tecno_vencimiento") or None
     tarjeta_op = data.get("tarjeta_op_vencimiento") or None
+    # Propietario según la tarjeta de propiedad: es el tercero (NIT) del archivo plano contable.
+    tp_nombre  = (data.get("tp_propietario_nombre") or "").strip() or None
+    tp_doc     = (data.get("tp_propietario_documento") or "").strip() or None
 
     if not numero:
         return jsonify({"error": "El número de bus es requerido"}), 400
@@ -1424,12 +1494,18 @@ def create_bus():
     try:
         cursor = db.execute(
             "INSERT INTO buses (numero, placa, modelo, grupo, estado, km_actuales, propietario_id, "
-            "soat_vencimiento, tecno_vencimiento, tarjeta_op_vencimiento) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?)",
-            (numero, placa, modelo, grupo, estado, km, prop_id, soat, tecno, tarjeta_op),
+            "soat_vencimiento, tecno_vencimiento, tarjeta_op_vencimiento, "
+            "tp_propietario_nombre, tp_propietario_documento) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            (numero, placa, modelo, grupo, estado, km, prop_id, soat, tecno, tarjeta_op, tp_nombre, tp_doc),
+        )
+        new_id = cursor.lastrowid
+        auditoria.registrar(
+            db, "catalogo", "bus", new_id, "crear",
+            f"Creó el bus {numero} ({placa or 's/placa'}), grupo {grupo}",
+            {k: data.get(k) for k in _ETQ_BUS if data.get(k) not in (None, "")},
         )
         db.commit()
-        new_id = cursor.lastrowid
     except Exception as e:
         db.close()
         return jsonify({"error": str(e)}), 400
@@ -1442,7 +1518,7 @@ def create_bus():
 def update_bus(bus_id):
     data    = request.get_json(force=True)
     db      = get_db()
-    bus     = db.execute("SELECT id FROM buses WHERE id = ?", (bus_id,)).fetchone()
+    bus     = db.execute("SELECT * FROM buses WHERE id = ?", (bus_id,)).fetchone()
     if not bus:
         db.close()
         return jsonify({"error": "Bus no encontrado"}), 404
@@ -1450,8 +1526,10 @@ def update_bus(bus_id):
     fields = [
         "numero", "placa", "modelo", "grupo", "estado", "km_actuales", "propietario_id",
         "soat_vencimiento", "tecno_vencimiento", "tarjeta_op_vencimiento",
+        "tp_propietario_nombre", "tp_propietario_documento",
     ]
-    nullable = ("propietario_id", "soat_vencimiento", "tecno_vencimiento", "tarjeta_op_vencimiento")
+    nullable = ("propietario_id", "soat_vencimiento", "tecno_vencimiento", "tarjeta_op_vencimiento",
+                "tp_propietario_nombre", "tp_propietario_documento")
     updates, values = [], []
     for f in fields:
         if f in data:
@@ -1465,6 +1543,14 @@ def update_bus(bus_id):
     values.append(bus_id)
     try:
         db.execute(f"UPDATE buses SET {', '.join(updates)}, updated_at = CURRENT_TIMESTAMP WHERE id = ?", values)
+        cambios = auditoria.diferencias(dict(bus), data, fields)
+        if cambios:
+            _nombres_por_id(db, "propietarios", "nombre", cambios, "propietario_id")
+            auditoria.registrar(
+                db, "catalogo", "bus", bus_id, "editar",
+                f"Editó el {_bus_txt(dict(bus))}: {auditoria.describir(cambios, _ETQ_BUS)}",
+                cambios,
+            )
         db.commit()
     except Exception as e:
         db.close()
@@ -1477,7 +1563,7 @@ def update_bus(bus_id):
 @require_role("Administrador")
 def delete_bus(bus_id):
     db = get_db()
-    bus = db.execute("SELECT id FROM buses WHERE id = ?", (bus_id,)).fetchone()
+    bus = db.execute("SELECT * FROM buses WHERE id = ?", (bus_id,)).fetchone()
     if not bus:
         db.close()
         return jsonify({"error": "Bus no encontrado"}), 404
@@ -1492,6 +1578,9 @@ def delete_bus(bus_id):
     db.execute("DELETE FROM estado_mantenimiento WHERE bus_id = ?", (bus_id,))
     db.execute("DELETE FROM registros_mantenimiento WHERE bus_id = ?", (bus_id,))
     db.execute("DELETE FROM buses WHERE id = ?", (bus_id,))
+    bus = dict(bus)
+    auditoria.registrar(db, "catalogo", "bus", bus_id, "eliminar", f"Eliminó el {_bus_txt(bus)}",
+                        {k: bus.get(k) for k in _ETQ_BUS})
     db.commit()
     db.close()
     return jsonify({"ok": True})
@@ -1536,15 +1625,24 @@ def get_tarifas():
 def update_tarifa(tarifa_id):
     data  = request.get_json(force=True)
     db    = get_db()
-    row   = db.execute("SELECT id FROM tarifas WHERE id = ?", (tarifa_id,)).fetchone()
+    row   = db.execute("SELECT * FROM tarifas WHERE id = ?", (tarifa_id,)).fetchone()
     if not row:
         db.close()
         return jsonify({"error": "Tarifa no encontrada"}), 404
 
+    nuevos = {"label": data.get("label", ""), "valor": data.get("valor", 0)}
     db.execute(
         "UPDATE tarifas SET label=?, valor=? WHERE id=?",
-        (data.get("label", ""), data.get("valor", 0), tarifa_id),
+        (nuevos["label"], nuevos["valor"], tarifa_id),
     )
+    cambios = auditoria.diferencias(dict(row), nuevos, ("label", "valor"))
+    if cambios:
+        auditoria.registrar(
+            db, "catalogo", "tarifa", tarifa_id, "editar",
+            f"Editó la tarifa «{dict(row)['label']}»: "
+            f"{auditoria.describir(cambios, {'label': 'Nombre', 'valor': 'Valor'})}",
+            cambios,
+        )
     db.commit()
     db.close()
     return jsonify({"ok": True})
@@ -1588,8 +1686,10 @@ def create_ruta():
         "INSERT INTO rutas (nombre, descripcion, grupo, color, activa) VALUES (?,?,?,?,?)",
         (nombre, data.get("descripcion", ""), grupo, data.get("color", "#6366f1"), data.get("activa", 1)),
     )
-    db.commit()
     new_id = cursor.lastrowid
+    auditoria.registrar(db, "catalogo", "ruta", new_id, "crear", f"Creó la ruta «{nombre}» (grupo {grupo})",
+                        {"nombre": nombre, "descripcion": data.get("descripcion", ""), "grupo": grupo})
+    db.commit()
     db.close()
     return jsonify({"ok": True, "id": new_id}), 201
 
@@ -1599,16 +1699,26 @@ def create_ruta():
 def update_ruta(ruta_id):
     data = request.get_json(force=True)
     db   = get_db()
-    row  = db.execute("SELECT id FROM rutas WHERE id = ?", (ruta_id,)).fetchone()
+    row  = db.execute("SELECT * FROM rutas WHERE id = ?", (ruta_id,)).fetchone()
     if not row:
         db.close()
         return jsonify({"error": "Ruta no encontrada"}), 404
 
+    nuevos = {"nombre": data.get("nombre", ""), "descripcion": data.get("descripcion", ""),
+              "grupo": data.get("grupo", "A"), "color": data.get("color", "#6366f1"),
+              "activa": data.get("activa", 1)}
     db.execute(
         "UPDATE rutas SET nombre=?, descripcion=?, grupo=?, color=?, activa=? WHERE id=?",
-        (data.get("nombre", ""), data.get("descripcion", ""), data.get("grupo", "A"),
-         data.get("color", "#6366f1"), data.get("activa", 1), ruta_id),
+        (nuevos["nombre"], nuevos["descripcion"], nuevos["grupo"], nuevos["color"],
+         nuevos["activa"], ruta_id),
     )
+    cambios = auditoria.diferencias(dict(row), nuevos, _ETQ_RUTA)
+    if cambios:
+        auditoria.registrar(
+            db, "catalogo", "ruta", ruta_id, "editar",
+            f"Editó la ruta «{dict(row)['nombre']}»: {auditoria.describir(cambios, _ETQ_RUTA)}",
+            cambios,
+        )
     db.commit()
     db.close()
     return jsonify({"ok": True})
@@ -1618,10 +1728,19 @@ def update_ruta(ruta_id):
 @require_role("Administrador")
 def delete_ruta(ruta_id):
     db  = get_db()
-    row = db.execute("SELECT id FROM rutas WHERE id = ?", (ruta_id,)).fetchone()
+    row = db.execute("SELECT * FROM rutas WHERE id = ?", (ruta_id,)).fetchone()
     if not row:
         db.close()
         return jsonify({"error": "Ruta no encontrada"}), 404
+    ruta_nombre = dict(row)["nombre"]
+
+    def _desactivar():
+        db.execute("UPDATE rutas SET activa = 0 WHERE id = ?", (ruta_id,))
+        auditoria.registrar(db, "catalogo", "ruta", ruta_id, "desactivar",
+                            f"Desactivó la ruta «{ruta_nombre}» (tiene historial asociado)")
+        db.commit()
+        db.close()
+        return jsonify({"ok": True, "warning": "Ruta desactivada (tiene historial asociado)"})
 
     # Cualquier tabla que referencie la ruta bloquea el borrado físico
     # (Postgres lanza IntegrityError). En vez de eso, la desactivamos: la ruta
@@ -1634,22 +1753,17 @@ def delete_ruta(ruta_id):
         except Exception:
             usada = None  # tabla o columna aún no existe (SQLite viejo)
         if usada:
-            db.execute("UPDATE rutas SET activa = 0 WHERE id = ?", (ruta_id,))
-            db.commit()
-            db.close()
-            return jsonify({"ok": True, "warning": "Ruta desactivada (tiene historial asociado)"})
+            return _desactivar()
 
     try:
         db.execute("DELETE FROM rutas WHERE id = ?", (ruta_id,))
+        auditoria.registrar(db, "catalogo", "ruta", ruta_id, "eliminar", f"Eliminó la ruta «{ruta_nombre}»")
         db.commit()
     except Exception:
         # Cinturón y tirantes: si alguna otra tabla referencia la ruta y no
         # la tenemos listada arriba, caemos a desactivación en vez de 500.
         db.rollback()
-        db.execute("UPDATE rutas SET activa = 0 WHERE id = ?", (ruta_id,))
-        db.commit()
-        db.close()
-        return jsonify({"ok": True, "warning": "Ruta desactivada (tiene historial asociado)"})
+        return _desactivar()
     db.close()
     return jsonify({"ok": True})
 
@@ -1713,8 +1827,11 @@ def create_conductor():
         "INSERT INTO conductores (nombre, cedula, telefono, activo) VALUES (?,?,?,?)",
         (nombre, cedula, data.get("telefono", ""), data.get("activo", 1)),
     )
-    db.commit()
     new_id = cursor.lastrowid
+    auditoria.registrar(db, "catalogo", "conductor", new_id, "crear",
+                        f"Creó el conductor {nombre}" + (f" (cédula {cedula})" if cedula else ""),
+                        {"nombre": nombre, "cedula": cedula, "telefono": data.get("telefono", "")})
+    db.commit()
     db.close()
     return jsonify({"ok": True, "id": new_id}), 201
 
@@ -1724,7 +1841,8 @@ def create_conductor():
 def update_conductor(cid):
     data = request.get_json(force=True)
     db   = get_db()
-    if not db.execute("SELECT id FROM conductores WHERE id = ?", (cid,)).fetchone():
+    antes = db.execute("SELECT * FROM conductores WHERE id = ?", (cid,)).fetchone()
+    if not antes:
         db.close()
         return jsonify({"error": "Conductor no encontrado"}), 404
 
@@ -1734,11 +1852,19 @@ def update_conductor(cid):
         detalle = f"{dup['nombre']}" + (f" (cédula {dup['cedula']})" if (dup.get("cedula") or "").strip() else "")
         return jsonify({"error": f"Ya hay otro conductor dado de alta con esos datos: {detalle}"}), 409
 
+    nuevos = {"nombre": data.get("nombre", ""), "cedula": data.get("cedula", ""),
+              "telefono": data.get("telefono", ""), "activo": data.get("activo", 1)}
     db.execute(
         "UPDATE conductores SET nombre=?, cedula=?, telefono=?, activo=? WHERE id=?",
-        (data.get("nombre", ""), data.get("cedula", ""), data.get("telefono", ""),
-         data.get("activo", 1), cid),
+        (nuevos["nombre"], nuevos["cedula"], nuevos["telefono"], nuevos["activo"], cid),
     )
+    cambios = auditoria.diferencias(dict(antes), nuevos, _ETQ_CONDUCTOR)
+    if cambios:
+        auditoria.registrar(
+            db, "catalogo", "conductor", cid, "editar",
+            f"Editó el conductor {dict(antes)['nombre']}: {auditoria.describir(cambios, _ETQ_CONDUCTOR)}",
+            cambios,
+        )
     db.commit()
     db.close()
     return jsonify({"ok": True})
@@ -1748,7 +1874,11 @@ def update_conductor(cid):
 @require_role("Administrador")
 def delete_conductor(cid):
     db = get_db()
+    antes = db.execute("SELECT nombre, activo FROM conductores WHERE id = ?", (cid,)).fetchone()
     db.execute("UPDATE conductores SET activo = 0 WHERE id = ?", (cid,))
+    if antes and dict(antes)["activo"]:
+        auditoria.registrar(db, "catalogo", "conductor", cid, "desactivar",
+                            f"Desactivó el conductor {dict(antes)['nombre']}")
     db.commit()
     db.close()
     return jsonify({"ok": True})
@@ -1783,8 +1913,10 @@ def create_puesto():
             "INSERT INTO puestos_trabajo (nombre, descripcion, activo) VALUES (?,?,?)",
             (nombre, (data.get("descripcion") or "").strip(), data.get("activo", 1)),
         )
-        db.commit()
         new_id = cursor.lastrowid
+        auditoria.registrar(db, "catalogo", "puesto", new_id, "crear", f"Creó el puesto «{nombre}»",
+                            {"nombre": nombre, "descripcion": (data.get("descripcion") or "").strip()})
+        db.commit()
     except Exception:
         db.close()
         return jsonify({"error": "Ya existe un puesto con ese nombre"}), 400
@@ -1797,7 +1929,8 @@ def create_puesto():
 def update_puesto(pid):
     data = request.get_json(force=True)
     db   = get_db()
-    if not db.execute("SELECT id FROM puestos_trabajo WHERE id = ?", (pid,)).fetchone():
+    antes = db.execute("SELECT * FROM puestos_trabajo WHERE id = ?", (pid,)).fetchone()
+    if not antes:
         db.close()
         return jsonify({"error": "Puesto no encontrado"}), 404
 
@@ -1811,6 +1944,13 @@ def update_puesto(pid):
         values.append(pid)
         try:
             db.execute(f"UPDATE puestos_trabajo SET {', '.join(updates)} WHERE id = ?", values)
+            cambios = auditoria.diferencias(dict(antes), data, allowed)
+            if cambios:
+                auditoria.registrar(
+                    db, "catalogo", "puesto", pid, "editar",
+                    f"Editó el puesto «{dict(antes)['nombre']}»: {auditoria.describir(cambios, _ETQ_PUESTO)}",
+                    cambios,
+                )
             db.commit()
         except Exception:
             db.close()
@@ -1823,7 +1963,11 @@ def update_puesto(pid):
 @require_role("Administrador")
 def delete_puesto(pid):
     db = get_db()
+    antes = db.execute("SELECT nombre, activo FROM puestos_trabajo WHERE id = ?", (pid,)).fetchone()
     db.execute("UPDATE puestos_trabajo SET activo = 0 WHERE id = ?", (pid,))
+    if antes and dict(antes)["activo"]:
+        auditoria.registrar(db, "catalogo", "puesto", pid, "desactivar",
+                            f"Desactivó el puesto «{dict(antes)['nombre']}»")
     db.commit()
     db.close()
     return jsonify({"ok": True})
@@ -2231,18 +2375,7 @@ def batch_upsert_despacho():
         if pax is not None:
             pax_por_bus[bus_id] = pax
 
-    # Los pasajeros de movilidad diaria salen de la registradora (ver
-    # PAX_REGISTRADORA_DESDE): si el despachador corrige una lectura después de
-    # que el analista guardó la movilidad, el dato guardado se actualiza. Solo
-    # toca registros de movilidad existentes; no los crea.
-    if fecha >= PAX_REGISTRADORA_DESDE:
-        for bus_id, pax in pax_por_bus.items():
-            db.execute(
-                """UPDATE registros_movilidad
-                      SET pasajeros = ?, updated_at = CURRENT_TIMESTAMP
-                    WHERE bus_id = ? AND fecha = ? AND pasajeros <> ?""",
-                (pax, bus_id, fecha, pax),
-            )
+    _sync_pax_movilidad(db, fecha, pax_por_bus)
 
     db.commit()
     db.close()
@@ -3812,6 +3945,11 @@ def admin_create_usuario():
         tel_raw = data.get("telefono")
         tel = None if tel_raw is None else (str(tel_raw).strip() or None)
         _sync_propietario_from_usuario(db, new_id, nombre, rol, activo=1, telefono=tel)
+        auditoria.registrar(
+            db, "catalogo", "usuario", new_id, "crear",
+            f"Creó la cuenta {_usuario_txt({'nombre': nombre, 'username': username, 'rol': rol})}",
+            {"nombre": nombre, "username": username, "rol": rol, "puesto_id": data.get("puesto_id") or None},
+        )
         db.commit()
     except Exception as e:
         db.close()
@@ -3825,9 +3963,14 @@ def admin_create_usuario():
 def admin_update_usuario(uid):
     data = request.get_json(force=True)
     db   = get_db()
-    if not db.execute("SELECT id FROM usuarios WHERE id = ?", (uid,)).fetchone():
+    antes = db.execute(
+        "SELECT id, nombre, username, iniciales, color, activo, puesto_id, rol FROM usuarios WHERE id = ?",
+        (uid,),
+    ).fetchone()
+    if not antes:
         db.close()
         return jsonify({"error": "Usuario no encontrado"}), 404
+    antes = dict(antes)
 
     allowed = ["nombre", "username", "iniciales", "color", "activo", "puesto_id", "rol"]
     updates, values = [], []
@@ -3853,6 +3996,21 @@ def admin_update_usuario(uid):
             tel_raw = data.get("telefono")
             tel = None if tel_raw is None else (str(tel_raw).strip() or "")
         _sync_propietario_from_usuario(db, uid, f["nombre"], f["rol"], f.get("activo", 1), telefono=tel)
+
+    cambios = auditoria.diferencias(antes, data, allowed)
+    _nombres_por_id(db, "puestos_trabajo", "nombre", cambios, "puesto_id")
+    cambio_clave = bool(data.get("password"))   # solo se anota que cambió, nunca el valor
+    if set(cambios) == {"activo"} and not cambio_clave:
+        accion = "activar" if cambios["activo"][1] else "desactivar"
+        texto = f"{'Activó' if accion == 'activar' else 'Desactivó'} la cuenta {_usuario_txt(antes)}"
+        auditoria.registrar(db, "catalogo", "usuario", uid, accion, texto, cambios)
+    elif cambios or cambio_clave:
+        partes = [auditoria.describir(cambios, _ETQ_USUARIO)] if cambios else []
+        if cambio_clave:
+            partes.append("cambió la contraseña")
+            cambios["contraseña"] = "cambiada"
+        auditoria.registrar(db, "catalogo", "usuario", uid, "editar",
+                            f"Editó la cuenta {_usuario_txt(antes)}: {'; '.join(partes)}", cambios)
     db.commit()
     db.close()
     return jsonify({"ok": True})
@@ -3866,8 +4024,13 @@ def admin_delete_usuario(uid):
     con otro rol/puesto. El historial se conserva desvinculado (queda sin nombre)."""
     hard = request.args.get("hard") == "1"
     db = get_db()
+    cuenta = db.execute("SELECT nombre, username, rol, activo FROM usuarios WHERE id = ?", (uid,)).fetchone()
+    cuenta = dict(cuenta) if cuenta else {"nombre": f"#{uid}", "username": "?", "rol": "?", "activo": 0}
     if not hard:
         db.execute("UPDATE usuarios SET activo = 0 WHERE id = ?", (uid,))
+        if cuenta["activo"]:
+            auditoria.registrar(db, "catalogo", "usuario", uid, "desactivar",
+                                f"Desactivó la cuenta {_usuario_txt(cuenta)}")
         db.commit()
         db.close()
         return jsonify({"ok": True})
@@ -3889,9 +4052,36 @@ def admin_delete_usuario(uid):
     db.execute("DELETE FROM despachador_rutas WHERE usuario_id = ?", (uid,))
     db.execute("DELETE FROM chequeos_despachador WHERE usuario_id = ?", (uid,))
     db.execute("DELETE FROM usuarios WHERE id = ?", (uid,))
+    auditoria.registrar(db, "catalogo", "usuario", uid, "eliminar",
+                        f"Eliminó definitivamente la cuenta {_usuario_txt(cuenta)}")
     db.commit()
     db.close()
     return jsonify({"ok": True})
+
+
+def _auditar_asignacion(db, uid, que, antes_ids, nuevos_ids, sql_nombres, prefijo):
+    """Anota en el historial qué buses/rutas se agregaron o quitaron a una cuenta."""
+    try:
+        nuevos = {int(x) for x in nuevos_ids}
+    except (TypeError, ValueError):
+        nuevos = set()
+    agregados, quitados = sorted(nuevos - antes_ids), sorted(antes_ids - nuevos)
+    if not agregados and not quitados:
+        return
+    nombres = {dict(r)["id"]: dict(r)["nombre"] for r in db.execute(sql_nombres).fetchall()}
+    cuenta = db.execute("SELECT nombre, username, rol FROM usuarios WHERE id = ?", (uid,)).fetchone()
+    cuenta = dict(cuenta) if cuenta else {"nombre": f"#{uid}", "username": "?", "rol": "?"}
+    partes = []
+    if agregados:
+        partes.append("agregó " + ", ".join(f"{prefijo} {nombres.get(i, i)}" for i in agregados))
+    if quitados:
+        partes.append("quitó " + ", ".join(f"{prefijo} {nombres.get(i, i)}" for i in quitados))
+    auditoria.registrar(
+        db, "catalogo", f"usuario_{que}", uid, "asignar",
+        f"Cambió los {que} de la cuenta {_usuario_txt(cuenta)}: {'; '.join(partes)}",
+        {"agregados": [nombres.get(i, i) for i in agregados],
+         "quitados": [nombres.get(i, i) for i in quitados]},
+    )
 
 
 @app.route("/api/admin/usuarios/<int:uid>/buses", methods=["GET"])
@@ -3916,6 +4106,8 @@ def admin_set_usuario_buses(uid):
     data    = request.get_json(force=True)
     bus_ids = data.get("bus_ids", [])
     db = get_db()
+    antes_ids = {dict(r)["bus_id"] for r in db.execute(
+        "SELECT bus_id FROM usuario_buses WHERE usuario_id = ?", (uid,)).fetchall()}
     db.execute("DELETE FROM usuario_buses WHERE usuario_id = ?", (uid,))
     for bid in bus_ids:
         try:
@@ -3951,6 +4143,8 @@ def admin_set_usuario_buses(uid):
     except Exception as e:
         print(f"[usuario_buses sync propietario_id] {e}")
 
+    _auditar_asignacion(db, uid, "buses", antes_ids, bus_ids,
+                        "SELECT id, numero AS nombre FROM buses", "bus")
     db.commit()
     db.close()
     return jsonify({"ok": True})
@@ -3978,12 +4172,16 @@ def admin_set_usuario_rutas(uid):
     data     = request.get_json(force=True)
     ruta_ids = data.get("ruta_ids", [])
     db = get_db()
+    antes_ids = {dict(r)["ruta_id"] for r in db.execute(
+        "SELECT ruta_id FROM despachador_rutas WHERE usuario_id = ?", (uid,)).fetchall()}
     db.execute("DELETE FROM despachador_rutas WHERE usuario_id = ?", (uid,))
     for rid in ruta_ids:
         try:
             db.execute("INSERT INTO despachador_rutas (usuario_id, ruta_id) VALUES (?,?)", (uid, rid))
         except Exception:
             pass
+    _auditar_asignacion(db, uid, "rutas", antes_ids, ruta_ids,
+                        "SELECT id, nombre FROM rutas", "ruta")
     db.commit()
     db.close()
     return jsonify({"ok": True})
@@ -4846,6 +5044,30 @@ import monitoreo  # noqa: E402
 
 monitoreo.configurar(get_db=get_db, require_role=require_role, database_url=DATABASE_URL)
 app.register_blueprint(monitoreo.bp)
+
+
+# ──────────────────────────────────────────
+#  Historial de modificaciones (api/auditoria/)
+# ──────────────────────────────────────────
+
+auditoria.configurar(get_db=get_db, require_role=require_role, database_url=DATABASE_URL)
+app.register_blueprint(auditoria.bp)
+
+
+# ──────────────────────────────────────────
+#  Recaudo (api/recaudo/)
+# ──────────────────────────────────────────
+
+import recaudo  # noqa: E402
+
+recaudo.configurar(get_db=get_db, require_role=require_role, database_url=DATABASE_URL,
+                   hoy_bogota=hoy_bogota, sync_pax_movilidad=_sync_pax_movilidad)
+app.register_blueprint(recaudo.bp)
+
+# Mientras el recaudo esté en prueba solo para el Administrador, el Recaudador
+# no tiene vistas (ver recaudo.comun.SOLO_ADMIN).
+if recaudo.comun.SOLO_ADMIN:
+    ROLE_VIEWS["Recaudador"] = []
 
 
 # ──────────────────────────────────────────

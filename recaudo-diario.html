@@ -1,0 +1,1381 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <link rel="icon" type="image/png" href="favicon.png" />
+  <link rel="apple-touch-icon" href="favicon.png" />
+  <script>
+    (function() {
+      if (window.location === window.parent.location) {
+        const token = localStorage.getItem('authToken');
+        if (!token) { window.location.href = '/index.html'; }
+      }
+    })();
+  </script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>La Milagrosa — Recaudo diario</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg:#f4f4f6; --white:#fff; --border:#e5e5eb; --border2:#d0d0d8;
+      --txt:#111; --txt2:#555; --txt3:#888; --primary:#6366f1; --green:#22c55e;
+      --red:#ef4444; --yellow:#f59e0b; --radius:12px; --radius-s:8px;
+      --shadow:0 1px 4px rgba(0,0,0,.07);
+    }
+    body {
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+      background:var(--bg); color:var(--txt); padding:24px; font-size:14px;
+    }
+    .page-header { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
+    .page-title { font-size:22px; font-weight:800; letter-spacing:-.4px; }
+    .page-sub   { font-size:13px; color:var(--txt2); margin-top:3px; max-width:680px; }
+    .tarifas-chip { display:inline-flex; align-items:center; gap:8px; margin-top:8px; background:#fef9c3;
+      color:#854d0e; border:1px solid #fde68a; border-radius:999px; padding:4px 12px; font-size:12.5px; font-weight:700; }
+    .tarifas-chip button { border:none; background:none; color:#a16207; font:inherit; font-size:12px;
+      text-decoration:underline; cursor:pointer; padding:0; }
+
+    .fecha-nav { display:flex; align-items:center; gap:6px; }
+    .fecha-nav input[type=date] { padding:8px 10px; border:1.5px solid var(--border2); border-radius:var(--radius-s);
+      font-family:inherit; font-size:14px; font-weight:700; background:var(--white); color:var(--txt); }
+    .nav-btn { width:36px; height:36px; display:inline-flex; align-items:center; justify-content:center;
+      border:1px solid var(--border2); background:var(--white); border-radius:var(--radius-s); cursor:pointer; color:var(--txt2); }
+    .nav-btn:hover { border-color:var(--primary); color:var(--primary); }
+    .nav-btn:disabled { opacity:.35; cursor:default; }
+
+    .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:10px; margin-bottom:16px; }
+    .kpi { background:var(--white); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); padding:12px 14px; min-width:0; }
+    .kpi-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:var(--txt3); }
+    .kpi-val { font-size:22px; font-weight:800; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .kpi-val.ok { color:#16a34a; } .kpi-val.bad { color:#dc2626; } .kpi-val.warn { color:#d97706; }
+
+    .aviso { background:#fef3c7; border:1px solid #fcd34d; color:#92400e; border-radius:var(--radius-s);
+      padding:10px 12px; font-size:12.5px; line-height:1.5; margin-bottom:14px; }
+    .aviso.info { background:#eef2ff; border-color:#c7d2fe; color:#3730a3; }
+    .aviso.bad  { background:#fef2f2; border-color:#fecaca; color:#991b1b; }
+
+    .layout { display:grid; grid-template-columns:minmax(280px,360px) minmax(0,1fr); gap:16px; align-items:start; }
+    .card { background:var(--white); border:1px solid var(--border); border-radius:var(--radius);
+      box-shadow:var(--shadow); padding:16px 18px; }
+    .card-title { display:flex; align-items:center; gap:8px; font-size:12px; font-weight:700; text-transform:uppercase;
+      letter-spacing:.5px; color:var(--txt3); margin-bottom:12px; }
+
+    /* Lista de buses */
+    .lista-card { padding:14px; position:sticky; top:16px; max-height:calc(100vh - 32px); display:flex; flex-direction:column; }
+    .buscar { width:100%; padding:9px 12px; border:1.5px solid var(--border2); border-radius:var(--radius-s);
+      font-family:inherit; font-size:14px; }
+    .buscar:focus { outline:none; border-color:var(--primary); }
+    .filtros { display:flex; gap:6px; flex-wrap:wrap; margin:10px 0; }
+    .filtro { border:1px solid var(--border2); background:var(--white); border-radius:999px; padding:4px 10px;
+      font-family:inherit; font-size:12px; font-weight:700; color:var(--txt2); cursor:pointer; }
+    .filtro.on { background:var(--txt); border-color:var(--txt); color:#fff; }
+    .filtro .n { opacity:.6; margin-left:3px; }
+    .buses-scroll { overflow:auto; margin:0 -4px; padding:0 4px; }
+    .grupo-lbl { font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.5px; color:var(--txt3);
+      margin:10px 2px 6px; }
+    .bus-item { width:100%; display:flex; align-items:center; gap:10px; text-align:left; border:1px solid transparent;
+      background:none; border-radius:10px; padding:8px 10px; cursor:pointer; font-family:inherit; color:var(--txt); }
+    .bus-item:hover { background:#f6f6fa; }
+    .bus-item.sel { background:#eef2ff; border-color:#c7d2fe; }
+    .bus-num { font-size:15px; font-weight:800; min-width:44px; }
+    .bus-info { flex:1; min-width:0; }
+    .bus-placa { font-size:12px; color:var(--txt2); font-weight:600; }
+    .bus-cond { font-size:11.5px; color:var(--txt3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+    .pill { display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:3px 9px;
+      font-size:11px; font-weight:700; white-space:nowrap; }
+    .pill .dot { width:6px; height:6px; border-radius:50%; background:currentColor; }
+    .pill.on   { background:rgba(34,197,94,.12); color:#16a34a; }
+    .pill.off  { background:rgba(136,136,136,.15); color:var(--txt3); }
+    .pill.bad  { background:rgba(239,68,68,.12); color:#dc2626; }
+    .pill.warn { background:rgba(245,158,11,.15); color:#b45309; }
+    .pill.pend { background:rgba(99,102,241,.12); color:#4f46e5; }
+
+    /* Formulario de liquidación */
+    .vacio { text-align:center; color:var(--txt3); padding:60px 20px; font-size:14px; line-height:1.6; }
+    .vacio svg { color:#d4d4dc; margin-bottom:10px; }
+    .form-head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; flex-wrap:wrap;
+      padding-bottom:12px; border-bottom:1px solid var(--border); margin-bottom:14px; }
+    .form-bus { font-size:20px; font-weight:800; letter-spacing:-.3px; }
+    .form-bus small { font-size:13px; color:var(--txt2); font-weight:600; margin-left:6px; }
+    .form-desp { font-size:12.5px; color:var(--txt2); margin-top:4px; line-height:1.5; }
+    .volver { display:none; }
+
+    .sec-lbl { font-size:11.5px; font-weight:800; text-transform:uppercase; letter-spacing:.5px; color:var(--txt3); margin:4px 0 8px; }
+    .campos { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin-bottom:14px; }
+    .campo label { display:block; font-size:11.5px; font-weight:700; color:var(--txt2); margin-bottom:5px; }
+    .campo input, .campo select { width:100%; padding:9px 10px; border:1.5px solid var(--border2); border-radius:var(--radius-s);
+      font-family:inherit; font-size:15px; background:var(--white); color:var(--txt); }
+    .campo input:focus, .campo select:focus { outline:none; border-color:var(--primary); }
+    .campo input:disabled, .campo select:disabled { background:#f6f6f8; color:var(--txt2); }
+    .campo input.err, .campo select.err { border-color:var(--red); background:#fff5f5; }
+    .req { color:var(--red); margin-left:2px; }
+    .opcional { font-weight:600; text-transform:none; letter-spacing:0; color:var(--txt3); }
+    .oblig-nota { font-size:12px; color:var(--txt3); margin:-4px 0 12px; }
+    .calc { padding:9px 10px; border-radius:var(--radius-s); background:#f6f6fa; font-size:15px; font-weight:800;
+      border:1.5px solid transparent; min-height:41px; white-space:nowrap; }
+    .calc.grande { background:#eef2ff; color:#3730a3; }
+    .calc.ok  { background:rgba(34,197,94,.1);  color:#15803d; }
+    .calc.bad { background:rgba(239,68,68,.1);  color:#b91c1c; }
+    .calc.warn { background:rgba(245,158,11,.12); color:#b45309; }
+    .calc .det { display:block; font-size:11px; font-weight:600; opacity:.8; }
+    .campo.ancho { grid-column:span 2; }
+    .nota { font-size:12px; color:var(--txt2); margin:-6px 0 14px; line-height:1.5; }
+    .nota.cambio { color:#b45309; font-weight:600; }
+
+    .cond-box { border:1px solid var(--border); border-radius:10px; padding:14px; background:#fcfcfe; margin-bottom:14px; }
+
+    /* Relevo: una pestaña por conductor (hasta 3) */
+    .cond-tabs { display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-bottom:10px; }
+    .cond-tab { border:1.5px solid var(--border2); background:var(--white); border-radius:999px; padding:6px 12px;
+      font-family:inherit; font-size:12.5px; font-weight:700; color:var(--txt2); cursor:pointer;
+      display:inline-flex; align-items:center; gap:6px; max-width:260px; }
+    .cond-tab .nom { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .cond-tab.on { background:var(--txt); border-color:var(--txt); color:#fff; }
+    .cond-tab.con-err { border-color:var(--red); }
+    .cond-tab.con-err::after { content:''; width:7px; height:7px; border-radius:50%; background:var(--red); flex-shrink:0; }
+    .cond-tab-add { border:1.5px dashed var(--primary); background:none; border-radius:999px; padding:6px 12px;
+      font-family:inherit; font-size:12.5px; font-weight:700; color:var(--primary); cursor:pointer; }
+    .cond-panel[hidden] { display:none; }
+    .tramo { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-top:12px; padding-top:12px;
+      border-top:1px dashed var(--border2); }
+    .relevo-ayuda { font-size:12px; color:var(--txt2); margin:-4px 0 12px; line-height:1.5; }
+    .resumen-wrap { overflow-x:auto; margin:4px 0 14px; border:1px solid var(--border); border-radius:10px; }
+    .resumen-bus { width:100%; border-collapse:collapse; font-size:13px; }
+    .resumen-bus th { text-align:right; font-size:11px; text-transform:uppercase; letter-spacing:.3px; color:var(--txt3);
+      padding:8px 10px; border-bottom:1px solid var(--border); white-space:nowrap; background:#fafafc; }
+    .resumen-bus td { text-align:right; padding:8px 10px; border-bottom:1px solid var(--border); white-space:nowrap; }
+    .resumen-bus th:first-child, .resumen-bus td:first-child { text-align:left; }
+    .resumen-bus tr.total td { font-weight:800; border-bottom:none; background:#fafafc; }
+    .resumen-bus .bad { color:#b91c1c; font-weight:700; } .resumen-bus .warn { color:#b45309; font-weight:700; }
+    .resumen-bus .ok { color:#15803d; font-weight:700; }
+
+    /* Encabezado: tarifas, tipos de gasto (admin) y ancho del papel de la tirilla */
+    .chips { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:8px; }
+    .chips .tarifas-chip { margin-top:0; }
+    .chip-btn { border:1px solid var(--border2); background:var(--white); border-radius:999px; padding:4px 12px;
+      font-family:inherit; font-size:12.5px; font-weight:700; color:var(--txt2); cursor:pointer; }
+    .chip-btn:hover { border-color:var(--primary); color:var(--primary); }
+    .chip-papel { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; color:var(--txt3); }
+    .chip-papel select { padding:3px 6px; border:1px solid var(--border2); border-radius:8px; font-family:inherit;
+      font-size:12.5px; background:var(--white); color:var(--txt); }
+
+    /* Gastos que reporta el conductor */
+    .gastos-box { border:1px solid var(--border); border-radius:10px; padding:4px 14px; background:#fcfcfe; margin-bottom:14px; }
+    .gasto-row { display:grid; grid-template-columns:minmax(110px,1fr) 150px minmax(110px,1.2fr); gap:10px;
+      align-items:center; padding:7px 0; border-bottom:1px dashed var(--border); }
+    .gasto-row:last-child { border-bottom:none; }
+    .gasto-row > label, .gasto-row > .g-nombre { font-size:13.5px; font-weight:700; }
+    .gasto-row input { width:100%; padding:8px 10px; border:1.5px solid var(--border2); border-radius:var(--radius-s);
+      font-family:inherit; font-size:15px; background:var(--white); color:var(--txt); }
+    .gasto-row input:focus { outline:none; border-color:var(--primary); }
+    .gasto-row input.valor, .gasto-row .g-valor { text-align:right; }
+    .gasto-row .g-valor { font-weight:800; font-size:14.5px; }
+    .gasto-row .g-nota { font-size:12.5px; color:var(--txt2); }
+    .gasto-row.total .g-nombre, .gasto-row.total .g-valor { font-weight:800; }
+    .sin-gastos { font-size:12.5px; color:var(--txt3); padding:10px 0; }
+
+    /* Tipos de gasto (admin) */
+    .tipo-row { display:flex; gap:8px; align-items:center; padding:6px 0; border-bottom:1px solid var(--border); }
+    .tipo-row input { flex:1; padding:8px 10px; border:1.5px solid var(--border2); border-radius:var(--radius-s);
+      font-family:inherit; font-size:14px; }
+    .tipo-row.inactivo input { color:var(--txt3); background:#f6f6f8; }
+    .nuevo-tipo { display:flex; gap:8px; margin-top:12px; }
+    .nuevo-tipo input { flex:1; padding:9px 10px; border:1.5px solid var(--border2); border-radius:var(--radius-s);
+      font-family:inherit; font-size:14px; }
+
+    .anuladas { margin-top:18px; padding-top:14px; border-top:1px dashed var(--border2); }
+    .anulada { border:1px solid #fecaca; background:#fff7f7; border-radius:10px; padding:10px 12px; margin-bottom:8px;
+      font-size:12.5px; color:var(--txt2); line-height:1.55; }
+    .anulada b { color:#991b1b; }
+    .anulada .montos { color:var(--txt3); }
+
+    .resumen { border:1px solid var(--border); border-radius:10px; overflow:hidden; margin-bottom:12px; }
+    .resumen div { display:flex; justify-content:space-between; gap:12px; padding:8px 12px; font-size:13.5px; }
+    .resumen div.sub { background:#eef2ff !important; font-weight:800; font-size:12px; text-transform:uppercase; letter-spacing:.3px; color:#3730a3; }
+    .resumen div:nth-child(even) { background:#f8f8fb; }
+    .resumen span:first-child { color:var(--txt2); }
+    .resumen span:last-child { font-weight:800; text-align:right; }
+    .resumen .bad { color:#b91c1c; } .resumen .warn { color:#b45309; } .resumen .ok { color:#15803d; }
+    textarea.motivo { width:100%; min-height:84px; padding:9px 10px; border:1.5px solid var(--border2); border-radius:var(--radius-s);
+      font-family:inherit; font-size:15px; resize:vertical; }
+    textarea.motivo:focus { outline:none; border-color:var(--red); }
+    .btn-danger { border:none; background:#dc2626; color:#fff; border-radius:var(--radius-s); padding:10px 18px;
+      font-family:inherit; font-size:14px; font-weight:700; cursor:pointer; white-space:nowrap; }
+    .btn-danger:disabled { opacity:.5; cursor:default; }
+
+    /* Combo buscable de conductores */
+    .combo { position:relative; }
+    .combo-drop { display:none; position:absolute; left:0; right:0; top:calc(100% + 4px); z-index:50; background:var(--white);
+      border:1px solid var(--border2); border-radius:var(--radius-s); box-shadow:0 8px 24px rgba(0,0,0,.12);
+      max-height:240px; overflow:auto; }
+    .combo.open .combo-drop { display:block; }
+    .combo-opt { padding:8px 10px; font-size:13.5px; cursor:pointer; }
+    .combo-opt:hover, .combo-opt.act { background:#eef2ff; }
+    .combo-opt small { color:var(--txt3); margin-left:6px; }
+    .combo-vacio { padding:10px; font-size:12.5px; color:var(--txt3); }
+
+    .acciones { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .acciones .meta { margin-right:auto; font-size:12px; color:var(--txt3); }
+    .btn { border:1px solid var(--border2); background:var(--white); color:var(--txt); border-radius:var(--radius-s);
+      padding:9px 14px; font-family:inherit; font-size:13px; font-weight:700; cursor:pointer; white-space:nowrap; }
+    .btn:hover { border-color:var(--primary); color:var(--primary); }
+    .btn.danger:hover { border-color:var(--red); color:var(--red); }
+    .btn-primary { border:none; background:var(--primary); color:#fff; border-radius:var(--radius-s);
+      padding:10px 18px; font-family:inherit; font-size:14px; font-weight:700; cursor:pointer; white-space:nowrap; }
+    .btn-primary:disabled { opacity:.5; cursor:default; }
+
+    /* Modal */
+    .modal-bg { position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center;
+      justify-content:center; z-index:1000; padding:16px; }
+    .modal-bg.hidden { display:none; }
+    .modal { background:var(--white); border-radius:14px; width:100%; max-width:420px; padding:22px;
+      box-shadow:0 12px 40px rgba(0,0,0,.25); }
+    .modal h3 { font-size:17px; font-weight:800; margin-bottom:4px; }
+    .modal .modal-sub { font-size:12.5px; color:var(--txt2); margin-bottom:16px; line-height:1.5; }
+    .modal-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:16px; }
+
+    .toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#111; color:#fff;
+      border-radius:var(--radius-s); padding:11px 20px; font-size:13px; font-weight:600; z-index:2000;
+      box-shadow:0 4px 16px rgba(0,0,0,.25); transition:opacity .25s; max-width:90vw; }
+    .toast.error { background:#b91c1c; }
+    .toast.hidden { opacity:0; pointer-events:none; }
+
+    /* Móvil: lista y formulario se alternan; sin tapar el menú de la shell */
+    @media (max-width:760px) {
+      body { padding:16px; padding-top:64px; }
+      input, select, textarea, .buscar, .fecha-nav input[type=date] { font-size:16px !important; }   /* evita el auto-zoom de iOS */
+      .kpis { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .kpi-val { font-size:18px; }
+      .layout { grid-template-columns:minmax(0,1fr); }
+      .lista-card { position:static; max-height:none; }
+      body.ver-form .lista-card { display:none; }
+      body:not(.ver-form) #formCard { display:none; }
+      .volver { display:inline-flex; }
+      .campos { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .campo.ancho { grid-column:1 / -1; }
+      .acciones .meta { width:100%; order:3; }
+      .acciones .btn-primary { flex:1; }
+      .modal-bg { align-items:flex-start; padding-top:72px; overflow:auto; }   /* libre el menú de la shell */
+      .gasto-row { grid-template-columns:1fr 130px; }
+      .tramo { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .cond-tab { max-width:100%; }
+      .gasto-row .g-nota, .gasto-row input.nota { grid-column:1 / -1; }
+      .gasto-row { padding:5px 0; row-gap:6px; }
+      .gasto-row input.nota { padding:6px 10px; }
+    }
+
+    /* Tirilla de liquidación: fuera de la pantalla (así se puede medir) y sola al imprimir */
+    #tirilla { position:absolute; left:-10000px; top:0; background:#fff; color:#000; }
+    #tirilla .copia { font-family:'Courier New', ui-monospace, monospace; font-size:12px; line-height:1.35; padding:3mm 0 5mm; }
+    #tirilla.papel-80 .copia { width:72mm; margin:0 4mm; }
+    #tirilla.papel-58 .copia { width:48mm; margin:0 5mm; font-size:10.5px; }
+    .t-centro { text-align:center; }
+    .t-titulo { font-weight:800; font-size:1.1em; }
+    .t-bus { font-weight:800; font-size:1.1em; }
+    .t-anulada { font-weight:800; font-size:1.2em; margin:4px 0; }
+    .t-linea { border-top:1px dashed #000; margin:5px 0; }
+    .t-sec { text-align:center; font-weight:800; margin:6px 0 2px; }
+    .t-fila { display:flex; justify-content:space-between; gap:6px; }
+    .t-fila span:first-child { white-space:nowrap; }
+    .t-fila span:last-child { text-align:right; overflow-wrap:anywhere; }
+    .t-fila.fuerte { font-weight:800; }
+    .t-fila.grande { font-weight:800; font-size:1.2em; }
+    .t-nota { font-size:.9em; padding-left:8px; }
+    .t-firma { margin-top:30px; border-top:1px solid #000; text-align:center; font-size:.9em; padding-top:2px; }
+    .t-copia { margin-top:8px; font-weight:800; }
+    #tirilla .fuerte { font-weight:800; }
+    @media print {
+      body { padding:0 !important; background:#fff !important; }
+      body > *:not(#tirilla) { display:none !important; }
+      #tirilla { position:static; }
+      #tirilla .copia { break-after:page; page-break-after:always; }
+      #tirilla .copia:last-child { break-after:auto; page-break-after:auto; }
+    }
+  </style>
+  <style id="estiloPagina"></style>
+</head>
+<body>
+  <div class="page-header">
+    <div>
+      <div class="page-title">Recaudo diario</div>
+      <div class="page-sub">Liquidación de lo que entrega cada conductor. Conductor, ruta, viajes y registradora vienen del despacho del día.</div>
+      <div class="chips">
+        <div class="tarifas-chip" id="tarifasChip">Tarifas: —</div>
+        <button class="chip-btn" id="btnTiposGasto" onclick="abrirTiposGasto()" hidden>Tipos de gasto</button>
+        <label class="chip-papel" title="Ancho del papel de la impresora de tirillas en este computador">Tirilla
+          <select id="papel" onchange="cambiarPapel(this.value)"><option value="80">80 mm</option><option value="58">58 mm</option></select>
+        </label>
+      </div>
+    </div>
+    <div class="fecha-nav">
+      <button class="nav-btn" onclick="moverDia(-1)" title="Día anterior">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <input type="date" id="fecha" onchange="cambiarFecha(this.value)" />
+      <button class="nav-btn" id="btnSig" onclick="moverDia(1)" title="Día siguiente">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi"><div class="kpi-label">Producido</div><div class="kpi-val" id="kProd">—</div></div>
+    <div class="kpi"><div class="kpi-label">Gastos</div><div class="kpi-val" id="kGastos">—</div></div>
+    <div class="kpi"><div class="kpi-label">Recaudado</div><div class="kpi-val" id="kRec">—</div></div>
+    <div class="kpi"><div class="kpi-label">Diferencia</div><div class="kpi-val" id="kDif">—</div></div>
+    <div class="kpi"><div class="kpi-label">Buses liquidados</div><div class="kpi-val" id="kBuses">—</div></div>
+  </div>
+
+  <div id="avisoDia"></div>
+
+  <div class="layout">
+    <div class="card lista-card">
+      <input class="buscar" id="buscar" placeholder="Buscar bus o placa…" oninput="q = this.value.trim().toLowerCase(); renderLista()" autocomplete="off" />
+      <div class="filtros" id="filtros"></div>
+      <div class="buses-scroll" id="lista"><div class="vacio">Cargando…</div></div>
+    </div>
+
+    <div class="card" id="formCard">
+      <div class="vacio">
+        <svg width="44" height="44" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        <div>Selecciona un bus para liquidar.<br>Los datos del despacho se llenan solos.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: editar tarifas (solo Administrador) -->
+  <div class="modal-bg hidden" id="modalTarifas">
+    <div class="modal">
+      <h3>Tarifas del pasaje</h3>
+      <div class="modal-sub">Se aplican a las liquidaciones nuevas. Las ya guardadas conservan la tarifa con la que se liquidaron.</div>
+      <div class="campos" style="grid-template-columns:1fr 1fr">
+        <div class="campo"><label>Buses</label><input id="tarA" inputmode="numeric" oninput="formatearDinero(this)" /></div>
+        <div class="campo"><label>Micros</label><input id="tarB" inputmode="numeric" oninput="formatearDinero(this)" /></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" onclick="cerrarModal('modalTarifas')">Cancelar</button>
+        <button class="btn-primary" onclick="guardarTarifas()">Guardar tarifas</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: confirmar liquidación (una vez guardada no se modifica) -->
+  <div class="modal-bg hidden" id="modalConfirmar">
+    <div class="modal">
+      <h3 id="confTitulo">Confirmar liquidación</h3>
+      <div class="modal-sub">Revisa los valores. <b>Una vez guardada, la liquidación no se puede modificar ni eliminar</b>; solo el administrador puede anularla.</div>
+      <div class="resumen" id="confResumen"></div>
+      <div class="modal-actions">
+        <button class="btn" onclick="cerrarModal('modalConfirmar')">Revisar</button>
+        <button class="btn-primary" id="btnConfirmar" onclick="confirmarGuardar()">Confirmar y guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: anular liquidación (solo Administrador) -->
+  <div class="modal-bg hidden" id="modalAnular">
+    <div class="modal">
+      <h3>Anular liquidación</h3>
+      <div class="modal-sub" id="anularSub"></div>
+      <div class="campo"><label>Motivo de la anulación</label>
+        <textarea class="motivo" id="anularMotivo" maxlength="500" placeholder="Ej: el recaudo se digitó mal, el conductor entregó $1.050.000"></textarea></div>
+      <div class="modal-actions">
+        <button class="btn" onclick="cerrarModal('modalAnular')">Cancelar</button>
+        <button class="btn-danger" id="btnAnular" onclick="confirmarAnular()">Anular liquidación</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: tipos de gasto (solo Administrador) -->
+  <div class="modal-bg hidden" id="modalTipos">
+    <div class="modal">
+      <h3>Tipos de gasto</h3>
+      <div class="modal-sub">Los gastos que el conductor puede reportar al liquidar. Desactivar o renombrar un tipo no cambia las liquidaciones que ya lo usaron.</div>
+      <div id="listaTipos"></div>
+      <div class="nuevo-tipo">
+        <input id="nuevoTipo" maxlength="60" placeholder="Nuevo gasto (ej: Peajes)" onkeydown="if (event.key === 'Enter') crearTipo()" />
+        <button class="btn-primary" onclick="crearTipo()">Agregar</button>
+      </div>
+      <div class="modal-actions"><button class="btn" onclick="cerrarModal('modalTipos')">Cerrar</button></div>
+    </div>
+  </div>
+
+  <div class="toast hidden" id="toast"></div>
+
+  <!-- Tirilla que se imprime al liquidar (dos copias) -->
+  <div id="tirilla" aria-hidden="true"></div>
+
+<script>
+  const API = (window.location.port === '3030') ? 'http://localhost:8001' : window.location.origin;
+  const CU = (() => { try { return JSON.parse(localStorage.getItem('currentUser') || '{}'); } catch (_) { return {}; } })();
+  const ES_ADMIN = CU.rol === 'Administrador';
+  const GRUPOS = { A: 'Buses', B: 'Micros' };
+  const TIPO   = { A: 'Bus', B: 'Micro' };
+
+  async function apiFetch(path, opts = {}) {
+    const token = localStorage.getItem('authToken');
+    const res = await fetch(API + path, {
+      ...opts,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        ...(opts.headers || {}),
+      },
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error || 'Error del servidor');
+    return json;
+  }
+
+  /* Fecha calendario en Colombia (no UTC: toISOString corre el día después de las 7pm) */
+  function hoyBogota() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date()); }
+  function shiftIso(iso, delta) {
+    const d = new Date(iso + 'T12:00:00Z');
+    d.setUTCDate(d.getUTCDate() + delta);
+    return d.toISOString().slice(0, 10);
+  }
+
+  function esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+  }
+  function fmtNum(n)   { return Number(n).toLocaleString('es-CO'); }
+  function fmtMoney(n) { return (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString('es-CO'); }
+  /* Entero >= 0 a partir del texto del input (ignora puntos de miles); vacío → null */
+  function leerEntero(v) {
+    const limpio = String(v ?? '').replace(/\D/g, '');
+    return limpio === '' ? null : parseInt(limpio, 10);
+  }
+  function formatearDinero(inp) {
+    const n = leerEntero(inp.value);
+    inp.value = n == null ? '' : fmtNum(n);
+  }
+
+  /* ── Estado ── */
+  let D = null;            // respuesta de /api/recaudo/dia
+  let fecha = hoyBogota();
+  let selId = null;        // bus seleccionado
+  let form = null;         // liquidación en edición
+  let dirty = false;
+  let filtro = null;       // null = elegir según el día (Pendientes si hay)
+  let q = '';
+
+  /* Ancho del papel de la impresora de tirillas: preferencia de cada computador */
+  const PAPEL_KEY = 'recaudo.papelTirilla';
+  let papel = (() => { try { return localStorage.getItem(PAPEL_KEY) === '58' ? '58' : '80'; } catch (_) { return '80'; } })();
+  function cambiarPapel(v) {
+    papel = v === '58' ? '58' : '80';
+    try { localStorage.setItem(PAPEL_KEY, papel); } catch (_) {}
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const inp = document.getElementById('fecha');
+    inp.value = fecha;
+    inp.max = hoyBogota();
+    document.getElementById('papel').value = papel;
+    cargar();
+  });
+  window.addEventListener('message', e => { if (e.data?.type === 'VIEW_SHOWN' && !dirty) cargar(); });
+  window.addEventListener('beforeunload', e => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
+  // Al corregir un campo se le quita la marca roja; las lecturas (final y relevos) las marca recalcular().
+  ['input', 'change'].forEach(tipo => document.addEventListener(tipo, e => {
+    if (e.target.id !== 'fRegFin' && !String(e.target.id).startsWith('fRelevo-')) e.target.classList?.remove('err');
+  }));
+
+  async function cargar() {
+    try {
+      D = await apiFetch(`/api/recaudo/dia?fecha=${fecha}`);
+    } catch (e) {
+      document.getElementById('lista').innerHTML = `<div class="vacio">${esc(e.message)}</div>`;
+      return;
+    }
+    document.getElementById('fecha').max = D.hoy;
+    document.getElementById('btnSig').disabled = fecha >= D.hoy;
+    if (!filtro) filtro = D.buses.some(b => estadoBus(b)[2] === 'pendientes') ? 'pendientes' : 'todos';
+    renderTarifas();
+    renderKpis();
+    renderAvisoDia();
+    renderLista();
+    if (selId && D.buses.some(b => b.id === selId)) seleccionar(selId, true);
+    else { selId = null; form = null; renderVacio(); }
+  }
+
+  function confirmarDescarte() {
+    return !dirty || confirm('Hay cambios sin guardar en esta liquidación. ¿Descartarlos?');
+  }
+  function cambiarFecha(v) {
+    if (!v || v === fecha) return;
+    if (!confirmarDescarte()) { document.getElementById('fecha').value = fecha; return; }
+    if (v > hoyBogota()) v = hoyBogota();
+    fecha = v; dirty = false; selId = null; filtro = null;
+    document.getElementById('fecha').value = fecha;
+    document.body.classList.remove('ver-form');
+    cargar();
+  }
+  function moverDia(delta) { cambiarFecha(shiftIso(fecha, delta)); }
+
+  /* ── Helpers de datos ── */
+  function bus(id)        { return D.buses.find(b => b.id === id); }
+  function conductor(id)  { return D.conductores.find(c => c.id === id); }
+  function ruta(id)       { return D.rutas.find(r => r.id === id); }
+  function tarifaDe(b)    { return b.recaudo ? b.recaudo.tarifa : (D.tarifas[b.grupo] || 0); }
+  function noTrabajo(b)   { return !b.recaudo && (b.estado === 'taller' || b.estado === 'descanso'); }
+
+  /* Estado del bus en la lista: [clase de la pill, texto, clave del filtro] */
+  function estadoBus(b) {
+    if (b.recaudo) {
+      const dif = b.recaudo.diferencia;
+      if (dif < 0) return ['bad', 'Faltante ' + fmtMoney(-dif), 'liquidados'];
+      if (dif > 0) return ['warn', 'Sobrante ' + fmtMoney(dif), 'liquidados'];
+      return ['on', 'Liquidado', 'liquidados'];
+    }
+    if (b.estado === 'taller')   return ['off', 'Taller', 'notrabajo'];
+    if (b.estado === 'descanso') return ['off', 'Descanso', 'notrabajo'];
+    if (!b.despacho_id && !b.anulados.length) return ['off', 'Sin despacho', 'sindespacho'];
+    return ['pend', b.anulados.length ? 'Por reliquidar' : 'Pendiente', 'pendientes'];
+  }
+
+  /* ── Encabezado ── */
+  function renderTarifas() {
+    const t = D.tarifas;
+    document.getElementById('tarifasChip').innerHTML =
+      `Tarifas: Bus ${fmtMoney(t.A || 0)} · Micro ${fmtMoney(t.B || 0)}` +
+      (ES_ADMIN ? ` <button onclick="abrirTarifas()">editar</button>` : '');
+    document.getElementById('btnTiposGasto').hidden = !ES_ADMIN;
+  }
+
+  function renderKpis() {
+    const liq = D.buses.filter(b => b.recaudo);
+    const sum = k => liq.reduce((s, b) => s + b.recaudo[k], 0);
+    const trabajaron = D.buses.filter(b => b.recaudo || b.estado === 'trabajando').length;
+    const dif = sum('diferencia');
+    document.getElementById('kProd').textContent = fmtMoney(sum('producido'));
+    document.getElementById('kGastos').textContent = fmtMoney(sum('total_gastos'));
+    document.getElementById('kRec').textContent = fmtMoney(sum('recaudado'));
+    const kDif = document.getElementById('kDif');
+    kDif.textContent = liq.length ? fmtMoney(dif) : '—';
+    kDif.className = 'kpi-val ' + (!liq.length ? '' : dif < 0 ? 'bad' : dif > 0 ? 'warn' : 'ok');
+    const kB = document.getElementById('kBuses');
+    kB.textContent = `${liq.length} / ${trabajaron}`;
+    kB.className = 'kpi-val ' + (trabajaron && liq.length >= trabajaron ? 'ok' : '');
+  }
+
+  function renderAvisoDia() {
+    const el = document.getElementById('avisoDia');
+    el.innerHTML = D.editable ? '' : `<div class="aviso">${esc(D.motivo)} Puedes consultar las liquidaciones, pero no modificarlas.</div>`;
+  }
+
+  /* ── Lista de buses ── */
+  function renderLista() {
+    const conteo = { todos: 0, pendientes: 0, liquidados: 0, sindespacho: 0, notrabajo: 0 };
+    D.buses.forEach(b => { conteo.todos++; conteo[estadoBus(b)[2]]++; });
+    const opciones = [['todos', 'Todos'], ['pendientes', 'Pendientes'], ['liquidados', 'Liquidados'],
+                      ['sindespacho', 'Sin despacho'], ['notrabajo', 'No trabajó']];
+    document.getElementById('filtros').innerHTML = opciones
+      .filter(([k]) => k === 'todos' || conteo[k] > 0 || k === filtro)
+      .map(([k, t]) => `<button class="filtro ${filtro === k && !q ? 'on' : ''}" onclick="filtrar('${k}')">${t}<span class="n">${conteo[k]}</span></button>`)
+      .join('');
+
+    // Al buscar se recorre toda la flota, sin importar el filtro: primero el
+    // número exacto, luego los números que empiezan así y al final las placas.
+    const rango = b => {
+      const num = String(b.numero);
+      if (num === q) return 0;
+      if (num.startsWith(q)) return 1;
+      return (b.placa || '').toLowerCase().replace(/[^a-z0-9]/g, '').includes(q.replace(/[^a-z0-9]/g, '')) ? 2 : -1;
+    };
+    const visibles = q
+      ? D.buses.filter(b => rango(b) >= 0).sort((x, y) => rango(x) - rango(y) || x.numero - y.numero)
+      : D.buses.filter(b => filtro === 'todos' || estadoBus(b)[2] === filtro);
+    if (!visibles.length) {
+      document.getElementById('lista').innerHTML = `<div class="vacio" style="padding:30px 10px">No hay buses con ese filtro.</div>`;
+      return;
+    }
+    const item = b => {
+      const [cls, txt] = estadoBus(b);
+      const condId = b.recaudo ? b.recaudo.conductores[0]?.conductor_id : b.conductor_id;
+      const extra = b.recaudo && b.recaudo.conductores.length > 1 ? ` +${b.recaudo.conductores.length - 1}` : '';
+      const cond = condId ? (conductor(condId)?.nombre || '') + extra : '';
+      return `<button class="bus-item ${b.id === selId ? 'sel' : ''}" onclick="elegir(${b.id})">
+        <div class="bus-num">${b.numero}</div>
+        <div class="bus-info">
+          <div class="bus-placa">${esc(b.placa || '')}</div>
+          <div class="bus-cond">${esc(cond) || '&nbsp;'}</div>
+        </div>
+        <span class="pill ${cls}">${txt}</span>
+      </button>`;
+    };
+    // Con búsqueda: lista plana en orden de relevancia. Sin búsqueda: por grupo.
+    let html = '';
+    if (q) {
+      html = `<div class="grupo-lbl">Resultados · ${visibles.length}</div>` + visibles.map(item).join('');
+    } else {
+      ['A', 'B'].forEach(g => {
+        const delGrupo = visibles.filter(b => b.grupo === g);
+        if (!delGrupo.length) return;
+        html += `<div class="grupo-lbl">${GRUPOS[g]} · ${delGrupo.length}</div>` + delGrupo.map(item).join('');
+      });
+    }
+    document.getElementById('lista').innerHTML = html;
+  }
+
+  function filtrar(k) {
+    filtro = k; q = '';
+    document.getElementById('buscar').value = '';
+    renderLista();
+  }
+
+  function elegir(id) {
+    if (id !== selId) {
+      if (!confirmarDescarte()) return;
+      seleccionar(id);
+    }
+    document.body.classList.add('ver-form');
+    // En celular la lista se oculta: llevar el formulario arriba, sin tapar el menú de la shell.
+    if (window.matchMedia('(max-width:760px)').matches) {
+      window.scrollTo({ top: Math.max(0, document.getElementById('formCard').offsetTop - 72) });
+    }
+  }
+
+  function volverLista() {
+    if (!confirmarDescarte()) return;
+    dirty = false;
+    document.body.classList.remove('ver-form');
+    seleccionar(selId, true);
+    window.scrollTo({ top: Math.max(0, document.querySelector('.lista-card').offsetTop - 72) });
+  }
+
+  /* ── Formulario ── */
+  function renderVacio() {
+    document.getElementById('formCard').innerHTML = `<div class="vacio">
+      <svg width="44" height="44" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+      <div>Selecciona un bus para liquidar.<br>Los datos del despacho se llenan solos.</div></div>`;
+  }
+
+  /* Arma la liquidación en edición: la guardada, o una nueva con los datos del despacho.
+     Cada conductor lleva sus propios gastos (relevo: hasta 3 conductores por bus). */
+  function nuevoConductor(d = {}) {
+    return { conductor_id: d.conductor_id ?? null, ruta_id: d.ruta_id ?? null, viajes: d.viajes ?? null,
+             registradora_fin: null, recaudado: null, observacion: '', gastos: {} };
+  }
+
+  function armarForm(b) {
+    if (b.recaudo) {
+      return {
+        registradora_inicio: b.recaudo.registradora_inicio,
+        registradora_fin:    b.recaudo.registradora_fin,
+        conductores: b.recaudo.conductores.map(c => ({
+          conductor_id: c.conductor_id, ruta_id: c.ruta_id, viajes: c.viajes,
+          registradora_fin: c.registradora_fin, recaudado: c.recaudado, observacion: c.observacion || '',
+          gastos: Object.fromEntries((b.recaudo.gastos || []).filter(g => g.orden_conductor === c.orden).map(g =>
+            [g.tipo_gasto_id, { valor: g.valor, observacion: g.observacion || '' }])),
+        })),
+      };
+    }
+    return {
+      registradora_inicio: b.registradora_inicio ?? b.ultima_reg_fin ?? null,
+      registradora_fin:    b.registradora_fin ?? null,
+      conductores: [nuevoConductor({ conductor_id: b.conductor_id, ruta_id: b.ruta_id, viajes: b.viajes_realizados })],
+    };
+  }
+
+  let tab = 0;   // pestaña (conductor) visible
+
+  function seleccionar(id, conservarEdicion = false) {
+    const b = bus(id);
+    if (!b) return;
+    const mismo = selId === id;
+    selId = id;
+    if (!(conservarEdicion && mismo && dirty)) { form = armarForm(b); dirty = false; tab = 0; }
+    tab = Math.min(tab, form.conductores.length - 1);
+    renderLista();
+    renderForm();
+  }
+
+  function renderForm() {
+    const b = bus(selId);
+    const card = document.getElementById('formCard');
+    const [cls, txt] = estadoBus(b);
+    const volver = `<button class="btn volver" onclick="volverLista()">← Lista</button>`;
+
+    // Origen de los datos
+    let desp;
+    if (b.despacho_id) {
+      const partes = [];
+      if (b.ruta_id) partes.push(esc(ruta(b.ruta_id)?.nombre || ''));
+      if (b.conductor_id) partes.push(esc(conductor(b.conductor_id)?.nombre || ''));
+      if (b.viajes_realizados != null) partes.push(`${b.viajes_realizados} viajes`);
+      desp = 'Despacho: ' + (partes.join(' · ') || 'sin datos');
+    } else {
+      desp = 'Este bus no tiene despacho ese día: digita los datos y al guardar se crea.';
+    }
+
+    const head = `<div class="form-head">
+      <div>
+        <div class="form-bus">${TIPO[b.grupo] || 'Bus'} ${b.numero}<small>${esc(b.placa || '')}</small></div>
+        <div class="form-desp">${desp}</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">${volver}<span class="pill ${cls}"><span class="dot"></span>${txt}</span></div>
+    </div>`;
+
+    if (noTrabajo(b)) {
+      card.innerHTML = head + `<div class="aviso">El despacho marca este bus en <b>${b.estado}</b>, así que no se liquida.
+        Si en realidad trabajó, primero hay que corregir su estado en el despacho.</div>`;
+      return;
+    }
+
+    const cerrada = !!b.recaudo;   // una liquidación guardada no se modifica
+    const editable = !cerrada && D.editable;
+    const ro = editable ? '' : 'disabled';
+    const req = editable ? '<span class="req">*</span>' : '';
+    const valEnt = v => v == null ? '' : v;
+    const n = form.conductores.length;
+
+    // Si ya entró en un cierre de caja, ni siquiera se puede anular hasta que el admin reabra esa caja.
+    const enCaja = cerrada && b.recaudo.cierre_id;
+    const comoCorregir = enCaja
+      ? `Ya está en la <b>caja cerrada N° ${String(b.recaudo.cierre_id).padStart(6, '0')}</b>: para anularla, ${ES_ADMIN ? 'primero reabre esa caja en Recaudo › Cierre de caja' : 'el administrador debe reabrir esa caja'}.`
+      : (ES_ADMIN ? 'Si tiene un error, anúlala y vuelve a liquidar.' : 'Si tiene un error, pide al administrador que la anule.');
+    const avisoCerrada = cerrada ? `<div class="aviso info">Liquidación guardada el ${fmtHora(b.recaudo.created_at)}${b.recaudo.usuario_nombre ? ' por <b>' + esc(b.recaudo.usuario_nombre) + '</b>' : ''}.
+        No se puede modificar. ${comoCorregir}</div>` : '';
+    const notaOblig = editable
+      ? `<div class="oblig-nota">Los campos con <span class="req">*</span> son obligatorios. Los gastos son opcionales.</div>` : '';
+
+    // Pestañas: se muestran si hay relevo o si todavía se puede agregar uno
+    const pestanas = (n > 1 || editable) ? `<div class="cond-tabs">
+        ${form.conductores.map((c, i) => `<button class="cond-tab ${i === tab ? 'on' : ''}" id="tab-${i}" onclick="verTab(${i})">
+          ${i + 1} · <span class="nom" id="tabNom-${i}">${esc(conductor(c.conductor_id)?.nombre || 'Sin conductor')}</span></button>`).join('')}
+        ${editable && n < 3 ? `<button class="cond-tab-add" onclick="agregarRelevo()">+ Agregar relevo</button>` : ''}
+      </div>` : '';
+    const ayudaRelevo = editable && n > 1
+      ? `<div class="relevo-ayuda">Relevo: cada conductor liquida su parte. Escribe la <b>registradora al relevo</b> (la lectura cuando entregó el bus);
+         el último conductor termina en la registradora final del bus. Reparte también los viajes y los gastos.</div>` : '';
+
+    card.innerHTML = head + avisoCerrada + notaOblig + `
+      <div class="sec-lbl">Registradora del día</div>
+      <div class="campos">
+        <div class="campo"><label>Reg. inicial${req}</label>
+          <input id="fRegIni" inputmode="numeric" value="${valEnt(form.registradora_inicio)}" ${ro}
+                 oninput="setHeader('registradora_inicio', this)" /></div>
+        <div class="campo"><label>Reg. final${req}</label>
+          <input id="fRegFin" inputmode="numeric" value="${valEnt(form.registradora_fin)}" ${ro}
+                 oninput="setHeader('registradora_fin', this)" /></div>
+        <div class="campo"><label>Pas. movilizados</label><div class="calc" id="cPax">—</div></div>
+        <div class="campo"><label>Tarifa ${TIPO[b.grupo] ? TIPO[b.grupo].toLowerCase() : ''}</label><div class="calc">${fmtMoney(tarifaDe(b))}</div></div>
+        <div class="campo"><label>Producido${n > 1 ? ' del bus' : ''}</label><div class="calc grande" id="cProd">—</div></div>
+      </div>
+      <div class="nota" id="notaReg"></div>
+
+      <div class="sec-lbl">${n > 1 ? 'Conductores (relevo)' : 'Conductor'}</div>
+      ${pestanas}${ayudaRelevo}
+      ${form.conductores.map((c, i) => htmlPanel(b, i, { editable, ro, req, valEnt })).join('')}
+      <div id="resumenBus"></div>
+
+      <div class="acciones">
+        <div class="meta"></div>
+        ${cerrada ? `<button class="btn" onclick="imprimirTirilla(${b.recaudo.id}, true)">Imprimir tirilla${n > 1 ? 's' : ''}</button>` : ''}
+        ${cerrada && ES_ADMIN && !enCaja ? `<button class="btn danger" onclick="abrirAnular()">Anular liquidación</button>` : ''}
+        ${editable ? `<button class="btn-primary" id="btnGuardar" onclick="guardar()">Guardar liquidación</button>` : ''}
+      </div>
+      ${htmlAnuladas(b)}`;
+    recalcular();
+  }
+
+  /* Panel de un conductor: datos, su tramo de registradora (si hay relevo), sus gastos y su entrega */
+  function htmlPanel(b, i, { editable, ro, req, valEnt }) {
+    const c = form.conductores[i];
+    const n = form.conductores.length;
+    const ultimo = i === n - 1;
+    const rutasGrupo = D.rutas.filter(r => (r.activa && r.grupo === b.grupo) || r.id === c.ruta_id);
+    const tramo = n > 1 ? `<div class="tramo">
+        <div class="campo"><label>Arranca en</label><div class="calc" id="cIni-${i}">—</div></div>
+        ${ultimo
+          ? `<div class="campo"><label>Termina en (reg. final)</label><div class="calc" id="cFin-${i}">—</div></div>`
+          : `<div class="campo"><label>Reg. al relevo${req}</label>
+               <input id="fRelevo-${i}" inputmode="numeric" value="${valEnt(c.registradora_fin)}" ${ro}
+                      oninput="setCond(${i}, 'registradora_fin', leerEntero(this.value))" /></div>`}
+        <div class="campo"><label>Pasajeros</label><div class="calc" id="cPaxC-${i}">—</div></div>
+        <div class="campo"><label>Producido</label><div class="calc" id="cProdC-${i}">—</div></div>
+      </div>` : '';
+    return `<div class="cond-panel" id="panel-${i}" ${i === tab ? '' : 'hidden'}>
+      <div class="cond-box">
+        <div class="campos" style="margin-bottom:0">
+          <div class="campo ancho"><label>Nombre${req}</label>
+            <div class="combo" id="combo-${i}">
+              <input class="combo-input" id="fCond-${i}" placeholder="Buscar conductor…" autocomplete="off" ${ro}
+                     value="${esc(c.conductor_id ? conductor(c.conductor_id)?.nombre || '' : '')}"
+                     onfocus="comboAbrir(${i})" oninput="comboFiltrar(${i})" onkeydown="comboTecla(event, ${i})" onblur="comboCerrar(${i})" />
+              <div class="combo-drop" id="comboDrop-${i}"></div>
+            </div></div>
+          <div class="campo"><label>Ruta${req}</label>
+            <select id="fRuta-${i}" ${ro} onchange="setCond(${i}, 'ruta_id', this.value ? Number(this.value) : null)">
+              <option value="">—</option>
+              ${rutasGrupo.map(r => `<option value="${r.id}" ${r.id === c.ruta_id ? 'selected' : ''}>${esc(r.nombre)}</option>`).join('')}
+            </select></div>
+          <div class="campo"><label>Viajes${req}</label>
+            <input id="fViajes-${i}" inputmode="numeric" value="${valEnt(c.viajes)}" ${ro}
+                   oninput="setCond(${i}, 'viajes', leerEntero(this.value))" /></div>
+        </div>
+        ${tramo}
+      </div>
+
+      <div class="sec-lbl">Gastos ${n > 1 ? 'de este conductor' : 'del conductor'} ${editable ? '<span class="opcional">(opcional)</span>' : ''}</div>
+      <div class="gastos-box">${htmlGastos(b, i, !editable)}</div>
+
+      <div class="sec-lbl">Entrega${n > 1 ? ' de este conductor' : ''}</div>
+      <div class="campos">
+        <div class="campo"><label>Producido</label><div class="calc" id="cProdE-${i}">—</div></div>
+        <div class="campo"><label>− Gastos</label><div class="calc" id="cGastosE-${i}">—</div></div>
+        <div class="campo"><label>Por entregar</label><div class="calc grande" id="cNeto-${i}">—</div></div>
+        <div class="campo"><label>Recaudo entregado${req}</label>
+          <input id="fRec-${i}" inputmode="numeric" placeholder="$0" value="${c.recaudado == null ? '' : fmtNum(c.recaudado)}" ${ro}
+                 oninput="formatearDinero(this); setCond(${i}, 'recaudado', leerEntero(this.value))" /></div>
+        <div class="campo"><label>Diferencia</label><div class="calc" id="cDif-${i}">—</div></div>
+        <div class="campo ancho"><label>Observación</label>
+          <input id="fObs-${i}" maxlength="500" value="${esc(c.observacion || '')}" ${ro} placeholder="Opcional"
+                 oninput="setCond(${i}, 'observacion', this.value)" /></div>
+      </div>
+      <div class="nota cambio" id="notaGastos-${i}"></div>
+      ${editable && i > 0 && ultimo ? `<button class="btn danger quitar-relevo" onclick="quitarRelevo(${i})">Quitar este relevo</button>` : ''}
+      ${!editable && b.recaudo && n > 1 ? `<button class="btn" onclick="imprimirTirilla(${b.recaudo.id}, true, ${i + 1})">Imprimir tirilla de este conductor</button>` : ''}
+    </div>`;
+  }
+
+  /* Gastos: una fila por tipo activo para digitarlos rápido; si ya está guardada,
+     los gastos tal como se liquidaron (con el nombre que tenían ese día). */
+  function htmlGastos(b, i, soloLectura) {
+    if (b.recaudo) {
+      const lista = b.recaudo.gastos.filter(g => g.orden_conductor === i + 1);
+      if (!lista.length) return `<div class="sin-gastos">Sin gastos reportados.</div>`;
+      return lista.map(g => `<div class="gasto-row">
+          <div class="g-nombre">${esc(g.tipo_nombre)}</div>
+          <div class="g-valor">${fmtMoney(g.valor)}</div>
+          <div class="g-nota">${esc(g.observacion || '')}</div>
+        </div>`).join('') + `<div class="gasto-row total"><div class="g-nombre">Total gastos</div>
+          <div class="g-valor">${fmtMoney(lista.reduce((t, g) => t + g.valor, 0))}</div><div></div></div>`;
+    }
+    if (!D.tipos_gasto.length) {
+      return `<div class="sin-gastos">No hay tipos de gasto activos${ES_ADMIN ? ': agrégalos en "Tipos de gasto".' : '.'}</div>`;
+    }
+    const ro = soloLectura ? 'disabled' : '';
+    const gastos = form.conductores[i].gastos;
+    return D.tipos_gasto.map(t => {
+      const g = gastos[t.id] || {};
+      return `<div class="gasto-row">
+        <label for="g-${i}-${t.id}">${esc(t.nombre)}</label>
+        <input class="valor" id="g-${i}-${t.id}" inputmode="numeric" placeholder="$0" ${ro}
+               value="${g.valor ? fmtNum(g.valor) : ''}"
+               oninput="formatearDinero(this); setGasto(${i}, ${t.id}, 'valor', leerEntero(this.value))" />
+        <input class="nota" maxlength="200" placeholder="Nota (opcional)" ${ro} value="${esc(g.observacion || '')}"
+               oninput="setGasto(${i}, ${t.id}, 'observacion', this.value)" />
+      </div>`;
+    }).join('') + `<div class="gasto-row total"><div class="g-nombre">Total gastos</div>
+        <div class="g-valor" id="cGastos-${i}">$0</div><div></div></div>`;
+  }
+
+  function setGasto(i, tipoId, campo, valor) {
+    const gastos = form.conductores[i].gastos;
+    gastos[tipoId] = { ...(gastos[tipoId] || {}), [campo]: valor };
+    dirty = true;
+    recalcular();
+  }
+
+  /* Gastos con valor de un conductor (para calcular y enviar) */
+  function gastosDe(i) {
+    const gastos = form.conductores[i].gastos;
+    return D.tipos_gasto
+      .filter(t => (gastos[t.id]?.valor || 0) > 0)
+      .map(t => ({ orden_conductor: i + 1, tipo_gasto_id: t.id, nombre: t.nombre, valor: gastos[t.id].valor,
+                   observacion: (gastos[t.id].observacion || '').trim() }));
+  }
+  function gastosDelForm() { return form.conductores.flatMap((_, i) => gastosDe(i)); }
+
+  function setHeader(campo, inp) {
+    form[campo] = leerEntero(inp.value);
+    dirty = true;
+    recalcular();
+  }
+  function setCond(i, campo, valor) {
+    form.conductores[i][campo] = valor;
+    dirty = true;
+    recalcular();
+  }
+
+  /* ── Relevo: pestañas, agregar y quitar conductores ── */
+  function verTab(i) {
+    tab = i;
+    form.conductores.forEach((_, k) => {
+      document.getElementById(`panel-${k}`).hidden = k !== i;
+      document.getElementById(`tab-${k}`)?.classList.toggle('on', k === i);
+    });
+  }
+  function agregarRelevo() {
+    if (form.conductores.length >= 3) return;
+    const anterior = form.conductores[form.conductores.length - 1];
+    form.conductores.push(nuevoConductor({ ruta_id: anterior.ruta_id }));
+    tab = form.conductores.length - 1;
+    dirty = true;
+    renderForm();
+    toast('Relevo agregado: escribe la registradora al relevo del conductor anterior y reparte los viajes');
+  }
+  function quitarRelevo(i) {
+    if (i === 0 || i !== form.conductores.length - 1) return;
+    if (!confirm(`¿Quitar el conductor ${i + 1} de esta liquidación?`)) return;
+    form.conductores.splice(i, 1);
+    form.conductores[i - 1].registradora_fin = null;   // el anterior vuelve a terminar en la final del bus
+    tab = i - 1;
+    dirty = true;
+    renderForm();
+  }
+
+  /* Tramo de cada conductor: el 1 arranca en la lectura inicial del bus, cada relevo
+     arranca donde terminó el anterior y el último termina en la lectura final.
+     Si ya está guardada, los valores son los que calculó el servidor. */
+  function calcularTramos(b) {
+    if (b.recaudo) return b.recaudo.conductores;
+    const tarifa = tarifaDe(b);
+    let inicio = form.registradora_inicio;
+    return form.conductores.map((c, i) => {
+      const fin = i === form.conductores.length - 1 ? form.registradora_fin : c.registradora_fin;
+      const pasajeros = inicio != null && fin != null ? fin - inicio : null;
+      const producido = pasajeros != null && pasajeros >= 0 ? pasajeros * tarifa : null;
+      const total_gastos = gastosDe(i).reduce((t, g) => t + g.valor, 0);
+      const neto = producido != null ? producido - total_gastos : null;
+      const t = { registradora_inicio: inicio, registradora_fin: fin, pasajeros, producido, total_gastos, neto,
+                  recaudado: c.recaudado, diferencia: neto != null && c.recaudado != null ? c.recaudado - neto : null };
+      inicio = fin;
+      return t;
+    });
+  }
+
+  /* Pasajeros, producido, gastos y diferencia en vivo (el servidor los recalcula al guardar) */
+  function recalcular() {
+    const b = bus(selId);
+    if (!b || noTrabajo(b) || !document.getElementById('fRegIni')) return;
+    const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+    const ini = form.registradora_inicio, fin = form.registradora_fin;
+    const hayLecturas = ini != null && fin != null;
+    const valida = hayLecturas && fin >= ini;
+    const pax = valida ? fin - ini : null;
+
+    document.getElementById('fRegFin').classList.toggle('err', hayLecturas && !valida);
+    set('cPax', pax != null ? fmtNum(pax) : (hayLecturas ? 'Lectura inválida' : '—'));
+    set('cProd', pax != null ? fmtMoney(pax * tarifaDe(b)) : '—');
+
+    const tramos = calcularTramos(b);
+    tramos.forEach((t, i) => {
+      const ok = t.pasajeros != null && t.pasajeros >= 0;
+      set(`cIni-${i}`, t.registradora_inicio != null ? fmtNum(t.registradora_inicio) : '—');
+      set(`cFin-${i}`, t.registradora_fin != null ? fmtNum(t.registradora_fin) : '—');
+      set(`cPaxC-${i}`, ok ? fmtNum(t.pasajeros) : (t.pasajeros != null ? 'Lectura inválida' : '—'));
+      set(`cProdC-${i}`, t.producido != null ? fmtMoney(t.producido) : '—');
+      set(`cProdE-${i}`, t.producido != null ? fmtMoney(t.producido) : '—');
+      set(`cGastos-${i}`, fmtMoney(t.total_gastos));
+      set(`cGastosE-${i}`, fmtMoney(t.total_gastos));
+      set(`cNeto-${i}`, t.neto != null ? fmtMoney(t.neto) : '—');
+      set(`notaGastos-${i}`, t.neto != null && t.neto < 0 ? 'Los gastos superan el producido: la empresa le quedaría debiendo al conductor.' : '');
+      const rel = document.getElementById(`fRelevo-${i}`);
+      if (rel) rel.classList.toggle('err', t.pasajeros != null && (t.pasajeros < 0 || (fin != null && t.registradora_fin > fin)));
+      const cDif = document.getElementById(`cDif-${i}`);
+      if (cDif) {
+        if (t.diferencia != null) {
+          cDif.className = 'calc ' + (t.diferencia < 0 ? 'bad' : t.diferencia > 0 ? 'warn' : 'ok');
+          cDif.innerHTML = fmtMoney(t.diferencia) + `<span class="det">${t.diferencia < 0 ? 'Faltante' : t.diferencia > 0 ? 'Sobrante' : 'Cuadrado'}</span>`;
+        } else { cDif.className = 'calc'; cDif.textContent = '—'; }
+      }
+      set(`tabNom-${i}`, conductor(form.conductores[i].conductor_id)?.nombre || 'Sin conductor');
+    });
+
+    // Resumen del bus cuando hay relevo
+    const res = document.getElementById('resumenBus');
+    if (tramos.length > 1) {
+      const suma = k => tramos.every(t => t[k] != null) ? tramos.reduce((s, t) => s + t[k], 0) : null;
+      const m = v => v != null ? fmtMoney(v) : '—';
+      const clsDif = v => v == null ? '' : v < 0 ? 'bad' : v > 0 ? 'warn' : 'ok';
+      const fila = (nombre, t, cls = '') => `<tr class="${cls}"><td>${nombre}</td>
+          <td>${t.pasajeros != null && t.pasajeros >= 0 ? fmtNum(t.pasajeros) : '—'}</td><td>${m(t.producido)}</td>
+          <td>${m(t.total_gastos)}</td><td>${m(t.neto)}</td><td>${m(t.recaudado)}</td>
+          <td class="${clsDif(t.diferencia)}">${t.diferencia != null ? textoDif(t.diferencia) : '—'}</td></tr>`;
+      const total = { pasajeros: suma('pasajeros'), producido: suma('producido'), total_gastos: suma('total_gastos'),
+                      neto: suma('neto'), recaudado: suma('recaudado'), diferencia: suma('diferencia') };
+      res.innerHTML = `<div class="sec-lbl">Resumen del bus</div><div class="resumen-wrap"><table class="resumen-bus">
+          <thead><tr><th>Conductor</th><th>Pasajeros</th><th>Producido</th><th>Gastos</th><th>Por entregar</th><th>Entregó</th><th>Resultado</th></tr></thead>
+          <tbody>${tramos.map((t, i) => fila(`${i + 1} · ${esc(conductor(form.conductores[i].conductor_id)?.nombre || 'Sin conductor')}`, t)).join('')}
+          ${fila('Total del bus', total, 'total')}</tbody></table></div>`;
+    } else {
+      res.innerHTML = '';
+    }
+
+    // Aviso de corrección del despacho (una sola fuente de verdad)
+    const nota = document.getElementById('notaReg');
+    if (hayLecturas && !valida) {
+      nota.className = 'nota cambio';
+      nota.textContent = 'La registradora final no puede ser menor que la inicial.';
+    } else if (!b.recaudo && b.despacho_id && (ini !== b.registradora_inicio || fin !== b.registradora_fin) && D.editable) {
+      const antes = `${b.registradora_inicio ?? '—'} → ${b.registradora_fin ?? '—'}`;
+      nota.className = 'nota cambio';
+      nota.textContent = `Al guardar se corrige también la registradora del despacho (tenía ${antes}) y los pasajeros de movilidad diaria.`;
+    } else if (!b.despacho_id && !b.recaudo && b.ultima_reg_fin != null && ini === b.ultima_reg_fin) {
+      nota.className = 'nota';
+      nota.textContent = `La lectura inicial viene de donde cerró la registradora el último día con datos (${fmtNum(b.ultima_reg_fin)}).`;
+    } else {
+      nota.className = 'nota'; nota.textContent = '';
+    }
+  }
+
+  /* ── Combo buscable de conductores ── */
+  let comboActivo = -1;
+  function opcionesConductor(i, texto) {
+    const actual = form.conductores[i].conductor_id;
+    const t = (texto || '').toLowerCase().trim();
+    return D.conductores
+      .filter(c => c.activo || c.id === actual)
+      .filter(c => !t || c.nombre.toLowerCase().includes(t) || String(c.cedula || '').includes(t))
+      .slice(0, 60);
+  }
+  function comboPintar(i, texto) {
+    const lista = opcionesConductor(i, texto);
+    comboActivo = lista.length ? 0 : -1;
+    document.getElementById(`comboDrop-${i}`).innerHTML = lista.length
+      ? lista.map((c, k) => `<div class="combo-opt ${k === 0 ? 'act' : ''}" data-id="${c.id}"
+            onmousedown="event.preventDefault(); comboElegir(${i}, ${c.id})">${esc(c.nombre)}${c.cedula ? `<small>${esc(c.cedula)}</small>` : ''}</div>`).join('')
+      : `<div class="combo-vacio">Sin coincidencias</div>`;
+  }
+  function comboAbrir(i) {
+    const inp = document.getElementById(`fCond-${i}`);
+    inp.select();
+    comboPintar(i, '');
+    document.getElementById(`combo-${i}`).classList.add('open');
+  }
+  function comboFiltrar(i) {
+    comboPintar(i, document.getElementById(`fCond-${i}`).value);
+    document.getElementById(`combo-${i}`).classList.add('open');
+  }
+  function comboTecla(e, i) {
+    const opts = [...document.querySelectorAll(`#comboDrop-${i} .combo-opt`)];
+    if (!opts.length) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      comboActivo = (comboActivo + (e.key === 'ArrowDown' ? 1 : -1) + opts.length) % opts.length;
+      opts.forEach((o, k) => o.classList.toggle('act', k === comboActivo));
+      opts[comboActivo].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter' && comboActivo >= 0) {
+      e.preventDefault();
+      comboElegir(i, Number(opts[comboActivo].dataset.id));
+      e.target.blur();
+    }
+  }
+  function comboElegir(i, id) {
+    setCond(i, 'conductor_id', id);
+    document.getElementById(`fCond-${i}`).value = conductor(id)?.nombre || '';
+    document.getElementById(`fCond-${i}`).classList.remove('err');
+    document.getElementById(`combo-${i}`).classList.remove('open');
+  }
+  function comboCerrar(i) {
+    // Al salir sin elegir, se restaura el nombre del conductor seleccionado.
+    const id = form.conductores[i].conductor_id;
+    document.getElementById(`fCond-${i}`).value = id ? conductor(id)?.nombre || '' : '';
+    document.getElementById(`combo-${i}`).classList.remove('open');
+  }
+
+  /* ── Liquidaciones anuladas del bus ese día (quedan como historial) ── */
+  function htmlAnuladas(b) {
+    if (!b.anulados || !b.anulados.length) return '';
+    return `<div class="anuladas"><div class="sec-lbl">Liquidaciones anuladas · ${b.anulados.length}</div>` +
+      b.anulados.map(a => {
+        const conds = a.conductores.map(c => esc(c.conductor_nombre || '')).join(', ');
+        return `<div class="anulada">
+          <b>Anulada el ${fmtHora(a.anulado_at)}${a.anulado_por_nombre ? ' por ' + esc(a.anulado_por_nombre) : ''}.</b>
+          Motivo: ${esc(a.motivo_anulacion || '')}<br>
+          <span class="montos">Liquidada el ${fmtHora(a.created_at)}${a.usuario_nombre ? ' por ' + esc(a.usuario_nombre) : ''} · ${conds} ·
+          ${fmtNum(a.pasajeros)} pax · Producido ${fmtMoney(a.producido)} · Gastos ${fmtMoney(a.total_gastos)} ·
+          Recaudado ${fmtMoney(a.recaudado)} · ${textoDif(a.diferencia)} ·
+          <a href="#" onclick="imprimirTirilla(${a.id}, true); return false;">ver tirilla</a></span>
+        </div>`;
+      }).join('') + '</div>';
+  }
+
+  function textoDif(dif) {
+    return dif < 0 ? 'Faltante ' + fmtMoney(-dif) : dif > 0 ? 'Sobrante ' + fmtMoney(dif) : 'Cuadrado';
+  }
+  function fmtDia(iso) {
+    return new Date(iso + 'T12:00:00Z').toLocaleDateString('es-CO', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long' });
+  }
+  function fmtHora(iso) {
+    if (!iso) return '';
+    return new Date(iso).toLocaleString('es-CO', { timeZone: 'America/Bogota', day: 'numeric', month: 'short',
+      hour: 'numeric', minute: '2-digit' });
+  }
+
+  /* ── Guardar (con confirmación: una vez guardada no se modifica) ── */
+  function guardar() {
+    const b = bus(selId);
+    const ini = form.registradora_inicio, fin = form.registradora_fin;
+    const n = form.conductores.length;
+    // Obligatorio todo menos los gastos: no se liquidan pasajeros sin viajes, ruta o conductor.
+    const faltan = [];   // [id del campo, qué falta, pestaña o null]
+    if (ini == null) faltan.push(['fRegIni', 'registradora inicial', null]);
+    if (fin == null) faltan.push(['fRegFin', 'registradora final', null]);
+    else if (ini != null && fin < ini) faltan.push(['fRegFin', 'registradora final mayor que la inicial', null]);
+    else if (ini != null && fin === ini) faltan.push(['fRegFin', 'pasajeros (la registradora final es igual a la inicial)', null]);
+    const tramos = calcularTramos(b);
+    form.conductores.forEach((c, k) => {
+      const cual = n > 1 ? ` del conductor ${k + 1}` : '';
+      if (!c.conductor_id) faltan.push([`fCond-${k}`, 'conductor' + cual, k]);
+      if (!c.ruta_id) faltan.push([`fRuta-${k}`, 'ruta' + cual, k]);
+      if (!c.viajes) faltan.push([`fViajes-${k}`, 'viajes' + cual, k]);
+      if (k < n - 1) {
+        // Relevo: la lectura al entregar el bus va entre el inicio de su tramo y la final del bus
+        const t = tramos[k];
+        if (c.registradora_fin == null) faltan.push([`fRelevo-${k}`, 'registradora al relevo' + cual, k]);
+        else if (t.pasajeros == null || t.pasajeros < 1) faltan.push([`fRelevo-${k}`, 'pasajeros' + cual + ' (el relevo debe ser mayor que donde arrancó)', k]);
+        else if (fin != null && c.registradora_fin >= fin) faltan.push([`fRelevo-${k}`, 'registradora al relevo' + cual + ' menor que la final del bus', k]);
+      }
+      if (c.recaudado == null) faltan.push([`fRec-${k}`, 'recaudo entregado' + cual, k]);
+    });
+    if (n > 1 && !faltan.length) {
+      const ids = form.conductores.map(c => c.conductor_id);
+      if (new Set(ids).size !== ids.length) faltan.push([`fCond-${n - 1}`, 'conductores distintos (hay uno repetido)', n - 1]);
+    }
+    document.querySelectorAll('#formCard .err, .cond-tab.con-err').forEach(e => e.classList.remove('err', 'con-err'));
+    if (faltan.length) {
+      faltan.forEach(([id, , k]) => {
+        document.getElementById(id)?.classList.add('err');
+        if (k != null) document.getElementById(`tab-${k}`)?.classList.add('con-err');
+      });
+      const primera = faltan.find(f => f[2] != null);
+      if (primera && faltan[0][2] != null) verTab(primera[2]);
+      toast('Falta llenar: ' + faltan.map(f => f[1]).join(', '), true);
+      document.getElementById(faltan[0][0])?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      return;
+    }
+
+    const tarifa = tarifaDe(b);
+    const suma = k => tramos.reduce((t, x) => t + x[k], 0);
+    const producido = suma('producido'), totalGastos = suma('total_gastos'), neto = suma('neto');
+    const rec = suma('recaudado'), dif = rec - neto;
+    const clsDif = d => d < 0 ? 'bad' : d > 0 ? 'warn' : 'ok';
+    const nombre = k => esc(conductor(form.conductores[k].conductor_id)?.nombre || '');
+    // Con relevo: el detalle de cada conductor y al final el total del bus
+    const bloque = (t, k) => `
+      ${n > 1 ? `<div class="sub"><span>Conductor ${k + 1} · ${nombre(k)}</span><span>${fmtNum(t.registradora_inicio)} → ${fmtNum(t.registradora_fin)}</span></div>` : ''}
+      <div><span>Pasajeros × tarifa</span><span>${fmtNum(t.pasajeros)} × ${fmtMoney(tarifa)}</span></div>
+      <div><span>Producido</span><span>${fmtMoney(t.producido)}</span></div>
+      ${gastosDe(k).map(g => `<div><span>− ${esc(g.nombre)}</span><span>${fmtMoney(g.valor)}</span></div>`).join('')}
+      <div><span>Total gastos</span><span>${fmtMoney(t.total_gastos)}</span></div>
+      <div><span>Por entregar</span><span>${fmtMoney(t.neto)}</span></div>
+      <div><span>Recaudo entregado</span><span>${fmtMoney(t.recaudado)}</span></div>
+      <div><span>Diferencia</span><span class="${clsDif(t.diferencia)}">${fmtMoney(t.diferencia)} · ${textoDif(t.diferencia)}</span></div>`;
+    document.getElementById('confTitulo').textContent = `Confirmar liquidación — ${TIPO[b.grupo] || 'Bus'} ${b.numero}`;
+    document.getElementById('confResumen').innerHTML = `
+      <div><span>Fecha</span><span>${fmtDia(fecha)}</span></div>
+      ${n === 1 ? `<div><span>Conductor</span><span>${nombre(0)}</span></div>` : ''}
+      <div><span>Registradora${n > 1 ? ' del bus' : ''}</span><span>${fmtNum(ini)} → ${fmtNum(fin)}</span></div>
+      ${tramos.map(bloque).join('')}
+      ${n > 1 ? `<div class="sub"><span>Total del bus</span><span>${fmtNum(fin - ini)} pasajeros</span></div>
+        <div><span>Producido</span><span>${fmtMoney(producido)}</span></div>
+        <div><span>Gastos</span><span>${fmtMoney(totalGastos)}</span></div>
+        <div><span>Por entregar</span><span>${fmtMoney(neto)}</span></div>
+        <div><span>Recaudado</span><span>${fmtMoney(rec)}</span></div>
+        <div><span>Diferencia</span><span class="${clsDif(dif)}">${fmtMoney(dif)} · ${textoDif(dif)}</span></div>` : ''}`;
+    document.getElementById('btnConfirmar').disabled = false;
+    abrirModal('modalConfirmar');
+  }
+
+  async function confirmarGuardar() {
+    const b = bus(selId);
+    const n = form.conductores.length;
+    const body = {
+      fecha, bus_id: b.id, registradora_inicio: form.registradora_inicio, registradora_fin: form.registradora_fin,
+      conductores: form.conductores.map((c, k) => ({
+        conductor_id: c.conductor_id, ruta_id: c.ruta_id, viajes: c.viajes,
+        registradora_fin: k < n - 1 ? c.registradora_fin : null, recaudado: c.recaudado, observacion: c.observacion,
+      })),
+      gastos: gastosDelForm().map(g => ({ orden_conductor: g.orden_conductor, tipo_gasto_id: g.tipo_gasto_id,
+                                          valor: g.valor, observacion: g.observacion })),
+    };
+    const btn = document.getElementById('btnConfirmar');
+    btn.disabled = true;
+    try {
+      const r = await apiFetch('/api/recaudo', { method: 'POST', body: JSON.stringify(body) });
+      dirty = false;
+      cerrarModal('modalConfirmar');
+      const dif = r.recaudo.diferencia;
+      toast(`Bus ${b.numero} liquidado` + (dif ? ' — ' + textoDif(dif).toLowerCase() : ''));
+      await cargar();
+      imprimirTirilla(r.recaudo.id, false);   // por cada conductor: copia conductor y copia empresa
+    } catch (e) {
+      toast(e.message, true);
+      btn.disabled = false;
+    }
+  }
+
+  /* ── Anular (solo Administrador): la liquidación queda como historial ── */
+  function abrirAnular() {
+    const b = bus(selId);
+    document.getElementById('anularSub').innerHTML =
+      `${TIPO[b.grupo] || 'Bus'} ${b.numero} · ${fmtDia(fecha)} · Producido ${fmtMoney(b.recaudo.producido)} · Gastos ${fmtMoney(b.recaudo.total_gastos)} · Recaudado ${fmtMoney(b.recaudo.recaudado)}.<br>
+       La liquidación no se borra: queda en el historial como anulada y el bus vuelve a quedar por liquidar.`;
+    document.getElementById('anularMotivo').value = '';
+    document.getElementById('btnAnular').disabled = false;
+    abrirModal('modalAnular');
+    document.getElementById('anularMotivo').focus();
+  }
+
+  async function confirmarAnular() {
+    const b = bus(selId);
+    const motivo = document.getElementById('anularMotivo').value.trim();
+    if (motivo.length < 5) return toast('Escribe el motivo de la anulación', true);
+    const btn = document.getElementById('btnAnular');
+    btn.disabled = true;
+    try {
+      await apiFetch(`/api/recaudo/${b.recaudo.id}/anular`, { method: 'POST', body: JSON.stringify({ motivo }) });
+      cerrarModal('modalAnular');
+      dirty = false;
+      toast(`Liquidación del bus ${b.numero} anulada`);
+      await cargar();
+    } catch (e) {
+      toast(e.message, true);
+      btn.disabled = false;
+    }
+  }
+
+  /* ── Tirilla de liquidación (impresora térmica de 80 o 58 mm) ── */
+  function liquidacionPorId(id) {
+    for (const b of D.buses) {
+      if (b.recaudo && b.recaudo.id === id) return b.recaudo;
+      const a = b.anulados.find(x => x.id === id);
+      if (a) return a;
+    }
+    return null;
+  }
+
+  /* Tirilla de UN conductor: con relevo, cada conductor recibe la suya solo con su parte. */
+  function htmlCopia(r, c, copia, reimpresion) {
+    const fila = (k, v, cls = '') => `<div class="t-fila ${cls}"><span>${k}</span><span>${v}</span></div>`;
+    const total = r.conductores.length;
+    const gastos = r.gastos.filter(g => g.orden_conductor === c.orden);
+    const dif = c.diferencia;
+    const ahora = new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota', day: '2-digit', month: '2-digit',
+      year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+    const obs = [c.observacion, c.orden === 1 ? r.observacion : null].filter(Boolean).join(' · ');
+    return `<div class="copia">
+      <div class="t-centro t-titulo">TIQUETE DE LIQUIDACIÓN</div>
+      <div class="t-centro">N° ${String(r.id).padStart(6, '0')}${reimpresion ? ' · REIMPRESIÓN' : ''}</div>
+      ${total > 1 ? `<div class="t-centro fuerte">RELEVO · CONDUCTOR ${c.orden} DE ${total}</div>` : ''}
+      ${r.anulado_at ? '<div class="t-centro t-anulada">*** ANULADA ***</div>' : ''}
+      <div class="t-centro">Del ${esc(r.fecha)}</div>
+      <div class="t-centro t-bus">Vehículo: ${r.bus_numero}${r.bus_placa ? ' · ' + esc(r.bus_placa) : ''}</div>
+      <div class="t-linea"></div>
+      ${fila('Ruta', esc(c.ruta_nombre || '—'))}
+      ${fila('Viajes', c.viajes ?? '—')}
+      ${fila('Registradora', `${c.registradora_inicio} → ${c.registradora_fin}`)}
+      ${fila('Pasajeros', fmtNum(c.pasajeros))}
+      ${fila('Tarifa', fmtMoney(r.tarifa))}
+      ${fila('Producido', fmtMoney(c.producido), 'fuerte')}
+      <div class="t-sec">GASTOS</div>
+      ${gastos.length ? gastos.map(g => fila(esc(g.tipo_nombre), fmtMoney(g.valor)) +
+          (g.observacion ? `<div class="t-nota">${esc(g.observacion)}</div>` : '')).join('') : '<div class="t-centro">Sin gastos</div>'}
+      ${fila('Total gastos', fmtMoney(c.total_gastos), 'fuerte')}
+      <div class="t-linea"></div>
+      ${fila('Por entregar', fmtMoney(c.neto), 'fuerte')}
+      <div class="t-sec">RECAUDO</div>
+      ${fila('Recaudo', fmtMoney(c.recaudado), 'grande')}
+      ${fila(dif < 0 ? 'FALTANTE' : dif > 0 ? 'SOBRANTE' : 'CUADRADO', fmtMoney(Math.abs(dif)), 'fuerte')}
+      <div class="t-sec">CONDUCTOR</div>
+      <div>${esc(c.conductor_cedula || '')}</div><div class="fuerte">${esc((c.conductor_nombre || '').toUpperCase())}</div>
+      ${obs ? `<div class="t-nota">Obs: ${esc(obs)}</div>` : ''}
+      <div class="t-linea"></div>
+      <div>Fecha impresión: ${ahora}</div>
+      <div>Atendido por: ${esc((r.usuario_nombre || '').toUpperCase())}</div>
+      ${reimpresion ? `<div>Reimpreso por: ${esc((CU.nombre || CU.name || '').toUpperCase())}</div>` : ''}
+      ${copia === 'COPIA EMPRESA' ? '<div class="t-firma">Firma del conductor</div>' : ''}
+      <div class="t-centro t-copia">*** ${copia} ***</div>
+    </div>`;
+  }
+
+  /* Por cada conductor, dos copias (conductor y empresa), cada una en su propia "página"
+     del rollo para que la impresora corte entre ellas; el alto se ajusta a la tirilla.
+     `soloOrden` reimprime solo la tirilla de un conductor. */
+  function imprimirTirilla(id, reimpresion, soloOrden = null) {
+    const r = liquidacionPorId(id);
+    if (!r) return toast('No se encontró la liquidación para imprimir', true);
+    const cont = document.getElementById('tirilla');
+    cont.className = 'papel-' + papel;
+    cont.innerHTML = r.conductores
+      .filter(c => soloOrden == null || c.orden === soloOrden)
+      .map(c => htmlCopia(r, c, 'COPIA CONDUCTOR', reimpresion) + htmlCopia(r, c, 'COPIA EMPRESA', reimpresion))
+      .join('');
+    const altoPx = Math.max(...[...cont.querySelectorAll('.copia')].map(c => c.offsetHeight));
+    const altoMm = Math.ceil(altoPx * 25.4 / 96) + 2;
+    document.getElementById('estiloPagina').textContent = `@page { size: ${papel}mm ${altoMm}mm; margin: 0; }`;
+    window.print();
+  }
+
+  /* ── Tipos de gasto (Administrador) ── */
+  async function abrirTiposGasto() {
+    abrirModal('modalTipos');
+    await pintarTipos();
+    document.getElementById('nuevoTipo').focus();
+  }
+  async function pintarTipos() {
+    const cont = document.getElementById('listaTipos');
+    try {
+      const tipos = await apiFetch('/api/recaudo/tipos-gasto');
+      cont.innerHTML = tipos.map(t => `<div class="tipo-row ${t.activo ? '' : 'inactivo'}">
+          <input value="${esc(t.nombre)}" maxlength="60" onchange="editarTipo(${t.id}, { nombre: this.value })" />
+          <button class="btn" onclick="editarTipo(${t.id}, { activo: ${t.activo ? 0 : 1} })">${t.activo ? 'Desactivar' : 'Activar'}</button>
+        </div>`).join('') || '<div class="sin-gastos">Todavía no hay tipos de gasto.</div>';
+    } catch (e) { cont.innerHTML = `<div class="sin-gastos">${esc(e.message)}</div>`; }
+  }
+  async function editarTipo(id, cambios) {
+    try {
+      await apiFetch(`/api/recaudo/tipos-gasto/${id}`, { method: 'PUT', body: JSON.stringify(cambios) });
+      toast('Tipo de gasto actualizado');
+    } catch (e) { toast(e.message, true); }
+    await pintarTipos();
+    await cargar();
+  }
+  async function crearTipo() {
+    const inp = document.getElementById('nuevoTipo');
+    const nombre = inp.value.trim();
+    if (nombre.length < 2) return toast('Escribe el nombre del gasto', true);
+    try {
+      await apiFetch('/api/recaudo/tipos-gasto', { method: 'POST', body: JSON.stringify({ nombre }) });
+      inp.value = '';
+      toast(`Gasto «${nombre}» agregado`);
+    } catch (e) { return toast(e.message, true); }
+    await pintarTipos();
+    await cargar();
+  }
+
+  /* ── Tarifas (Administrador) ── */
+  function abrirTarifas() {
+    document.getElementById('tarA').value = fmtNum(D.tarifas.A || 0);
+    document.getElementById('tarB').value = fmtNum(D.tarifas.B || 0);
+    abrirModal('modalTarifas');
+  }
+  function abrirModal(id)  { document.getElementById(id).classList.remove('hidden'); }
+  function cerrarModal(id) { document.getElementById(id).classList.add('hidden'); }
+  async function guardarTarifas() {
+    const A = leerEntero(document.getElementById('tarA').value);
+    const B = leerEntero(document.getElementById('tarB').value);
+    if (!A || !B) return toast('Las dos tarifas deben ser mayores que cero', true);
+    try {
+      await apiFetch('/api/recaudo/tarifas', { method: 'PUT', body: JSON.stringify({ A, B }) });
+      cerrarModal('modalTarifas');
+      toast('Tarifas actualizadas');
+      await cargar();
+    } catch (e) { toast(e.message, true); }
+  }
+
+  let toastTimer = null;
+  function toast(msg, error = false) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast' + (error ? ' error' : '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.add('hidden'), 3200);
+  }
+</script>
+</body>
+</html>

@@ -24,6 +24,7 @@ def seed_usuarios(conn):
         ("analista",    "analista123", "Laura Analista", "Analista",       "LA", "#22c55e"),
         ("tecnico",     "tecnico123",  "Jorge Técnico",  "Técnico Mant.",  "JT", "#f59e0b"),
         ("propietario", "prop123",     "Carlos Noriega", "Propietario",    "CN", "#f59e0b"),
+        ("recaudador",  "recaudo123",  "Diana Recaudo",  "Recaudador",     "DR", "#eab308"),
     ]
     conn.executemany(
         "INSERT OR IGNORE INTO usuarios (username, password, nombre, rol, iniciales, color) VALUES (?,?,?,?,?,?)",
