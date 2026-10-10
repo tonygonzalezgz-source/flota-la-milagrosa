@@ -671,11 +671,23 @@
         })),
       };
     }
-    return {
+    const base = {
       registradora_inicio: b.registradora_inicio ?? b.ultima_reg_fin ?? null,
       registradora_fin:    b.registradora_fin ?? null,
-      conductores: [nuevoConductor({ conductor_id: b.conductor_id, ruta_id: b.ruta_id, viajes: b.viajes_realizados })],
     };
+    const rel = b.relevos || [];
+    if (!rel.length) {
+      return { ...base, conductores: [nuevoConductor({ conductor_id: b.conductor_id, ruta_id: b.ruta_id, viajes: b.viajes_realizados })] };
+    }
+    // Relevo anotado por el despachador: cada conductor entrega con la lectura con
+    // la que recibe el siguiente. Los viajes del despacho son el total del bus.
+    const viajesRel = rel.reduce((t, r) => t + (r.viajes || 0), 0);
+    const v1 = b.viajes_realizados == null ? null : b.viajes_realizados - viajesRel;
+    const conductores = [
+      { conductor_id: b.conductor_id, ruta_id: b.ruta_id, viajes: v1 > 0 ? v1 : null },
+      ...rel.map(r => ({ conductor_id: r.conductor_id, ruta_id: r.ruta_id ?? b.ruta_id, viajes: r.viajes })),
+    ].map((c, i) => ({ ...nuevoConductor(c), registradora_fin: rel[i] ? rel[i].registradora : null }));
+    return { ...base, conductores };
   }
 
   let tab = 0;   // pestaña (conductor) visible
@@ -704,6 +716,8 @@
       if (b.ruta_id) partes.push(esc(ruta(b.ruta_id)?.nombre || ''));
       if (b.conductor_id) partes.push(esc(conductor(b.conductor_id)?.nombre || ''));
       if (b.viajes_realizados != null) partes.push(`${b.viajes_realizados} viajes`);
+      (b.relevos || []).forEach(r => partes.push(
+        `relevo ${esc(conductor(r.conductor_id)?.nombre || '')} desde ${Number(r.registradora).toLocaleString('es-CO')}`));
       desp = 'Despacho: ' + (partes.join(' · ') || 'sin datos');
     } else {
       desp = 'Este bus no tiene despacho ese día: digita los datos y al guardar se crea.';
