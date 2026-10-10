@@ -618,15 +618,16 @@ def _filtro_propietario(conn):
     return f" AND r.bus_id IN ({','.join('?' * len(ids))})", ids
 
 
-def _rango_propietario():
+def _rango_propietario(max_dias=None):
     """(desde, hasta) validados; por defecto el mes en curso (hora Bogotá)."""
+    max_dias = max_dias or _MAX_DIAS_PROPIETARIO
     hoy = hoy_bogota()
     desde = request.args.get("desde") or hoy[:8] + "01"
     hasta = request.args.get("hasta") or hoy
     if not _fecha_valida(desde) or not _fecha_valida(hasta) or desde > hasta:
         raise _Rechazo("Rango de fechas inválido (use AAAA-MM-DD)")
-    if (date.fromisoformat(hasta) - date.fromisoformat(desde)).days > _MAX_DIAS_PROPIETARIO:
-        raise _Rechazo(f"El rango no puede pasar de {_MAX_DIAS_PROPIETARIO} días")
+    if (date.fromisoformat(hasta) - date.fromisoformat(desde)).days > max_dias:
+        raise _Rechazo(f"El rango no puede pasar de {max_dias} días")
     return desde, hasta
 
 
@@ -685,6 +686,47 @@ def recaudo_propietario_resumen():
     buses = [{k: (int(v) if k != "bus_id" and v is not None else v) for k, v in dict(f).items()}
              for f in filas]
     return jsonify({"desde": desde, "hasta": hasta, "buses": buses})
+
+
+# Los reportes de la app piden hasta un año; por eso esta consulta es compacta.
+_MAX_DIAS_DIARIO = 366
+
+
+@bp.route("/api/recaudo/propietario/diario", methods=["GET"])
+@rol("Propietario", "Administrador")
+def recaudo_propietario_diario():
+    """Recaudo compacto por bus, día y conductor (una fila por conductor de cada
+    liquidación vigente; con relevo, varias por día) de los buses del propietario:
+    ?desde=&hasta= (hasta 366 días). Para Mis Buses y los reportes de la app."""
+    try:
+        desde, hasta = _rango_propietario(_MAX_DIAS_DIARIO)
+    except _Rechazo as e:
+        return jsonify({"error": str(e)}), e.status
+    conn = db()
+    filtro = _filtro_propietario(conn)
+    if filtro is None:
+        conn.close()
+        return jsonify({"desde": desde, "hasta": hasta, "filas": []})
+    where, params = filtro
+    filas = conn.execute(
+        f"""SELECT r.id AS recaudo_id, r.bus_id, r.fecha, rc.orden,
+                   c.nombre AS conductor_nombre, ru.nombre AS ruta_nombre, rc.viajes,
+                   rc.pasajeros, rc.producido, rc.total_gastos, rc.recaudado, rc.diferencia
+              FROM recaudos r
+              JOIN recaudo_conductores rc ON rc.recaudo_id = r.id
+         LEFT JOIN conductores c ON c.id = rc.conductor_id
+         LEFT JOIN rutas ru ON ru.id = rc.ruta_id
+             WHERE r.fecha BETWEEN ? AND ? AND r.anulado_at IS NULL{where}
+          ORDER BY r.fecha, r.bus_id, rc.orden""",
+        [desde, hasta] + params,
+    ).fetchall()
+    conn.close()
+    salida = []
+    for f in filas:
+        f = dict(f)
+        f["fecha"] = _fecha_iso(f["fecha"])
+        salida.append(f)
+    return jsonify({"desde": desde, "hasta": hasta, "filas": salida})
 
 
 # ──────────────────────────────────────────
