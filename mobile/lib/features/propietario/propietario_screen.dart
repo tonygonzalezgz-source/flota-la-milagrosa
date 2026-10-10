@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../core/fechas.dart';
 import '../../core/modelos.dart';
 import '../../core/movilidad.dart';
+import '../../core/recaudo.dart';
 import '../../core/session.dart';
 import '../../core/theme.dart';
 import '../../widgets/aurora.dart';
@@ -42,6 +43,9 @@ class _PropietarioScreenState extends ConsumerState<PropietarioScreen> {
   List<Map<String, dynamic>> _buses = [];
   List<Map<String, dynamic>> _movilidad = [];
   List<Map<String, dynamic>> _docs = [];
+
+  /// Recaudo y gastos del mes por bus; null si el recaudo no está habilitado.
+  Map<int, ResumenRecaudo>? _recaudo;
   late String _desde;
 
   @override
@@ -59,6 +63,8 @@ class _PropietarioScreenState extends ConsumerState<PropietarioScreen> {
     final uid = ref.read(sessionProvider).value?.id;
     final hoy = DateTime.parse(Fechas.hoy());
     _desde = Fechas.iso(lunesDe(hoy).subtract(const Duration(days: 7 * (semanasGrafica - 1))));
+    // El recaudo va aparte: si falla, el resto de la pantalla igual se muestra.
+    final recaudo = resumenRecaudoMes(api).then<Map<int, ResumenRecaudo>?>((r) => r, onError: (_) => null);
     try {
       final r = await Future.wait([
         api.get('/buses', query: {'user_id': uid}),
@@ -68,6 +74,7 @@ class _PropietarioScreenState extends ConsumerState<PropietarioScreen> {
       _buses = asLista(r[0]);
       _movilidad = asLista(r[1]);
       _docs = asLista(r[2]).where((d) => d['estado'] != 'sin_registrar').toList();
+      _recaudo = await recaudo;
     } catch (e) {
       _error = e.toString();
     }
@@ -231,7 +238,8 @@ class _PropietarioScreenState extends ConsumerState<PropietarioScreen> {
             const SizedBox(height: 4),
             Text(
               'Dinero bruto = pasajeros × ${pesos(tarifaPasaje)} (valor del pasaje). '
-              'IPK = pasajeros ÷ kilómetros recorridos.',
+              'IPK = pasajeros ÷ kilómetros recorridos.'
+              '${_recaudo == null ? '' : ' Recaudo = lo que entregó el conductor al liquidar, ya descontados los gastos.'}',
               style: const TextStyle(fontSize: 11, color: AppColors.muted),
             ),
           ]),
@@ -330,6 +338,7 @@ class _PropietarioScreenState extends ConsumerState<PropietarioScreen> {
               style: const TextStyle(fontSize: 12, color: AppColors.muted),
               overflow: TextOverflow.ellipsis,
             ),
+            if (_recaudo != null) ...[const SizedBox(height: 6), _recaudoMes(_recaudo![id])],
           ]),
         ),
         const SizedBox(width: 8),
@@ -343,6 +352,25 @@ class _PropietarioScreenState extends ConsumerState<PropietarioScreen> {
           ),
         ),
       ]),
+    );
+  }
+
+  /// Recaudo real del mes del bus (lo liquidado en el módulo Recaudo).
+  Widget _recaudoMes(ResumenRecaudo? r) {
+    if (r == null || r.dias == 0) {
+      return const Text('Recaudo: sin liquidar este mes', style: TextStyle(fontSize: 12, color: AppColors.muted));
+    }
+    return Text.rich(
+      TextSpan(children: [
+        const TextSpan(text: 'Recaudo mes '),
+        TextSpan(
+          text: pesos(r.recaudado),
+          style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.dinero),
+        ),
+        TextSpan(text: ' · gastos ${pesos(r.totalGastos)}'),
+      ]),
+      style: const TextStyle(fontSize: 12, color: Color(0xFF3A4666)),
+      overflow: TextOverflow.ellipsis,
     );
   }
 
