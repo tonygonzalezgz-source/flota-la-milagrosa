@@ -4,11 +4,8 @@ import 'modelos.dart';
 /// Cálculos de movilidad para el propietario, sobre las filas de
 /// `/api/movilidad/rango` (registros_movilidad + despacho del día).
 
-/// Valor bruto del pasaje con el que se liquida a los propietarios (COP).
-const tarifaPasaje = 3900;
-
-/// Dinero bruto a liquidar: pasajeros × valor del pasaje.
-int dineroLiquidar(int pasajeros) => pasajeros * tarifaPasaje;
+// El dinero ya no se calcula aquí con un valor fijo del pasaje: lo que ve el
+// propietario es el recaudo real de cada liquidación (ver recaudo.dart).
 
 /// IPK: índice de pasajeros por kilómetro. 0 si no hay kilómetros.
 double ipk(int pasajeros, double km) => km > 0 ? pasajeros / km : 0;

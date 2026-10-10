@@ -3,9 +3,11 @@ import 'fechas.dart';
 import 'modelos.dart';
 
 /// Recaudo real del bus: lo que el conductor liquidó cada día en el módulo
-/// Recaudo de la web (producido, gastos, lo que entregó y el faltante o
-/// sobrante). El servidor solo devuelve los buses del propietario; si el
-/// recaudo no está habilitado para la cuenta responde 403 y la app no lo muestra.
+/// Recaudo de la web. El dinero que ve el propietario es siempre lo RECAUDADO:
+/// pasajeros × la tarifa de su tipo de vehículo (bus o micro, la que tenía el
+/// día de la liquidación) menos los gastos que reportó el conductor. El servidor
+/// solo devuelve los buses del propietario; si el recaudo no está habilitado
+/// para la cuenta responde 403 y la app no muestra dinero.
 
 class GastoRecaudo {
   final int ordenConductor;
@@ -149,7 +151,54 @@ class Liquidacion {
   List<GastoRecaudo> gastosDe(int orden) => gastos.where((g) => g.ordenConductor == orden).toList();
 }
 
-/// Totales del mes de un bus.
+/// Recaudo de un conductor en un día (fila de /api/recaudo/propietario/diario).
+/// Con relevo hay varias filas para el mismo bus y día.
+class TramoDiario {
+  final int recaudoId;
+  final int busId;
+  final String fecha;
+  final int orden;
+  final String conductor;
+  final String ruta;
+  final int? viajes;
+  final int pasajeros;
+  final int producido;
+  final int totalGastos;
+  final int recaudado;
+  final int diferencia;
+
+  const TramoDiario({
+    required this.recaudoId,
+    required this.busId,
+    required this.fecha,
+    required this.orden,
+    required this.conductor,
+    required this.ruta,
+    required this.viajes,
+    required this.pasajeros,
+    required this.producido,
+    required this.totalGastos,
+    required this.recaudado,
+    required this.diferencia,
+  });
+
+  factory TramoDiario.fromJson(Map<String, dynamic> j) => TramoDiario(
+        recaudoId: asInt(j['recaudo_id']) ?? 0,
+        busId: asInt(j['bus_id']) ?? 0,
+        fecha: Fechas.normalizar(j['fecha']),
+        orden: asInt(j['orden']) ?? 1,
+        conductor: asStr(j['conductor_nombre']),
+        ruta: asStr(j['ruta_nombre']),
+        viajes: asInt(j['viajes']),
+        pasajeros: asInt(j['pasajeros']) ?? 0,
+        producido: asInt(j['producido']) ?? 0,
+        totalGastos: asInt(j['total_gastos']) ?? 0,
+        recaudado: asInt(j['recaudado']) ?? 0,
+        diferencia: asInt(j['diferencia']) ?? 0,
+      );
+}
+
+/// Totales de recaudo (de un bus, una semana, un mes…).
 class ResumenRecaudo {
   final int dias;
   final int producido;
@@ -164,14 +213,30 @@ class ResumenRecaudo {
     this.diferencia = 0,
   });
 
-  factory ResumenRecaudo.fromJson(Map<String, dynamic> j) => ResumenRecaudo(
-        dias: asInt(j['dias']) ?? 0,
-        producido: asInt(j['producido']) ?? 0,
-        totalGastos: asInt(j['total_gastos']) ?? 0,
-        recaudado: asInt(j['recaudado']) ?? 0,
-        diferencia: asInt(j['diferencia']) ?? 0,
-      );
+  /// Suma las filas; [dias] cuenta los días liquidados (bus + fecha) distintos.
+  factory ResumenRecaudo.de(Iterable<TramoDiario> filas) {
+    var producido = 0, gastos = 0, recaudado = 0, diferencia = 0;
+    final dias = <String>{};
+    for (final t in filas) {
+      producido += t.producido;
+      gastos += t.totalGastos;
+      recaudado += t.recaudado;
+      diferencia += t.diferencia;
+      dias.add('${t.busId}|${t.fecha}');
+    }
+    return ResumenRecaudo(
+      dias: dias.length,
+      producido: producido,
+      totalGastos: gastos,
+      recaudado: recaudado,
+      diferencia: diferencia,
+    );
+  }
 }
+
+/// Filas de [filas] entre [desde] y [hasta] (fechas ISO, ambas incluidas).
+Iterable<TramoDiario> entreFechas(Iterable<TramoDiario> filas, String desde, String hasta) =>
+    filas.where((t) => t.fecha.compareTo(desde) >= 0 && t.fecha.compareTo(hasta) <= 0);
 
 /// Cómo quedó la entrega: (texto, nivel) con nivel -1 faltante, 0 cuadrado, 1 sobrante.
 (String, int) estadoDiferencia(int diferencia) {
@@ -180,15 +245,12 @@ class ResumenRecaudo {
   return ('Cuadrado', 0);
 }
 
-/// Recaudo y gastos del mes en curso, por bus. null = recaudo no habilitado (403).
-Future<Map<int, ResumenRecaudo>?> resumenRecaudoMes(ApiClient api) async {
+/// Recaudo por bus, día y conductor de los buses de la cuenta (hasta 366 días).
+/// null = recaudo no habilitado (403).
+Future<List<TramoDiario>?> recaudoDiario(ApiClient api, String desde, String hasta) async {
   try {
-    final j = await api.get('/recaudo/propietario/resumen',
-        query: {'desde': Fechas.primerDiaMes(), 'hasta': Fechas.hoy()});
-    return {
-      for (final b in asLista(j is Map ? j['buses'] : null))
-        if (asInt(b['bus_id']) != null) asInt(b['bus_id'])!: ResumenRecaudo.fromJson(b),
-    };
+    final j = await api.get('/recaudo/propietario/diario', query: {'desde': desde, 'hasta': hasta});
+    return asLista(j is Map ? j['filas'] : null).map(TramoDiario.fromJson).toList();
   } on ApiException catch (e) {
     if (e.statusCode == 403) return null;
     rethrow;

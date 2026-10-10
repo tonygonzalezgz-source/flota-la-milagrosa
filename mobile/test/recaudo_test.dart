@@ -61,10 +61,22 @@ void main() {
     expect(estadoDiferencia(0), ('Cuadrado', 0));
   });
 
-  test('el resumen del mes tolera campos vacíos', () {
-    final r = ResumenRecaudo.fromJson({'bus_id': 1, 'dias': 2, 'recaudado': 900000, 'total_gastos': null});
-    expect(r.dias, 2);
-    expect(r.recaudado, 900000);
-    expect(r.totalGastos, 0);
+  test('el resumen suma lo recaudado y cuenta los días liquidados (relevo = un día)', () {
+    TramoDiario t(int bus, String fecha, int orden, int recaudado, int gastos) => TramoDiario.fromJson({
+          'bus_id': bus, 'fecha': fecha, 'orden': orden, 'recaudado': recaudado, 'total_gastos': gastos,
+          'producido': recaudado + gastos, 'diferencia': null,
+        });
+    final filas = [
+      t(1, '2026-10-05', 1, 300000, 50000),
+      t(1, '2026-10-05', 2, 200000, 0), // relevo del mismo día
+      t(1, '2026-10-06', 1, 400000, 10000),
+      t(2, '2026-10-06', 1, 100000, 0),
+    ];
+    final r = ResumenRecaudo.de(filas);
+    expect(r.dias, 3);
+    expect(r.recaudado, 1000000);
+    expect(r.totalGastos, 60000);
+    expect(ResumenRecaudo.de(entreFechas(filas, '2026-10-06', '2026-10-06')).recaudado, 500000);
+    expect(const ResumenRecaudo().dias, 0);
   });
 }

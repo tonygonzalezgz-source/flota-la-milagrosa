@@ -9,12 +9,6 @@ Map<String, dynamic> fila(String fecha, int pax, int vueltas, double km) => {
 };
 
 void main() {
-  test('el dinero bruto se liquida a \$3.900 por pasajero', () {
-    expect(tarifaPasaje, 3900);
-    expect(dineroLiquidar(100), 390000);
-    expect(dineroLiquidar(0), 0);
-  });
-
   test('IPK = pasajeros / km, 0 sin kilómetros', () {
     expect(ipk(300, 120), 2.5);
     expect(ipk(300, 0), 0);

@@ -1,3 +1,4 @@
+import 'package:buscontrol/core/recaudo.dart';
 import 'package:buscontrol/core/reportes.dart';
 import 'package:buscontrol/features/reportes/reporte_excel.dart';
 import 'package:excel/excel.dart';
@@ -30,11 +31,31 @@ Map<String, dynamic> _mov(int bus, String fecha, int vueltas, int pax, double km
 /// Despacho como lo devuelve /api/despacho/historial (sin bus_id en el backend viejo).
 Map<String, dynamic> _desp(int numero, String fecha, String? estado) => {'numero': numero, 'fecha': fecha, 'estado': estado};
 
-Reporte _reporte({List<Map<String, dynamic>>? despacho, int? busId, bool sinDespacho = false}) => Reporte.armar(
+/// Recaudo de un conductor en una liquidación (fila de /api/recaudo/propietario/diario).
+TramoDiario _tramo(int bus, String fecha, int orden, String conductor, String ruta, int recaudado, int gastos) =>
+    TramoDiario.fromJson({
+      'recaudo_id': 1, 'bus_id': bus, 'fecha': fecha, 'orden': orden, 'conductor_nombre': conductor,
+      'ruta_nombre': ruta, 'viajes': 3, 'pasajeros': 100, 'producido': recaudado + gastos,
+      'total_gastos': gastos, 'recaudado': recaudado, 'diferencia': 0,
+    });
+
+final _recaudo = [
+  // Bus 12 el 1 de octubre con relevo: Pedro en la Ruta 1 y Ana en la Ruta 2.
+  _tramo(1, '2026-10-01', 1, 'Pedro Gómez', 'Ruta 1', 1000000, 100000),
+  _tramo(1, '2026-10-01', 2, 'Ana Ruiz', 'Ruta 2', 500000, 0),
+  _tramo(1, '2026-10-02', 1, 'Pedro Gómez', 'Ruta 1', 900000, 50000),
+  _tramo(2, '2026-10-01', 1, 'Luis Martínez', 'Ruta 2', 400000, 20000),
+  _tramo(1, '2026-09-30', 1, 'Pedro Gómez', 'Ruta 1', 999, 0), // fuera del rango
+  _tramo(99, '2026-10-01', 1, 'Otro', 'Ruta 1', 777, 0), // bus de otro propietario
+];
+
+Reporte _reporte({List<Map<String, dynamic>>? despacho, int? busId, bool sinDespacho = false, bool sinRecaudo = false}) =>
+    Reporte.armar(
       rango: (desde: '2026-10-01', hasta: '2026-10-08'),
       buses: _buses,
       hoy: _hoy,
       busId: busId,
+      recaudo: sinRecaudo ? null : _recaudo,
       movilidad: [
         _mov(1, '2026-10-01', 6, 900, 140, despCond: 'Pedro Gómez', despRuta: 'Ruta 1'),
         _mov(1, '2026-10-02', 7, 1000, 150, conductor: 'Pedro Gómez', ruta: 'Ruta 1'),
@@ -95,12 +116,31 @@ void main() {
     expect([for (final e in EstadoDia.values) b15.cuantos(e)], [1, 1, 1, 5]);
   });
 
-  test('totales, dinero, IPK y promedios', () {
+  test('el dinero es lo recaudado en las liquidaciones, por bus, ruta, conductor y día', () {
+    final r = _reporte();
+    expect(r.conRecaudo, isTrue);
+    expect(r.total.recaudo, 2800000);
+    expect(r.total.gastos, 170000);
+    expect(r.buses.first.totales.recaudo, 2400000);
+    // Con relevo, cada conductor suma a su ruta.
+    expect(r.porRuta['Ruta 1']!.recaudo, 1900000);
+    expect(r.porRuta['Ruta 2']!.recaudo, 900000);
+    expect(r.porConductor['Ana Ruiz']!.recaudo, 500000);
+    final dia1Bus12 = r.diario.firstWhere((f) => f['bus_id'] == 1 && f['fecha'] == '2026-10-01');
+    expect(r.recaudoDe(dia1Bus12), 1500000);
+    final dia3Bus15 = r.diario.firstWhere((f) => f['bus_id'] == 2 && f['fecha'] == '2026-10-03');
+    expect(r.recaudoDe(dia3Bus15), isNull);
+
+    final sin = _reporte(sinRecaudo: true);
+    expect(sin.conRecaudo, isFalse);
+    expect(sin.total.recaudo, 0);
+  });
+
+  test('totales, IPK y promedios', () {
     final r = _reporte();
     expect(r.total.pasajeros, 2500);
     expect(r.total.vueltas, 18);
     expect(r.total.km, 390);
-    expect(r.total.dinero, 2500 * 3900);
     expect(r.total.ipkValor, closeTo(2500 / 390, 1e-9));
     final b12 = r.buses.first;
     expect(b12.totales.pasajeros, 1900);
@@ -147,10 +187,13 @@ void main() {
     final filaBus12 = resumen.indexWhere((f) => f.isNotEmpty && f[0]?.value.toString() == '12');
     expect(celda('Resumen', filaBus12, 2), '3'); // días trabajados
     expect(celda('Resumen', filaBus12, 7), '1900'); // pasajeros
-    expect(celda('Resumen', filaBus12, 11), '${1900 * 3900}'); // dinero bruto
+    expect(celda('Resumen', filaBus12, 11), '150000'); // gastos
+    expect(celda('Resumen', filaBus12, 12), '2400000'); // recaudo
 
     expect(libro.tables['Detalle']!.rows.length, 1 + 4);
     expect(celda('Detalle', 1, 0), '01/10/2026'); // más antiguo primero
+    final filaDia = libro.tables['Detalle']!.rows.indexWhere((f) => f.length > 1 && f[1]?.value.toString() == '12');
+    expect(celda('Detalle', filaDia, 9), '1500000'); // recaudo del 1 de octubre del bus 12
     expect(celda('Días', 0, 1), 'Bus 12');
     expect(celda('Días', 3, 1), 'Taller'); // 3 de octubre
     expect(nombreExcel(r), 'Reporte BusControl 2026-10-01 a 2026-10-08.xlsx');
