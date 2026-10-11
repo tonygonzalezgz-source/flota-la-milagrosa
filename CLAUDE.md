@@ -31,7 +31,22 @@ misma API; los permisos salen de `ROLE_VIEWS` → `allowedViews`.
   y Chakra Petch/Manrope (`assets/fonts`, licencia OFL).
 - **Propietario:** entra a una barra inferior (Mis Buses · Mapa · Gastos · Más).
   Sin alertas de mantenimiento.
-- **Dinero bruto = pasajeros × $3.900** (`tarifaPasaje` en `core/movilidad.dart`).
+- **Dinero = lo RECAUDADO** (decisión del usuario, 2026-10-10). Ya no existe el
+  pasaje fijo de $3.900. Todo valor en pesos que ve el propietario sale de las
+  liquidaciones del módulo Recaudo de la web: pasajeros × la tarifa de su tipo de
+  vehículo (bus o micro, la que tenía ese día) menos los gastos del conductor.
+  - Mis Buses: "Recaudo de la semana" (vs. los mismos días de la semana pasada);
+    en cada bus, el recaudo de la semana y "Recaudo mes · gastos".
+  - Detalle del bus: "Recaudo del día" (o "Sin liquidar") con "Ver liquidación",
+    que muestra el detalle como la tirilla, con el relevo por conductor.
+  - Reportes y Excel: recaudo y gastos por bus, ruta, conductor y día; con relevo,
+    cada conductor suma a su ruta.
+  - Datos: `core/recaudo.dart` con `/api/recaudo/propietario` (liquidaciones
+    completas, máx. 92 días), `/api/recaudo/propietario/diario` (una fila por
+    conductor, máx. 366 días) y `/resumen`. Solo los buses del propietario; un 403
+    (recaudo no habilitado para el rol) oculta el dinero.
+  - En la web, quién ve el recaudo lo decide `ROLES_HABILITADOS` en
+    `api/recaudo/comun.py`: hoy Administrador y Propietario.
   IPK = pasajeros ÷ km. La comparación semanal usa los mismos días de la semana pasada.
 - **Reportes del propietario** (`features/reportes`, `core/reportes.dart`):
   periodo y bus; días trabajados (con movilidad o despacho "trabajando"; taller
@@ -60,7 +75,9 @@ misma API; los permisos salen de `ROLE_VIEWS` → `allowedViews`.
 ## Pendientes e ideas
 
 - La rama `claude/clever-knuth-p6se92` aún no está fusionada a `main`, así que
-  buscontrol.net todavía no tiene la seguridad ni los cambios del servidor.
+  buscontrol.net todavía no tiene la seguridad ni los cambios del servidor de
+  esta rama. Sí tiene `main` fusionado (recaudo, relevos, auditoría): los
+  endpoints de recaudo que usa la app ya están en producción.
 - Verificar que `CRON_SECRET` exista en Vercel (protege `/api/cron/*`).
 - Conductor: limitar despacho y alistamiento a su propio bus.
 - Consumo de combustible por vuelta, cuando exista el valor del tanqueo del día.
