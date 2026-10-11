@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../core/fechas.dart';
 import '../../core/modelos.dart';
 import '../../core/movilidad.dart';
+import '../../core/recaudo.dart';
 import '../../core/session.dart';
 import '../../core/theme.dart';
 import '../../widgets/aurora.dart';
@@ -26,9 +27,10 @@ String saludo() {
   return 'Buenas noches';
 }
 
-/// "Mis Buses" (estilo Aurora Clara): la semana en curso frente a la pasada,
-/// la gráfica de las últimas semanas y los vehículos del propietario; tocando
-/// uno se abre su detalle diario.
+/// "Mis Buses" (estilo Aurora Clara): el recaudo de la semana en curso frente
+/// a la pasada, la gráfica de las últimas semanas y los vehículos del
+/// propietario; tocando uno se abre su detalle diario. El dinero es siempre lo
+/// recaudado en las liquidaciones (ya descontados los gastos).
 class PropietarioScreen extends ConsumerStatefulWidget {
   const PropietarioScreen({super.key});
 
@@ -42,6 +44,10 @@ class _PropietarioScreenState extends ConsumerState<PropietarioScreen> {
   List<Map<String, dynamic>> _buses = [];
   List<Map<String, dynamic>> _movilidad = [];
   List<Map<String, dynamic>> _docs = [];
+
+  /// Recaudo por bus, día y conductor desde [_desde]; null si el recaudo no
+  /// está habilitado para la cuenta (entonces no se muestra dinero).
+  List<TramoDiario>? _recaudo;
   late String _desde;
 
   @override
@@ -59,6 +65,8 @@ class _PropietarioScreenState extends ConsumerState<PropietarioScreen> {
     final uid = ref.read(sessionProvider).value?.id;
     final hoy = DateTime.parse(Fechas.hoy());
     _desde = Fechas.iso(lunesDe(hoy).subtract(const Duration(days: 7 * (semanasGrafica - 1))));
+    // El recaudo va aparte: si falla, el resto de la pantalla igual se muestra.
+    final recaudo = recaudoDiario(api, _desde, Fechas.hoy()).then<List<TramoDiario>?>((r) => r, onError: (_) => null);
     try {
       final r = await Future.wait([
         api.get('/buses', query: {'user_id': uid}),
@@ -68,6 +76,7 @@ class _PropietarioScreenState extends ConsumerState<PropietarioScreen> {
       _buses = asLista(r[0]);
       _movilidad = asLista(r[1]);
       _docs = asLista(r[2]).where((d) => d['estado'] != 'sin_registrar').toList();
+      _recaudo = await recaudo;
     } catch (e) {
       _error = e.toString();
     }
@@ -147,6 +156,18 @@ class _PropietarioScreenState extends ConsumerState<PropietarioScreen> {
     );
   }
 
+  /// Recaudo de la semana en curso (lunes a hoy) y el de los mismos días de la
+  /// semana pasada, de las filas [filas].
+  (ResumenRecaudo, ResumenRecaudo) _semanas(Iterable<TramoDiario> filas) {
+    final hoy = DateTime.parse(Fechas.hoy());
+    final lunes = lunesDe(hoy);
+    final semanaPasada = Duration(days: 7);
+    return (
+      ResumenRecaudo.de(entreFechas(filas, Fechas.iso(lunes), Fechas.iso(hoy))),
+      ResumenRecaudo.de(entreFechas(filas, Fechas.iso(lunes.subtract(semanaPasada)), Fechas.iso(hoy.subtract(semanaPasada)))),
+    );
+  }
+
   Widget _contenido(String nombre) {
     final cmp = estaSemanaVsAnterior(_movilidad);
     final a = cmp.actual, b = cmp.anterior;
@@ -160,41 +181,7 @@ class _PropietarioScreenState extends ConsumerState<PropietarioScreen> {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 18),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            TarjetaAurora(
-              radio: 26,
-              sombra: sombraFuerte,
-              padding: const EdgeInsets.all(20),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  const Expanded(
-                    child: Text(
-                      'Dinero bruto de la semana',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.muted),
-                    ),
-                  ),
-                  Variacion(variacion(a.pasajeros, b.pasajeros), pastilla: true),
-                ]),
-                const SizedBox(height: 6),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    pesos(dineroLiquidar(a.pasajeros)),
-                    style: const TextStyle(
-                      fontFamily: Fuentes.titulo,
-                      fontSize: 34,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -1,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '${miles(a.pasajeros)} pasajeros × ${pesos(tarifaPasaje)} · vs. mismos días de la semana pasada',
-                  style: const TextStyle(fontSize: 12, color: AppColors.muted),
-                ),
-              ]),
-            ),
+            _tarjetaSemana(a.pasajeros, b.pasajeros),
             const SizedBox(height: 14),
             Row(children: [
               Expanded(
@@ -230,7 +217,8 @@ class _PropietarioScreenState extends ConsumerState<PropietarioScreen> {
             for (final bus in _buses) ...[_bus(bus), const SizedBox(height: 10)],
             const SizedBox(height: 4),
             Text(
-              'Dinero bruto = pasajeros × ${pesos(tarifaPasaje)} (valor del pasaje). '
+              '${_recaudo == null ? '' : 'Recaudo = lo que entregó el conductor al liquidar: pasajeros × la tarifa '
+                  'de su vehículo (bus o micro), menos los gastos del día. '}'
               'IPK = pasajeros ÷ kilómetros recorridos.',
               style: const TextStyle(fontSize: 11, color: AppColors.muted),
             ),
@@ -238,6 +226,55 @@ class _PropietarioScreenState extends ConsumerState<PropietarioScreen> {
         ),
       ),
     ]);
+  }
+
+  /// Tarjeta principal: el recaudo de la semana frente a los mismos días de la
+  /// pasada. Sin recaudo habilitado, los pasajeros de la semana.
+  Widget _tarjetaSemana(int paxSemana, int paxAnterior) {
+    final recaudo = _recaudo;
+    final (actual, anterior) = recaudo == null ? (null, null) : _semanas(recaudo);
+    final titulo = actual == null ? 'Pasajeros de la semana' : 'Recaudo de la semana';
+    final valor = actual == null ? miles(paxSemana) : pesos(actual.recaudado);
+    final cambio = actual == null
+        ? variacion(paxSemana, paxAnterior)
+        : variacion(actual.recaudado, anterior!.recaudado);
+    final detalle = actual == null
+        ? 'vs. mismos días de la semana pasada'
+        : '${actual.dias} ${actual.dias == 1 ? 'liquidación' : 'liquidaciones'} · gastos '
+            '${pesos(actual.totalGastos)} · vs. mismos días de la semana pasada';
+    return TarjetaAurora(
+      radio: 26,
+      sombra: sombraFuerte,
+      padding: const EdgeInsets.all(20),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(
+            child: Text(
+              titulo,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.muted),
+            ),
+          ),
+          Variacion(cambio, pastilla: true),
+        ]),
+        const SizedBox(height: 6),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            valor,
+            style: TextStyle(
+              fontFamily: Fuentes.titulo,
+              fontSize: 34,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -1,
+              color: actual == null ? AppColors.texto : AppColors.dinero,
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(detalle, style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+      ]),
+    );
   }
 
   Widget _accesoReportes() => TarjetaAurora(
@@ -284,6 +321,8 @@ class _PropietarioScreenState extends ConsumerState<PropietarioScreen> {
       ..sort((x, y) => Fechas.normalizar(y['fecha']).compareTo(Fechas.normalizar(x['fecha'])));
     final semana = estaSemanaVsAnterior(filas).actual;
     final ultimo = filas.isEmpty ? null : filas.first;
+    final recaudoBus = _recaudo?.where((t) => t.busId == id).toList();
+    final recaudoSemana = recaudoBus == null ? null : _semanas(recaudoBus).$1;
     final placa = asStr(bus['placa']);
     final micro = asStr(bus['grupo']) == 'B';
 
@@ -330,19 +369,47 @@ class _PropietarioScreenState extends ConsumerState<PropietarioScreen> {
               style: const TextStyle(fontSize: 12, color: AppColors.muted),
               overflow: TextOverflow.ellipsis,
             ),
+            if (recaudoBus != null) ...[
+              const SizedBox(height: 6),
+              _recaudoMes(ResumenRecaudo.de(entreFechas(recaudoBus, Fechas.primerDiaMes(), Fechas.hoy()))),
+            ],
           ]),
         ),
-        const SizedBox(width: 8),
-        Text(
-          pesosCortos(dineroLiquidar(semana.pasajeros)),
-          style: const TextStyle(
-            fontFamily: Fuentes.titulo,
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-            color: AppColors.dinero,
-          ),
-        ),
+        if (recaudoSemana != null) ...[
+          const SizedBox(width: 8),
+          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            Text(
+              pesosCortos(recaudoSemana.recaudado),
+              style: const TextStyle(
+                fontFamily: Fuentes.titulo,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: AppColors.dinero,
+              ),
+            ),
+            const Text('semana', style: TextStyle(fontSize: 11, color: AppColors.muted)),
+          ]),
+        ],
       ]),
+    );
+  }
+
+  /// Recaudo real del mes del bus (lo liquidado en el módulo Recaudo).
+  Widget _recaudoMes(ResumenRecaudo r) {
+    if (r.dias == 0) {
+      return const Text('Recaudo: sin liquidar este mes', style: TextStyle(fontSize: 12, color: AppColors.muted));
+    }
+    return Text.rich(
+      TextSpan(children: [
+        const TextSpan(text: 'Recaudo mes '),
+        TextSpan(
+          text: pesos(r.recaudado),
+          style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.dinero),
+        ),
+        TextSpan(text: ' · gastos ${pesos(r.totalGastos)}'),
+      ]),
+      style: const TextStyle(fontSize: 12, color: Color(0xFF3A4666)),
+      overflow: TextOverflow.ellipsis,
     );
   }
 

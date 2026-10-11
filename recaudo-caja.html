@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <link rel="icon" type="image/png" href="favicon.png" />
+  <link rel="apple-touch-icon" href="favicon.png" />
+  <script>
+    (function() {
+      if (window.location === window.parent.location) {
+        const token = localStorage.getItem('authToken');
+        if (!token) { window.location.href = '/index.html'; }
+      }
+    })();
+  </script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>La Milagrosa — Cierre de caja</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg:#f4f4f6; --white:#fff; --border:#e5e5eb; --border2:#d0d0d8;
+      --txt:#111; --txt2:#555; --txt3:#888; --primary:#6366f1; --green:#22c55e;
+      --red:#ef4444; --yellow:#f59e0b; --radius:12px; --radius-s:8px;
+      --shadow:0 1px 4px rgba(0,0,0,.07);
+    }
+    body {
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+      background:var(--bg); color:var(--txt); padding:24px; font-size:14px;
+    }
+    .page-header { margin-bottom:16px; }
+    .page-title { font-size:22px; font-weight:800; letter-spacing:-.4px; }
+    .page-sub   { font-size:13px; color:var(--txt2); margin-top:3px; max-width:760px; line-height:1.5; }
+
+    .cajas { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:14px; }
+    .cajas-lbl { font-size:11.5px; font-weight:800; text-transform:uppercase; letter-spacing:.4px; color:var(--txt3); margin-right:4px; }
+    .caja-chip { border:1.5px solid var(--border2); background:var(--white); border-radius:999px; padding:6px 12px;
+      font-family:inherit; font-size:12.5px; font-weight:700; color:var(--txt2); cursor:pointer; }
+    .caja-chip.on { background:var(--txt); border-color:var(--txt); color:#fff; }
+    .caja-chip small { font-weight:600; opacity:.75; margin-left:4px; }
+
+    .card { background:var(--white); border:1px solid var(--border); border-radius:var(--radius);
+      box-shadow:var(--shadow); padding:16px 18px; margin-bottom:16px; min-width:0; }
+    .card-title { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
+      font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:.5px; color:var(--txt3); margin-bottom:12px; }
+    .card-title b { color:var(--txt); text-transform:none; letter-spacing:0; font-size:15px; }
+
+    .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:14px; }
+    .kpi { background:#fafafc; border:1px solid var(--border); border-radius:10px; padding:10px 12px; min-width:0; }
+    .kpi-label { font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:var(--txt3); }
+    .kpi-val { font-size:19px; font-weight:800; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .kpi-val.ok { color:#16a34a; } .kpi-val.bad { color:#dc2626; } .kpi-val.warn { color:#d97706; }
+    .kpi-sub { font-size:11px; color:var(--txt3); margin-top:2px; }
+
+    .tabla-wrap { overflow-x:auto; border:1px solid var(--border); border-radius:10px; }
+    table { width:100%; border-collapse:collapse; }
+    th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.4px; color:var(--txt3);
+      padding:8px 10px; border-bottom:1px solid var(--border); white-space:nowrap; background:#fafafc; }
+    td { padding:9px 10px; border-bottom:1px solid var(--border); font-size:13px; vertical-align:middle; }
+    tr:last-child td { border-bottom:none; }
+    td.num, th.num { text-align:right; white-space:nowrap; }
+    tr.total td { font-weight:800; background:#fafafc; }
+    .sub { font-size:11.5px; color:var(--txt3); }
+    .pill { display:inline-flex; align-items:center; border-radius:999px; padding:3px 9px; font-size:11px; font-weight:700; white-space:nowrap; }
+    .pill.on   { background:rgba(34,197,94,.12); color:#16a34a; }
+    .pill.bad  { background:rgba(239,68,68,.12); color:#dc2626; }
+    .pill.warn { background:rgba(245,158,11,.15); color:#b45309; }
+    .pill.off  { background:rgba(136,136,136,.15); color:var(--txt3); }
+    .c-bad { color:#b91c1c; font-weight:700; } .c-warn { color:#b45309; font-weight:700; } .c-ok { color:#15803d; font-weight:700; }
+
+    .cierre-form { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; margin-top:14px; align-items:end; }
+    .campo label { display:block; font-size:11.5px; font-weight:700; color:var(--txt2); margin-bottom:5px; }
+    .campo input, .campo select { width:100%; padding:9px 10px; border:1.5px solid var(--border2); border-radius:var(--radius-s);
+      font-family:inherit; font-size:15px; background:var(--white); color:var(--txt); }
+    .campo input:focus, .campo select:focus { outline:none; border-color:var(--primary); }
+    .campo input.err { border-color:var(--red); background:#fff5f5; }
+    .campo.ancho { grid-column:span 2; }
+    .req { color:var(--red); margin-left:2px; }
+    .calc { padding:9px 10px; border-radius:var(--radius-s); background:#f6f6fa; font-size:15px; font-weight:800; min-height:41px; }
+    .calc.ok  { background:rgba(34,197,94,.1);  color:#15803d; }
+    .calc.bad { background:rgba(239,68,68,.1);  color:#b91c1c; }
+    .calc.warn { background:rgba(245,158,11,.12); color:#b45309; }
+    .acciones { display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap; margin-top:14px; }
+    .vacio { text-align:center; color:var(--txt3); padding:26px 10px; font-size:13.5px; line-height:1.6; }
+    .aviso { background:#eef2ff; border:1px solid #c7d2fe; color:#3730a3; border-radius:var(--radius-s);
+      padding:10px 12px; font-size:12.5px; line-height:1.5; margin-bottom:12px; }
+
+    .filtros { display:flex; gap:10px; flex-wrap:wrap; align-items:end; margin-bottom:12px; }
+    .filtros .campo input, .filtros .campo select { font-size:14px; padding:7px 10px; }
+
+    .btn { border:1px solid var(--border2); background:var(--white); color:var(--txt); border-radius:var(--radius-s);
+      padding:8px 12px; font-family:inherit; font-size:12.5px; font-weight:700; cursor:pointer; white-space:nowrap; }
+    .btn:hover { border-color:var(--primary); color:var(--primary); }
+    .btn.sm { padding:5px 9px; font-size:12px; }
+    .btn.danger:hover { border-color:var(--red); color:var(--red); }
+    .btn-primary { border:none; background:var(--primary); color:#fff; border-radius:var(--radius-s); padding:10px 18px;
+      font-family:inherit; font-size:14px; font-weight:700; cursor:pointer; white-space:nowrap; }
+    .btn-primary:disabled, .btn:disabled { opacity:.5; cursor:default; }
+    .btn-danger { border:none; background:#dc2626; color:#fff; border-radius:var(--radius-s); padding:10px 18px;
+      font-family:inherit; font-size:14px; font-weight:700; cursor:pointer; }
+    .btns { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+
+    .modal-bg { position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center;
+      justify-content:center; z-index:1000; padding:16px; }
+    .modal-bg.hidden { display:none; }
+    .modal { background:var(--white); border-radius:14px; width:100%; max-width:460px; max-height:92vh; overflow:auto;
+      padding:22px; box-shadow:0 12px 40px rgba(0,0,0,.25); }
+    .modal h3 { font-size:17px; font-weight:800; margin-bottom:4px; }
+    .modal .modal-sub { font-size:12.5px; color:var(--txt2); margin-bottom:14px; line-height:1.5; }
+    .modal-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:16px; flex-wrap:wrap; }
+    .resumen { border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+    .resumen div { display:flex; justify-content:space-between; gap:12px; padding:8px 12px; font-size:13.5px; }
+    .resumen div:nth-child(even) { background:#f8f8fb; }
+    .resumen span:first-child { color:var(--txt2); }
+    .resumen span:last-child { font-weight:800; text-align:right; }
+    textarea.motivo { width:100%; min-height:84px; padding:9px 10px; border:1.5px solid var(--border2); border-radius:var(--radius-s);
+      font-family:inherit; font-size:15px; resize:vertical; }
+
+    .toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#111; color:#fff;
+      border-radius:var(--radius-s); padding:11px 20px; font-size:13px; font-weight:600; z-index:2000;
+      box-shadow:0 4px 16px rgba(0,0,0,.25); transition:opacity .25s; max-width:90vw; }
+    .toast.error { background:#b91c1c; }
+    .toast.hidden { opacity:0; pointer-events:none; }
+
+    /* Móvil: tablas → tarjetas; sin tapar el menú de la shell; inputs de 16 px (iOS) */
+    @media (max-width:760px) {
+      body { padding:16px; padding-top:64px; }
+      input, select, textarea { font-size:16px !important; }
+      .kpis { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .campo.ancho { grid-column:1 / -1; }
+      .tabla-wrap { border:none; overflow:visible; }
+      table.resp thead { display:none; }
+      table.resp, table.resp tbody, table.resp tr, table.resp td { display:block; width:100%; }
+      table.resp tr { border:1px solid var(--border); border-radius:10px; margin-bottom:8px; padding:6px 10px; background:var(--white); }
+      table.resp td { border:none; padding:5px 0; display:flex; justify-content:space-between; gap:12px; text-align:right; }
+      table.resp td::before { content:attr(data-label); font-size:11px; font-weight:700; text-transform:uppercase; color:var(--txt3); text-align:left; }
+      table.resp td.num { white-space:normal; }
+      table.resp tr.total { background:#fafafc; }
+      .btns { justify-content:flex-start; }
+      .modal-bg { align-items:flex-start; padding-top:72px; overflow:auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page-header">
+    <div class="page-title">Cierre de caja</div>
+    <div class="page-sub">Cada recaudador cierra lo que recibió desde su último cierre. Escribe el efectivo que entregas a la transportadora:
+      el sistema lo compara con lo recaudado. Al cerrar, esas liquidaciones quedan bloqueadas; solo el administrador puede reabrir una caja.</div>
+  </div>
+
+  <div class="cajas" id="cajasAbiertas" hidden></div>
+
+  <div class="card" id="cardCaja"><div class="vacio">Cargando…</div></div>
+
+  <div class="card">
+    <div class="card-title"><span>Cierres anteriores</span></div>
+    <div class="filtros">
+      <div class="campo"><label>Desde</label><input type="date" id="fDesde" /></div>
+      <div class="campo"><label>Hasta</label><input type="date" id="fHasta" /></div>
+      <div class="campo" id="campoRecaudador" hidden><label>Recaudador</label>
+        <select id="fRecaudador" onchange="renderCierres()"><option value="">Todos</option></select></div>
+      <button class="btn" onclick="cargarCierres()">Buscar</button>
+    </div>
+    <div id="listaCierres"><div class="vacio">Cargando…</div></div>
+  </div>
+
+  <!-- Archivo plano contable del día (solo Administrador) -->
+  <div class="card" id="cardPlano" hidden>
+    <div class="card-title"><span>Archivo plano contable</span></div>
+    <div class="page-sub" style="margin:-4px 0 12px">Un comprobante por día con los cierres de todos los recaudadores, en el formato que importa el programa contable.
+      Las cuentas salen de Catálogo › Conceptos de recaudo y el NIT de cada vehículo, del propietario según la tarjeta de propiedad (Catálogo › Buses).</div>
+    <div class="filtros">
+      <div class="campo"><label>Día del cierre</label><input type="date" id="fPlano" /></div>
+      <button class="btn" onclick="revisarPlano()">Revisar</button>
+    </div>
+    <div id="resPlano"></div>
+  </div>
+
+  <!-- Confirmar cierre -->
+  <div class="modal-bg hidden" id="modalCerrar">
+    <div class="modal">
+      <h3 id="cerrarTitulo">Cerrar caja</h3>
+      <div class="modal-sub">Revisa los valores. <b>Al cerrar, estas liquidaciones quedan bloqueadas</b> y no se pueden anular; solo el administrador puede reabrir la caja.</div>
+      <div class="resumen" id="cerrarResumen"></div>
+      <div class="modal-actions">
+        <button class="btn" onclick="cerrarModal('modalCerrar')">Revisar</button>
+        <button class="btn-primary" id="btnConfirmarCierre" onclick="confirmarCierre()">Confirmar cierre</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cierre hecho -->
+  <div class="modal-bg hidden" id="modalHecho">
+    <div class="modal">
+      <h3 id="hechoTitulo">Caja cerrada</h3>
+      <div class="modal-sub" id="hechoSub"></div>
+      <div class="modal-actions">
+        <button class="btn" id="hechoPdf">Descargar PDF</button>
+        <button class="btn" id="hechoExcel">Descargar Excel</button>
+        <button class="btn-primary" onclick="cerrarModal('modalHecho')">Listo</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reabrir (solo Administrador) -->
+  <div class="modal-bg hidden" id="modalReabrir">
+    <div class="modal">
+      <h3>Reabrir caja</h3>
+      <div class="modal-sub" id="reabrirSub"></div>
+      <div class="campo"><label>Motivo de la reapertura</label>
+        <textarea class="motivo" id="reabrirMotivo" maxlength="500" placeholder="Ej: faltó una liquidación, hay que anular una mal digitada"></textarea></div>
+      <div class="modal-actions">
+        <button class="btn" onclick="cerrarModal('modalReabrir')">Cancelar</button>
+        <button class="btn-danger" id="btnReabrir" onclick="confirmarReabrir()">Reabrir caja</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast hidden" id="toast"></div>
+
+<script>
+  const API = (window.location.port === '3030') ? 'http://localhost:8001' : window.location.origin;
+  const CU = (() => { try { return JSON.parse(localStorage.getItem('currentUser') || '{}'); } catch (_) { return {}; } })();
+  const ES_ADMIN = CU.rol === 'Administrador';
+
+  async function apiFetch(path, opts = {}) {
+    const token = localStorage.getItem('authToken');
+    const res = await fetch(API + path, {
+      ...opts,
+      headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}), ...(opts.headers || {}) },
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error || 'Error del servidor');
+    return json;
+  }
+
+  function hoyBogota() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date()); }
+  function shiftIso(iso, delta) {
+    const d = new Date(iso + 'T12:00:00Z');
+    d.setUTCDate(d.getUTCDate() + delta);
+    return d.toISOString().slice(0, 10);
+  }
+  function esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+  }
+  const fmtNum   = n => Number(n || 0).toLocaleString('es-CO');
+  const fmtMoney = n => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n || 0)).toLocaleString('es-CO');
+  const leerEntero = v => { const l = String(v ?? '').replace(/\D/g, ''); return l === '' ? null : parseInt(l, 10); };
+  function formatearDinero(inp) { const n = leerEntero(inp.value); inp.value = n == null ? '' : fmtNum(n); }
+  function fmtHora(iso) {
+    if (!iso) return '';
+    return new Date(iso).toLocaleString('es-CO', { timeZone: 'America/Bogota', day: 'numeric', month: 'short',
+      hour: 'numeric', minute: '2-digit' });
+  }
+  function fmtDia(iso) {
+    return new Date(iso + 'T12:00:00Z').toLocaleDateString('es-CO', { timeZone: 'UTC', day: 'numeric', month: 'short' });
+  }
+  const numCierre = id => 'N° ' + String(id).padStart(6, '0');
+  function textoDif(d, deCaja = false) {
+    if (d < 0) return 'Faltante ' + fmtMoney(-d);
+    if (d > 0) return 'Sobrante ' + fmtMoney(d);
+    return deCaja ? 'Cuadrada' : 'Cuadrado';
+  }
+  const clsDif = d => d < 0 ? 'bad' : d > 0 ? 'warn' : 'ok';
+
+  /* ── Estado ── */
+  let caja = null;          // respuesta de /api/recaudo/caja
+  let usuarioCaja = null;   // de quién es la caja que se ve (el admin puede cambiarla)
+  let cierres = [];
+  let cierreAReabrir = null;
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const hoy = hoyBogota();
+    document.getElementById('fHasta').value = hoy;
+    document.getElementById('fDesde').value = shiftIso(hoy, -30);
+    document.getElementById('campoRecaudador').hidden = !ES_ADMIN;
+    document.getElementById('cardPlano').hidden = !ES_ADMIN;
+    document.getElementById('fPlano').value = hoy;
+    cargarCaja();
+    cargarCierres();
+  });
+  window.addEventListener('message', e => { if (e.data?.type === 'VIEW_SHOWN') { cargarCaja(); cargarCierres(); } });
+
+  /* ── Caja abierta ── */
+  async function cargarCaja() {
+    try {
+      caja = await apiFetch('/api/recaudo/caja' + (usuarioCaja ? `?usuario_id=${usuarioCaja}` : ''));
+    } catch (e) {
+      document.getElementById('cardCaja').innerHTML = `<div class="vacio">${esc(e.message)}</div>`;
+      return;
+    }
+    renderCajasAbiertas();
+    renderCaja();
+  }
+
+  /* Administrador: chips con las cajas abiertas de todos para revisar o cerrar la de alguien */
+  function renderCajasAbiertas() {
+    const cont = document.getElementById('cajasAbiertas');
+    if (!ES_ADMIN) { cont.hidden = true; return; }
+    const abiertas = caja.cajas_abiertas || [];
+    const yo = CU.id;
+    const lista = abiertas.some(c => c.usuario_id === yo) ? abiertas
+      : [{ usuario_id: yo, nombre: CU.nombre || 'Mi caja', liquidaciones: 0, recaudado: 0 }, ...abiertas];
+    cont.hidden = false;
+    cont.innerHTML = `<span class="cajas-lbl">Cajas abiertas</span>` + lista.map(c => `
+      <button class="caja-chip ${c.usuario_id === caja.usuario.id ? 'on' : ''}" onclick="verCajaDe(${c.usuario_id})">
+        ${esc(c.usuario_id === yo ? 'Mi caja' : c.nombre || 'Usuario #' + c.usuario_id)}
+        <small>${c.liquidaciones} · ${fmtMoney(c.recaudado)}</small></button>`).join('');
+  }
+  function verCajaDe(uid) { usuarioCaja = uid === CU.id ? null : uid; cargarCaja(); }
+
+  function renderCaja() {
+    const card = document.getElementById('cardCaja');
+    const t = caja.totales, liqs = caja.liquidaciones;
+    const propia = caja.usuario.id === CU.id;
+    const titulo = `<div class="card-title"><span>Caja abierta ${propia ? '' : 'de'} <b>${propia ? '' : esc(caja.usuario.nombre || '')}</b></span>
+      <span>${liqs.length ? `desde ${fmtHora(liqs.map(l => l.created_at).sort()[0])}` : ''}</span></div>`;
+    if (!liqs.length) {
+      card.innerHTML = titulo + `<div class="vacio">No hay liquidaciones pendientes por cerrar. La caja está al día.</div>`;
+      return;
+    }
+    const filas = [...liqs].sort((a, b) => a.created_at.localeCompare(b.created_at)).map(l => `<tr>
+        <td data-label="Liquidada">${fmtHora(l.created_at)}</td>
+        <td data-label="Día">${fmtDia(l.fecha)}</td>
+        <td data-label="Bus"><span><b>${l.bus_numero}</b> <span class="sub">${esc(l.bus_placa || '')}</span></span></td>
+        <td data-label="Conductor">${l.conductores.map(c => esc(c.conductor_nombre)).join(', ')}</td>
+        <td data-label="Producido" class="num">${fmtMoney(l.producido)}</td>
+        <td data-label="Gastos" class="num">${fmtMoney(l.total_gastos)}</td>
+        <td data-label="Recaudado" class="num"><b>${fmtMoney(l.recaudado)}</b></td>
+        <td data-label="Resultado" class="num"><span class="c-${clsDif(l.diferencia)}">${textoDif(l.diferencia)}</span></td>
+      </tr>`).join('');
+    card.innerHTML = titulo + `
+      ${!propia ? `<div class="aviso">Estás viendo la caja de ${esc(caja.usuario.nombre || '')}. Si la cierras, el cierre queda a su nombre y el historial registra que lo hiciste tú.</div>` : ''}
+      <div class="kpis">
+        <div class="kpi"><div class="kpi-label">Liquidaciones</div><div class="kpi-val">${t.liquidaciones}</div><div class="kpi-sub">${fmtNum(t.pasajeros)} pasajeros</div></div>
+        <div class="kpi"><div class="kpi-label">Producido</div><div class="kpi-val">${fmtMoney(t.producido)}</div></div>
+        <div class="kpi"><div class="kpi-label">Gastos</div><div class="kpi-val">${fmtMoney(t.total_gastos)}</div></div>
+        <div class="kpi"><div class="kpi-label">Recaudado</div><div class="kpi-val ok">${fmtMoney(t.recaudado)}</div><div class="kpi-sub">lo que debe haber en caja</div></div>
+        <div class="kpi"><div class="kpi-label">Conductores</div><div class="kpi-val ${clsDif(t.diferencia_conductores)}">${fmtMoney(t.diferencia_conductores)}</div><div class="kpi-sub">faltantes / sobrantes</div></div>
+      </div>
+      <div class="tabla-wrap"><table class="resp">
+        <thead><tr><th>Liquidada</th><th>Día</th><th>Bus</th><th>Conductor</th><th class="num">Producido</th><th class="num">Gastos</th><th class="num">Recaudado</th><th class="num">Resultado</th></tr></thead>
+        <tbody>${filas}
+          <tr class="total"><td data-label="">Total</td><td></td><td></td><td></td>
+            <td data-label="Producido" class="num">${fmtMoney(t.producido)}</td><td data-label="Gastos" class="num">${fmtMoney(t.total_gastos)}</td>
+            <td data-label="Recaudado" class="num">${fmtMoney(t.recaudado)}</td>
+            <td data-label="Conductores" class="num"><span class="c-${clsDif(t.diferencia_conductores)}">${textoDif(t.diferencia_conductores)}</span></td></tr>
+        </tbody></table></div>
+      <div class="cierre-form">
+        <div class="campo"><label>Efectivo entregado a la transportadora<span class="req">*</span></label>
+          <input id="fEfectivo" inputmode="numeric" placeholder="$0" oninput="formatearDinero(this); recalcularCaja()" /></div>
+        <div class="campo"><label>Diferencia de caja</label><div class="calc" id="cDifCaja">—</div></div>
+        <div class="campo"><label>N° planilla / precinto <span class="sub">(opcional)</span></label>
+          <input id="fPlanilla" maxlength="80" placeholder="De la transportadora" /></div>
+        <div class="campo ancho"><label>Observación <span class="sub">(opcional)</span></label>
+          <input id="fObs" maxlength="500" placeholder="Opcional" /></div>
+      </div>
+      <div class="acciones"><button class="btn-primary" onclick="cerrarCaja()">Cerrar caja</button></div>`;
+  }
+
+  function recalcularCaja() {
+    const el = document.getElementById('cDifCaja');
+    const ef = leerEntero(document.getElementById('fEfectivo').value);
+    document.getElementById('fEfectivo').classList.remove('err');
+    if (ef == null) { el.className = 'calc'; el.textContent = '—'; return; }
+    const d = ef - caja.totales.recaudado;
+    el.className = 'calc ' + clsDif(d);
+    el.textContent = `${fmtMoney(d)} · ${textoDif(d, true)}`;
+  }
+
+  function cerrarCaja() {
+    const ef = leerEntero(document.getElementById('fEfectivo').value);
+    if (ef == null) {
+      document.getElementById('fEfectivo').classList.add('err');
+      document.getElementById('fEfectivo').focus();
+      return toast('Falta llenar: el efectivo entregado', true);
+    }
+    const t = caja.totales, d = ef - t.recaudado;
+    const planilla = document.getElementById('fPlanilla').value.trim();
+    document.getElementById('cerrarTitulo').textContent = `Cerrar caja${caja.usuario.id === CU.id ? '' : ' de ' + (caja.usuario.nombre || '')}`;
+    document.getElementById('cerrarResumen').innerHTML = `
+      <div><span>Liquidaciones</span><span>${t.liquidaciones}</span></div>
+      <div><span>Producido</span><span>${fmtMoney(t.producido)}</span></div>
+      <div><span>Gastos</span><span>${fmtMoney(t.total_gastos)}</span></div>
+      <div><span>Recaudado (debe haber en caja)</span><span>${fmtMoney(t.recaudado)}</span></div>
+      <div><span>Efectivo entregado</span><span>${fmtMoney(ef)}</span></div>
+      <div><span>Diferencia de caja</span><span class="c-${clsDif(d)}">${fmtMoney(d)} · ${textoDif(d, true)}</span></div>
+      ${planilla ? `<div><span>Planilla / precinto</span><span>${esc(planilla)}</span></div>` : ''}`;
+    document.getElementById('btnConfirmarCierre').disabled = false;
+    abrirModal('modalCerrar');
+  }
+
+  async function confirmarCierre() {
+    const btn = document.getElementById('btnConfirmarCierre');
+    btn.disabled = true;
+    const body = {
+      efectivo: leerEntero(document.getElementById('fEfectivo').value),
+      planilla: document.getElementById('fPlanilla').value.trim(),
+      observacion: document.getElementById('fObs').value.trim(),
+      ...(usuarioCaja ? { usuario_id: usuarioCaja } : {}),
+    };
+    try {
+      const r = await apiFetch('/api/recaudo/caja/cerrar', { method: 'POST', body: JSON.stringify(body) });
+      cerrarModal('modalCerrar');
+      const c = r.cierre;
+      document.getElementById('hechoTitulo').textContent = `Caja cerrada · ${numCierre(c.id)}`;
+      document.getElementById('hechoSub').innerHTML = `${c.liquidaciones} ${c.liquidaciones === 1 ? 'liquidación' : 'liquidaciones'} ·
+        recaudado ${fmtMoney(c.recaudado)} · efectivo ${fmtMoney(c.efectivo)} ·
+        <b class="c-${clsDif(c.diferencia_caja)}">${textoDif(c.diferencia_caja, true)}</b>.<br>Descarga el reporte para entregarlo con el dinero.`;
+      document.getElementById('hechoPdf').onclick = () => exportar(c.id, 'pdf');
+      document.getElementById('hechoExcel').onclick = () => exportar(c.id, 'excel');
+      abrirModal('modalHecho');
+      await Promise.all([cargarCaja(), cargarCierres()]);
+    } catch (e) {
+      toast(e.message, true);
+      btn.disabled = false;
+    }
+  }
+
+  /* ── Cierres anteriores ── */
+  async function cargarCierres() {
+    const desde = document.getElementById('fDesde').value, hasta = document.getElementById('fHasta').value;
+    try {
+      cierres = (await apiFetch(`/api/recaudo/cierres?desde=${desde}&hasta=${hasta}`)).cierres;
+    } catch (e) {
+      document.getElementById('listaCierres').innerHTML = `<div class="vacio">${esc(e.message)}</div>`;
+      return;
+    }
+    if (ES_ADMIN) {
+      const sel = document.getElementById('fRecaudador'), actual = sel.value;
+      const usuarios = [...new Map(cierres.map(c => [c.usuario_id, c.usuario_nombre])).entries()];
+      sel.innerHTML = '<option value="">Todos</option>' + usuarios.map(([id, n]) => `<option value="${id}">${esc(n || 'Usuario #' + id)}</option>`).join('');
+      sel.value = usuarios.some(([id]) => String(id) === actual) ? actual : '';
+    }
+    renderCierres();
+  }
+
+  function renderCierres() {
+    const filtro = document.getElementById('fRecaudador').value;
+    const lista = cierres.filter(c => !filtro || String(c.usuario_id) === filtro);
+    const cont = document.getElementById('listaCierres');
+    if (!lista.length) { cont.innerHTML = `<div class="vacio">No hay cierres en esas fechas.</div>`; return; }
+    cont.innerHTML = `<div class="tabla-wrap"><table class="resp">
+      <thead><tr><th>Cierre</th><th>Cerrado</th>${ES_ADMIN ? '<th>Recaudador</th>' : ''}<th class="num">Liquidaciones</th>
+        <th class="num">Recaudado</th><th class="num">Efectivo</th><th class="num">Diferencia de caja</th><th>Estado</th><th></th></tr></thead>
+      <tbody>${lista.map(c => `<tr>
+        <td data-label="Cierre"><div><b>${numCierre(c.id)}</b>${c.planilla ? `<div class="sub">Planilla ${esc(c.planilla)}</div>` : ''}</div></td>
+        <td data-label="Cerrado"><div>${fmtHora(c.cerrado_at)}${c.cerrado_por && c.cerrado_por !== c.usuario_id ? `<div class="sub">por ${esc(c.cerrado_por_nombre || '')}</div>` : ''}</div></td>
+        ${ES_ADMIN ? `<td data-label="Recaudador">${esc(c.usuario_nombre || '')}</td>` : ''}
+        <td data-label="Liquidaciones" class="num">${c.liquidaciones}</td>
+        <td data-label="Recaudado" class="num">${fmtMoney(c.recaudado)}</td>
+        <td data-label="Efectivo" class="num">${fmtMoney(c.efectivo)}</td>
+        <td data-label="Diferencia de caja" class="num"><span class="c-${clsDif(c.diferencia_caja)}">${textoDif(c.diferencia_caja, true)}</span></td>
+        <td data-label="Estado"><div>${c.reabierto_at
+          ? `<span class="pill off" title="${esc(c.motivo_reapertura || '')}">Reabierto</span><div class="sub">${fmtHora(c.reabierto_at)}${c.reabierto_por_nombre ? ' · ' + esc(c.reabierto_por_nombre) : ''}</div>`
+          : '<span class="pill on">Cerrado</span>'}</div></td>
+        <td data-label=""><div class="btns">
+          <button class="btn sm" onclick="exportar(${c.id}, 'pdf')">PDF</button>
+          <button class="btn sm" onclick="exportar(${c.id}, 'excel')">Excel</button>
+          ${ES_ADMIN && !c.reabierto_at ? `<button class="btn sm danger" onclick="abrirReabrir(${c.id})">Reabrir</button>` : ''}
+        </div></td>
+      </tr>`).join('')}</tbody></table></div>`;
+  }
+
+  /* ── Reabrir (solo Administrador) ── */
+  function abrirReabrir(id) {
+    const c = cierres.find(x => x.id === id);
+    cierreAReabrir = id;
+    document.getElementById('reabrirSub').innerHTML = `${numCierre(id)} de ${esc(c.usuario_nombre || '')} · ${c.liquidaciones} liquidaciones ·
+      recaudado ${fmtMoney(c.recaudado)}.<br>El cierre queda en el historial como reabierto y sus liquidaciones vuelven a la caja abierta
+      del recaudador (ahí se pueden anular y luego cerrar de nuevo).`;
+    document.getElementById('reabrirMotivo').value = '';
+    document.getElementById('btnReabrir').disabled = false;
+    abrirModal('modalReabrir');
+    document.getElementById('reabrirMotivo').focus();
+  }
+  async function confirmarReabrir() {
+    const motivo = document.getElementById('reabrirMotivo').value.trim();
+    if (motivo.length < 5) return toast('Escribe el motivo de la reapertura', true);
+    const btn = document.getElementById('btnReabrir');
+    btn.disabled = true;
+    try {
+      await apiFetch(`/api/recaudo/cierres/${cierreAReabrir}/reabrir`, { method: 'POST', body: JSON.stringify({ motivo }) });
+      cerrarModal('modalReabrir');
+      toast(`Caja ${numCierre(cierreAReabrir)} reabierta`);
+      await Promise.all([cargarCaja(), cargarCierres()]);
+    } catch (e) { toast(e.message, true); btn.disabled = false; }
+  }
+
+  /* ── Reporte del cierre: PDF y Excel ── */
+  const _libs = {};
+  function cargarLibreria(src) {
+    if (!_libs[src]) {
+      _libs[src] = new Promise((ok, fail) => {
+        const s = document.createElement('script');
+        s.src = src; s.onload = ok;
+        s.onerror = () => { delete _libs[src]; fail(new Error('No se pudo descargar la librería. Revisa tu conexión.')); };
+        document.head.appendChild(s);
+      });
+    }
+    return _libs[src];
+  }
+  const LIB_JSPDF     = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+  const LIB_AUTOTABLE = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js';
+  const LIB_EXCELJS   = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
+
+  /* Logo de la flota (archivo del sitio) reducido a un JPEG de 300 px para los reportes */
+  let _logo;
+  async function logoReporte() {
+    if (_logo !== undefined) return _logo;
+    try {
+      const img = new Image();
+      img.src = 'logo-milagrosa.png';
+      await img.decode();
+      const c = document.createElement('canvas');
+      c.width = 300; c.height = Math.round(300 * img.naturalHeight / img.naturalWidth);
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      _logo = { data: c.toDataURL('image/jpeg', 0.9), w: c.width, h: c.height };
+    } catch (_) { _logo = null; }
+    return _logo;
+  }
+
+  /* Datos del reporte: encabezado, resumen y una fila por liquidación */
+  function datosReporte(c) {
+    const liqs = [...c.liquidaciones_detalle].sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
+    return {
+      titulo: `Cierre de caja ${numCierre(c.id)}`,
+      lineas: [
+        `Recaudador: ${c.usuario_nombre || ''}${c.cerrado_por && c.cerrado_por !== c.usuario_id ? ` (cerrada por ${c.cerrado_por_nombre || ''})` : ''}`,
+        `Cerrado: ${fmtHora(c.cerrado_at)}${c.desde_at ? ` · Liquidaciones desde ${fmtHora(c.desde_at)} hasta ${fmtHora(c.hasta_at)}` : ''}`,
+        c.planilla ? `Planilla / precinto de la transportadora: ${c.planilla}` : '',
+        c.reabierto_at ? `REABIERTO el ${fmtHora(c.reabierto_at)}${c.reabierto_por_nombre ? ' por ' + c.reabierto_por_nombre : ''}. Motivo: ${c.motivo_reapertura || ''}` : '',
+      ].filter(Boolean),
+      resumen: [
+        ['Liquidaciones', String(c.liquidaciones)], ['Pasajeros', fmtNum(c.pasajeros)],
+        ['Producido', fmtMoney(c.producido)], ['Gastos', fmtMoney(c.total_gastos)],
+        ['Por entregar', fmtMoney(c.neto)], ['Recaudado (debe haber en caja)', fmtMoney(c.recaudado)],
+        ['Faltantes / sobrantes de conductores', textoDif(c.diferencia_conductores)],
+        ['Efectivo entregado', fmtMoney(c.efectivo)], ['Diferencia de caja', textoDif(c.diferencia_caja, true)],
+      ],
+      cabecera: ['Liquidada', 'Día', 'Bus', 'Conductor(es)', 'Pasajeros', 'Producido', 'Gastos', 'Recaudado', 'Resultado'],
+      filas: liqs.map(l => [fmtHora(l.created_at), l.fecha, `${l.bus_numero} ${l.bus_placa || ''}`.trim(),
+        l.conductores.map(x => x.conductor_nombre).join(', '), fmtNum(l.pasajeros), fmtMoney(l.producido),
+        fmtMoney(l.total_gastos), fmtMoney(l.recaudado), textoDif(l.diferencia)]),
+      total: ['TOTAL', '', '', '', fmtNum(c.pasajeros), fmtMoney(c.producido), fmtMoney(c.total_gastos),
+        fmtMoney(c.recaudado), textoDif(c.diferencia_conductores)],
+      observacion: c.observacion || '',
+    };
+  }
+
+  async function exportar(id, tipo) {
+    try {
+      toast('Generando el reporte…');
+      const c = await apiFetch(`/api/recaudo/cierres/${id}`);
+      const d = datosReporte(c);
+      const logo = await logoReporte();
+      if (tipo === 'pdf') await exportarPDF(c, d, logo); else await exportarExcel(c, d, logo);
+      toast(tipo === 'pdf' ? 'PDF generado' : 'Excel generado');
+    } catch (e) { toast(e.message || 'No se pudo generar el reporte', true); }
+  }
+
+  async function exportarPDF(c, d, logo) {
+    await cargarLibreria(LIB_JSPDF);
+    await cargarLibreria(LIB_AUTOTABLE);
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const margin = 12, pageW = doc.internal.pageSize.getWidth();
+    let headX = margin, logoH = 0;
+    if (logo) {
+      logoH = 30 * logo.h / logo.w;
+      doc.addImage(logo.data, 'JPEG', margin, 10, 30, logoH);
+      headX = margin + 36;
+    }
+    let y = 16;
+    doc.setFontSize(15); doc.setFont(undefined, 'bold'); doc.text(d.titulo, headX, y); y += 6;
+    doc.setFontSize(9.5); doc.setFont(undefined, 'normal'); doc.setTextColor(80);
+    d.lineas.forEach(l => { doc.splitTextToSize(l, pageW - headX - margin).forEach(t => { doc.text(t, headX, y); y += 4.6; }); });
+    doc.text(`Generado: ${new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' })}`, headX, y); y += 6;
+    doc.setTextColor(0);
+    y = Math.max(y, 10 + logoH + 6);
+    if (c.reabierto_at) {
+      doc.setTextColor(185, 28, 28); doc.setFontSize(11); doc.setFont(undefined, 'bold');
+      doc.text('CIERRE REABIERTO — sus liquidaciones volvieron a la caja abierta', margin, y); y += 6;
+      doc.setTextColor(0); doc.setFont(undefined, 'normal');
+    }
+    doc.autoTable({
+      startY: y, margin: { left: margin, right: margin }, theme: 'grid', body: d.resumen,
+      styles: { fontSize: 9.5, cellPadding: 2 }, columnStyles: { 0: { cellWidth: 75, textColor: 80 }, 1: { halign: 'right', fontStyle: 'bold' } },
+      tableWidth: 130,
+    });
+    doc.autoTable({
+      startY: doc.lastAutoTable.finalY + 6, margin: { left: margin, right: margin }, theme: 'grid',
+      head: [d.cabecera], body: d.filas, foot: [d.total],
+      styles: { fontSize: 8, cellPadding: 1.8 },
+      headStyles: { fillColor: [99, 102, 241], textColor: 255, fontStyle: 'bold' },
+      footStyles: { fillColor: [243, 244, 246], textColor: 30, fontStyle: 'bold' },
+      columnStyles: { 4: { halign: 'right' }, 5: { halign: 'right' }, 6: { halign: 'right' }, 7: { halign: 'right' }, 8: { halign: 'right' } },
+    });
+    y = doc.lastAutoTable.finalY + 8;
+    if (d.observacion) { doc.setFontSize(9.5); doc.text(doc.splitTextToSize('Observación: ' + d.observacion, pageW - 2 * margin), margin, y); y += 10; }
+    if (y > 260) { doc.addPage(); y = 30; }
+    y += 14;
+    doc.setDrawColor(120); doc.setFontSize(9.5);
+    doc.line(margin, y, margin + 70, y); doc.text('Entrega (recaudador)', margin, y + 5);
+    doc.line(pageW - margin - 70, y, pageW - margin, y); doc.text('Recibe (transportadora)', pageW - margin - 70, y + 5);
+    doc.save(`cierre_caja_${String(c.id).padStart(6, '0')}.pdf`);
+  }
+
+  async function exportarExcel(c, d, logo) {
+    await cargarLibreria(LIB_EXCELJS);
+    const AZUL = 'FF1D4ED8', borde = { style: 'thin', color: { argb: 'FFD9D9E8' } };
+    const bordes = { top: borde, left: borde, bottom: borde, right: borde };
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Flota la Milagrosa';
+    const ws = wb.addWorksheet('Cierre de caja');
+    ws.columns = [{ width: 18 }, { width: 12 }, { width: 14 }, { width: 34 }, { width: 11 }, { width: 14 }, { width: 13 }, { width: 14 }, { width: 18 }];
+    ws.getRow(1).height = 22; ws.getRow(2).height = 18; ws.getRow(3).height = 18; ws.getRow(4).height = 18;
+    ws.mergeCells('A1:A4');
+    if (logo) {
+      try { ws.addImage(wb.addImage({ base64: logo.data.split(',')[1], extension: 'jpeg' }), { tl: { col: 0, row: 0 }, ext: { width: 120, height: 120 * logo.h / logo.w } }); } catch (_) {}
+    }
+    ws.mergeCells('B1:I1');
+    Object.assign(ws.getCell('B1'), { value: d.titulo.toUpperCase(), font: { bold: true, size: 15, color: { argb: AZUL } }, alignment: { horizontal: 'right', vertical: 'middle' } });
+    d.lineas.slice(0, 3).forEach((l, i) => {
+      ws.mergeCells(`B${i + 2}:I${i + 2}`);
+      Object.assign(ws.getCell(`B${i + 2}`), { value: l, font: { size: 10, color: { argb: l.startsWith('REABIERTO') ? 'FFB91C1C' : 'FF555566' } }, alignment: { horizontal: 'right', vertical: 'middle' } });
+    });
+    let fila = 6;
+    d.resumen.forEach(([k, v]) => {
+      ws.mergeCells(`A${fila}:C${fila}`);
+      ws.getCell(`A${fila}`).value = k; ws.getCell(`A${fila}`).font = { size: 10, color: { argb: 'FF555566' } };
+      ws.getCell(`D${fila}`).value = v; ws.getCell(`D${fila}`).font = { bold: true, size: 10 };
+      ['A', 'D'].forEach(col => { ws.getCell(`${col}${fila}`).border = bordes; });
+      fila++;
+    });
+    fila++;
+    const hr = ws.getRow(fila);
+    hr.values = d.cabecera; hr.height = 20;
+    hr.eachCell(cell => { cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: AZUL } }; cell.font = { bold: true, color: { argb: 'FFFFFFFF' } }; cell.border = bordes; cell.alignment = { horizontal: 'center', vertical: 'middle' }; });
+    d.filas.forEach(f => {
+      const r = ws.addRow(f);
+      r.eachCell(cell => { cell.border = bordes; cell.font = { size: 10 }; });
+      [5, 6, 7, 8, 9].forEach(i => { r.getCell(i).alignment = { horizontal: 'right' }; });
+    });
+    const tr = ws.addRow(d.total);
+    tr.eachCell(cell => { cell.border = bordes; cell.font = { bold: true, color: { argb: AZUL } }; cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } }; });
+    [5, 6, 7, 8, 9].forEach(i => { tr.getCell(i).alignment = { horizontal: 'right' }; });
+    if (d.observacion) { ws.addRow([]); ws.addRow(['Observación: ' + d.observacion]); }
+    const buf = await wb.xlsx.writeBuffer();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+    a.download = `cierre_caja_${String(c.id).padStart(6, '0')}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  /* ── Archivo plano del día (Administrador) ── */
+  let plano = null;
+  async function revisarPlano() {
+    const cont = document.getElementById('resPlano');
+    const fecha = document.getElementById('fPlano').value;
+    try {
+      plano = await apiFetch(`/api/recaudo/plano?fecha=${fecha}`);
+    } catch (e) { cont.innerHTML = `<div class="vacio">${esc(e.message)}</div>`; return; }
+    if (!plano.filas.length) {
+      cont.innerHTML = `<div class="vacio">No hay cierres de caja ese día (o los que hubo están reabiertos).</div>`;
+      return;
+    }
+    const lineasRecaudo = plano.filas.length - 1;
+    cont.innerHTML = `
+      <div class="kpis">
+        <div class="kpi"><div class="kpi-label">Comprobante</div><div class="kpi-val">${esc(plano.numero)}</div></div>
+        <div class="kpi"><div class="kpi-label">Cierres</div><div class="kpi-val">${plano.cierres.length}</div>
+          <div class="kpi-sub">${plano.cierres.map(c => `${numCierre(c.id)} ${esc(c.recaudador || '')}`).join(' · ')}</div></div>
+        <div class="kpi"><div class="kpi-label">Líneas</div><div class="kpi-val">${plano.filas.length}</div><div class="kpi-sub">${lineasRecaudo} de recaudo + 1 de cierre</div></div>
+        <div class="kpi"><div class="kpi-label">Total</div><div class="kpi-val ok">${fmtMoney(plano.total)}</div></div>
+      </div>
+      ${plano.avisos.length ? `<div class="aviso" style="background:#fef3c7;border-color:#fcd34d;color:#92400e">
+        <b>Revisa antes de enviarlo a contabilidad:</b><br>${plano.avisos.map(esc).join('<br>')}<br>
+        Complétalo en Catálogo › Buses y vuelve a revisar.</div>` : ''}
+      <div class="acciones" style="justify-content:flex-start;margin-top:0">
+        <button class="btn-primary" onclick="descargarPlano()">Descargar archivo plano (Excel)</button>
+      </div>`;
+  }
+
+  /* Excel sin formato: una fila de encabezados y una por línea, como lo pide el programa contable */
+  async function descargarPlano() {
+    if (!plano) return;
+    try {
+      await cargarLibreria(LIB_EXCELJS);
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet('Plano');
+      ws.addRow([...plano.columnas]);
+      // Los valores solo con dígitos van como número (como en el ejemplo de la contadora)
+      plano.filas.forEach(f => ws.addRow(f.map(v => (typeof v === 'string' && /^\d+$/.test(v)) ? Number(v) : v)));
+      const buf = await wb.xlsx.writeBuffer();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+      a.download = `plano_recaudos_${plano.numero}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast('Archivo plano generado');
+    } catch (e) { toast(e.message || 'No se pudo generar el archivo', true); }
+  }
+
+  function abrirModal(id)  { document.getElementById(id).classList.remove('hidden'); }
+  function cerrarModal(id) { document.getElementById(id).classList.add('hidden'); }
+  let toastTimer = null;
+  function toast(msg, error = false) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.className = 'toast' + (error ? ' error' : '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.add('hidden'), 3200);
+  }
+</script>
+</body>
+</html>

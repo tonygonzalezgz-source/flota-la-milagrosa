@@ -5,19 +5,21 @@ import 'package:intl/intl.dart';
 import '../../core/fechas.dart';
 import '../../core/modelos.dart';
 import '../../core/movilidad.dart';
+import '../../core/recaudo.dart';
 import '../../core/session.dart';
 import '../../core/theme.dart';
 import '../../widgets/aurora.dart';
 import '../../widgets/comunes.dart';
 import '../reportes/reportes_screen.dart';
 import 'grafica_semanal.dart';
+import 'liquidacion_sheet.dart';
 import 'propietario_screen.dart' show semanasGrafica;
 
 String _mayuscula(String s) => s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
 
 /// Detalle de un vehículo del propietario (estilo Aurora Clara): lo que pasó
-/// en la fecha elegida (dinero, pasajeros, vueltas, km, IPK, conductor, ruta y
-/// novedades), su gráfica semanal y los últimos días registrados.
+/// en la fecha elegida (recaudo real de la liquidación, pasajeros, vueltas, km,
+/// IPK, conductor, ruta y novedades), su gráfica semanal y los últimos días.
 class VehiculoScreen extends ConsumerStatefulWidget {
   final Map<String, dynamic> bus;
 
@@ -47,6 +49,11 @@ class _VehiculoScreenState extends ConsumerState<VehiculoScreen> {
   late String _fecha;
   bool _buscando = false;
 
+  /// Liquidaciones del recaudo por fecha; null si el recaudo no está habilitado
+  /// para la cuenta (o aún no cargó): entonces no se muestra nada del recaudo.
+  Map<String, Liquidacion>? _liqs;
+  bool _recaudoListo = false;
+
   int get _busId => asInt(widget.bus['id'])!;
 
   @override
@@ -55,6 +62,18 @@ class _VehiculoScreenState extends ConsumerState<VehiculoScreen> {
     // Arranca en el último día con registro; si no hay ninguno, hoy.
     final fechas = _porFecha.keys.toList()..sort();
     _fecha = fechas.isEmpty ? Fechas.hoy() : fechas.last;
+    _cargarRecaudo();
+  }
+
+  Future<void> _cargarRecaudo() async {
+    try {
+      final r = await liquidacionesBus(ref.read(apiClientProvider), _busId, widget.desde, Fechas.hoy());
+      if (mounted) setState(() => _liqs = r);
+    } catch (_) {
+      // Sin recaudo la pantalla sigue con la movilidad.
+    } finally {
+      if (mounted) setState(() => _recaudoListo = true);
+    }
   }
 
   @override
@@ -78,6 +97,10 @@ class _VehiculoScreenState extends ConsumerState<VehiculoScreen> {
       _consultadas.add(fecha);
       for (final f in filas.where((f) => asInt(f['bus_id']) == _busId)) {
         _porFecha[Fechas.normalizar(f['fecha'])] = f;
+      }
+      if (_liqs != null) {
+        final r = await liquidacionesBus(ref.read(apiClientProvider), _busId, fecha, fecha);
+        if (r != null) _liqs!.addAll(r);
       }
     } catch (e) {
       if (mounted) mostrarMensaje(context, e.toString(), error: true);
@@ -113,8 +136,8 @@ class _VehiculoScreenState extends ConsumerState<VehiculoScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final recientes = _porFecha.values.toList()
-      ..sort((a, b) => Fechas.normalizar(b['fecha']).compareTo(Fechas.normalizar(a['fecha'])));
+    // Días con movilidad o con liquidación, del más reciente al más antiguo.
+    final recientes = {..._porFecha.keys, ...?_liqs?.keys}.toList()..sort((a, b) => b.compareTo(a));
 
     return Scaffold(
       backgroundColor: AppColors.bgLight,
@@ -135,9 +158,9 @@ class _VehiculoScreenState extends ConsumerState<VehiculoScreen> {
               const SizedBox(height: 10),
               if (recientes.isEmpty)
                 const TarjetaAurora(
-                  child: VacioView('Este vehículo no tiene registros de movilidad recientes.'),
+                  child: VacioView('Este vehículo no tiene registros recientes.'),
                 ),
-              for (final f in recientes.take(21)) ...[_filaReciente(f), const SizedBox(height: 8)],
+              for (final fecha in recientes.take(21)) ...[_filaReciente(fecha), const SizedBox(height: 8)],
             ]),
           ),
         ),
@@ -235,64 +258,40 @@ class _VehiculoScreenState extends ConsumerState<VehiculoScreen> {
       ];
     }
     final f = _porFecha[_fecha];
-    if (f == null) {
+    final liq = _liqs?[_fecha];
+    if (f == null && liq == null) {
       return [
         const TarjetaAurora(
           radio: 26,
           sombra: sombraFuerte,
-          child: VacioView('No hay registro de movilidad para este día.', icono: Icons.event_busy),
+          child: VacioView('No hay movilidad ni liquidación para este día.', icono: Icons.event_busy),
         ),
       ];
     }
-    final pax = asInt(f['pasajeros']) ?? 0;
-    final km = asDouble(f['km_recorridos']) ?? 0;
-    final conductor = conductorDe(f);
-    final ruta = rutaDe(f);
-    final novedades = asStr(f['novedades']).trim();
+    // Sin movilidad del analista, los datos del día salen de la liquidación.
+    final pax = f != null ? asInt(f['pasajeros']) ?? 0 : liq!.pasajeros;
+    final vueltas = f != null ? asInt(f['vueltas']) ?? 0 : liq!.viajes ?? 0;
+    final km = f == null ? null : asDouble(f['km_recorridos']) ?? 0;
+    final conductor = f != null ? conductorDe(f) : liq!.nombresConductores;
+    final ruta = f != null ? rutaDe(f) : liq!.rutas;
+    final novedades = f == null ? '' : asStr(f['novedades']).trim();
 
     return [
-      TarjetaAurora(
-        radio: 26,
-        sombra: sombraFuerte,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
-        child: Column(children: [
-          const Text(
-            'Dinero bruto a liquidar',
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.muted),
-          ),
-          const SizedBox(height: 4),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              pesos(dineroLiquidar(pax)),
-              style: const TextStyle(
-                fontFamily: Fuentes.titulo,
-                fontSize: 38,
-                fontWeight: FontWeight.w700,
-                letterSpacing: -1,
-                color: AppColors.dinero,
-              ),
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '${miles(pax)} pasajeros × ${pesos(tarifaPasaje)}',
-            style: const TextStyle(fontSize: 12, color: AppColors.muted),
-          ),
-        ]),
-      ),
+      _tarjetaRecaudo(liq, pax),
       const SizedBox(height: 16),
       Row(children: [
         Expanded(child: _dato('Pasajeros', miles(pax))),
         const SizedBox(width: 10),
-        Expanded(child: _dato('Vueltas', miles(asInt(f['vueltas']) ?? 0))),
+        Expanded(child: _dato('Vueltas', miles(vueltas))),
       ]),
-      const SizedBox(height: 10),
-      Row(children: [
-        Expanded(child: _dato('Km recorridos', km.toStringAsFixed(1).replaceAll('.', ','))),
-        const SizedBox(width: 10),
-        Expanded(child: _dato('IPK', ipk(pax, km).toStringAsFixed(2).replaceAll('.', ','), destacado: true)),
-      ]),
+      if (km != null) ...[
+        const SizedBox(height: 10),
+        Row(children: [
+          Expanded(child: _dato('Km recorridos', km.toStringAsFixed(1).replaceAll('.', ','))),
+          const SizedBox(width: 10),
+          Expanded(child: _dato('IPK', ipk(pax, km).toStringAsFixed(2).replaceAll('.', ','), destacado: true)),
+        ]),
+      ],
       const SizedBox(height: 16),
       TarjetaAurora(
         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -302,30 +301,118 @@ class _VehiculoScreenState extends ConsumerState<VehiculoScreen> {
           _linea(Icons.route_outlined, AppColors.blue, const Color(0xFFE6F7F5), 'Ruta',
               ruta.isEmpty ? 'Sin registrar' : ruta),
           const SizedBox(height: 14),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(
-              color: novedades.isEmpty ? AppColors.campo : const Color(0xFFFFF4E0),
-              borderRadius: BorderRadius.circular(16),
+          if (f == null)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(color: AppColors.campo, borderRadius: BorderRadius.circular(16)),
+              child: const Text('Datos tomados de la liquidación: la movilidad de este día aún no está cargada.',
+                  style: TextStyle(fontSize: 13, color: AppColors.muted)),
+            )
+          else
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: novedades.isEmpty ? AppColors.campo : const Color(0xFFFFF4E0),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: novedades.isEmpty
+                  ? const Row(children: [
+                      Icon(Icons.check_circle_outline, size: 18, color: AppColors.dinero),
+                      SizedBox(width: 8),
+                      Text('Sin novedades reportadas', style: TextStyle(fontSize: 13, color: AppColors.muted)),
+                    ])
+                  : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      const Text(
+                        'Novedad reportada',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF8A5200)),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(novedades, style: const TextStyle(fontSize: 14, color: Color(0xFF5C3A00))),
+                    ]),
             ),
-            child: novedades.isEmpty
-                ? const Row(children: [
-                    Icon(Icons.check_circle_outline, size: 18, color: AppColors.dinero),
-                    SizedBox(width: 8),
-                    Text('Sin novedades reportadas', style: TextStyle(fontSize: 13, color: AppColors.muted)),
-                  ])
-                : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    const Text(
-                      'Novedad reportada',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF8A5200)),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(novedades, style: const TextStyle(fontSize: 14, color: Color(0xFF5C3A00))),
-                  ]),
-          ),
         ]),
       ),
     ];
+  }
+
+  /// Tarjeta principal del día: lo RECAUDADO en la liquidación (pasajeros × la
+  /// tarifa del bus o de la micro, menos los gastos), cómo quedó la entrega y
+  /// "Ver liquidación". Si el día no se ha liquidado, lo dice.
+  Widget _tarjetaRecaudo(Liquidacion? l, int pax) {
+    const titulo = Text(
+      'Recaudo del día',
+      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.muted),
+    );
+    if (l == null) {
+      final texto = _liqs == null && !_recaudoListo
+          ? 'Cargando el recaudo…'
+          : _liqs == null
+              ? 'El recaudo no está disponible para esta cuenta.'
+              : '${miles(pax)} pasajeros registrados. El recaudo aparece cuando se liquide el bus.';
+      return TarjetaAurora(
+        radio: 26,
+        sombra: sombraFuerte,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+        child: Column(children: [
+          titulo,
+          const SizedBox(height: 6),
+          const Text(
+            'Sin liquidar',
+            style: TextStyle(fontFamily: Fuentes.titulo, fontSize: 30, fontWeight: FontWeight.w700, color: AppColors.muted),
+          ),
+          const SizedBox(height: 4),
+          Text(texto, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: AppColors.muted)),
+        ]),
+      );
+    }
+    Widget mini(String nombre, int valor) => Column(children: [
+          Text(nombre, style: const TextStyle(fontSize: 11, color: AppColors.muted)),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(pesos(valor), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+          ),
+        ]);
+    return TarjetaAurora(
+      radio: 26,
+      sombra: sombraFuerte,
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+      onTap: () => verLiquidacion(context, l),
+      child: Column(children: [
+        titulo,
+        const SizedBox(height: 4),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            pesos(l.recaudado),
+            style: const TextStyle(
+              fontFamily: Fuentes.titulo,
+              fontSize: 38,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -1,
+              color: AppColors.dinero,
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        ChipDiferencia(l.diferencia),
+        const SizedBox(height: 14),
+        Row(children: [
+          Expanded(child: mini('Producido', l.producido)),
+          Expanded(child: mini('Gastos', l.totalGastos)),
+          Expanded(child: mini('Por entregar', l.neto)),
+        ]),
+        const SizedBox(height: 4),
+        Text(
+          '${miles(l.pasajeros)} pasajeros × ${pesos(l.tarifa)}',
+          style: const TextStyle(fontSize: 12, color: AppColors.muted),
+        ),
+        TextButton.icon(
+          onPressed: () => verLiquidacion(context, l),
+          icon: const Icon(Icons.receipt_long_outlined, size: 18),
+          label: const Text('Ver liquidación'),
+        ),
+      ]),
+    );
   }
 
   /// Dato del día; [destacado] lo pinta en azul (IPK, como en la propuesta).
@@ -366,11 +453,12 @@ class _VehiculoScreenState extends ConsumerState<VehiculoScreen> {
         ),
       ]);
 
-  Widget _filaReciente(Map<String, dynamic> f) {
-    final fecha = Fechas.normalizar(f['fecha']);
-    final pax = asInt(f['pasajeros']) ?? 0;
+  Widget _filaReciente(String fecha) {
+    final f = _porFecha[fecha];
+    final liq = _liqs?[fecha];
+    final pax = f != null ? asInt(f['pasajeros']) ?? 0 : liq?.pasajeros ?? 0;
     final sel = fecha == _fecha;
-    final conductor = conductorDe(f);
+    final conductor = f != null ? conductorDe(f) : liq?.nombresConductores ?? '';
     return TarjetaAurora(
       radio: 18,
       color: sel ? const Color(0xFFF4F7FF) : Colors.white,
@@ -397,10 +485,13 @@ class _VehiculoScreenState extends ConsumerState<VehiculoScreen> {
         const SizedBox(width: 8),
         Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
           Text('${miles(pax)} pax', style: const TextStyle(fontWeight: FontWeight.w700)),
-          Text(
-            pesos(dineroLiquidar(pax)),
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.dinero),
-          ),
+          if (liq != null)
+            Text(
+              pesos(liq.recaudado),
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.dinero),
+            )
+          else if (_liqs != null)
+            const Text('Sin liquidar', style: TextStyle(fontSize: 11, color: AppColors.muted)),
         ]),
       ]),
     );

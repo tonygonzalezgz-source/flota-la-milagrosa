@@ -7,7 +7,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../core/fechas.dart';
 import '../../core/modelos.dart';
-import '../../core/movilidad.dart';
+import '../../core/recaudo.dart';
 import '../../core/reportes.dart';
 import '../../core/session.dart';
 import '../../core/theme.dart';
@@ -50,6 +50,9 @@ class _ReportesScreenState extends ConsumerState<ReportesScreen> {
   List<Map<String, dynamic>> _buses = [];
   List<Map<String, dynamic>> _movilidad = [];
   List<Map<String, dynamic>>? _despacho;
+
+  /// Recaudo por bus, día y conductor; null si no está habilitado o no cargó.
+  List<TramoDiario>? _recaudo;
   int _consulta = 0;
   bool _verTodoDiario = false;
   bool _exportando = false;
@@ -84,11 +87,15 @@ class _ReportesScreenState extends ConsumerState<ReportesScreen> {
             .get('/despacho/historial', query: {'desde': _rango.desde, 'hasta': _rango.hasta})
             .then<Object?>((v) => v)
             .catchError((_) => null),
+        // El dinero es lo recaudado en las liquidaciones; sin recaudo, el
+        // reporte sale igual sin dinero.
+        recaudoDiario(api, _rango.desde, _rango.hasta).then<Object?>((v) => v).catchError((_) => null),
       ]);
       if (consulta != _consulta || !mounted) return;
       _buses = asLista(r[0]);
       _movilidad = asLista(r[1]);
       _despacho = r[2] == null ? null : asLista(r[2]);
+      _recaudo = r[3] as List<TramoDiario>?;
     } catch (e) {
       if (consulta != _consulta || !mounted) return;
       _error = e.toString();
@@ -130,7 +137,14 @@ class _ReportesScreenState extends ConsumerState<ReportesScreen> {
 
   Reporte? get _reporte => _cargando || _error != null
       ? null
-      : Reporte.armar(rango: _rango, buses: _buses, movilidad: _movilidad, despacho: _despacho, busId: _busId);
+      : Reporte.armar(
+          rango: _rango,
+          buses: _buses,
+          movilidad: _movilidad,
+          despacho: _despacho,
+          recaudo: _recaudo,
+          busId: _busId,
+        );
 
   Rect _origenCompartir() {
     final t = MediaQuery.sizeOf(context);
@@ -263,13 +277,13 @@ class _ReportesScreenState extends ConsumerState<ReportesScreen> {
         sombra: sombraFuerte,
         padding: const EdgeInsets.all(20),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('Dinero bruto del periodo',
+          const Text('Recaudo del periodo',
               style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.muted)),
           const SizedBox(height: 6),
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
-            child: Text(pesos(t.dinero),
+            child: Text(r.conRecaudo ? pesos(t.recaudo) : '—',
                 style: const TextStyle(
                     fontFamily: Fuentes.titulo,
                     fontSize: 34,
@@ -277,7 +291,10 @@ class _ReportesScreenState extends ConsumerState<ReportesScreen> {
                     letterSpacing: -1,
                     color: AppColors.dinero)),
           ),
-          Text('${miles(t.pasajeros)} pasajeros × ${pesos(tarifaPasaje)}',
+          Text(
+              r.conRecaudo
+                  ? 'Ya descontados los gastos (${pesos(t.gastos)})'
+                  : 'El recaudo no está disponible para esta cuenta.',
               style: const TextStyle(fontSize: 12, color: AppColors.muted)),
         ]),
       ),
@@ -317,19 +334,20 @@ class _ReportesScreenState extends ConsumerState<ReportesScreen> {
       ),
       if (r.buses.length > 1) ...[
         _titulo('Por bus'),
-        for (final b in r.buses) ...[_filaBus(b), const SizedBox(height: 8)],
+        for (final b in r.buses) ...[_filaBus(b, r.conRecaudo), const SizedBox(height: 8)],
       ],
       _titulo('Por ruta'),
-      _tablaGrupos(r.porRuta, (v) => '${v.dias.length} día${v.dias.length == 1 ? '' : 's'} · ${miles(v.vueltas)} vueltas'),
+      _tablaGrupos(r.porRuta, r.conRecaudo, (v) => '${v.dias.length} día${v.dias.length == 1 ? '' : 's'} · ${miles(v.vueltas)} vueltas'),
       _titulo('Por conductor'),
       _tablaGrupos(
           r.porConductor,
+          r.conRecaudo,
           (v) => '${v.dias.length} día${v.dias.length == 1 ? '' : 's'} · ${miles(v.vueltas)} vueltas'
               '${v.vueltas == 0 ? '' : ' · ${miles(v.pasajerosPorVuelta)} pas/vuelta'}'),
       _titulo('Detalle diario'),
       if (r.diario.isEmpty)
         const TarjetaAurora(child: VacioView('Sin movilidad registrada en este periodo.', icono: Icons.event_busy)),
-      for (final f in (_verTodoDiario ? r.diario : r.diario.take(20))) ...[_filaDia(f), const SizedBox(height: 8)],
+      for (final f in (_verTodoDiario ? r.diario : r.diario.take(20))) ...[_filaDia(f, r), const SizedBox(height: 8)],
       if (!_verTodoDiario && r.diario.length > 20)
         TextButton(
           onPressed: () => setState(() => _verTodoDiario = true),
@@ -344,10 +362,11 @@ class _ReportesScreenState extends ConsumerState<ReportesScreen> {
         label: const Text('Descargar Excel'),
       ),
       const SizedBox(height: 14),
-      Text(
-        'Dinero bruto = pasajeros × ${pesos(tarifaPasaje)}. Un día cuenta como trabajado si tiene movilidad '
+      const Text(
+        'Recaudo = lo que entregaron los conductores al liquidar: pasajeros × la tarifa de cada vehículo '
+        '(bus o micro), menos los gastos del día. Un día cuenta como trabajado si tiene movilidad '
         'registrada o el despacho lo marcó "trabajando".',
-        style: const TextStyle(fontSize: 11, color: AppColors.muted),
+        style: TextStyle(fontSize: 11, color: AppColors.muted),
       ),
     ]);
   }
@@ -428,7 +447,7 @@ class _ReportesScreenState extends ConsumerState<ReportesScreen> {
     ]);
   }
 
-  Widget _filaBus(ReporteBus b) => TarjetaAurora(
+  Widget _filaBus(ReporteBus b, bool conRecaudo) => TarjetaAurora(
         padding: const EdgeInsets.all(14),
         onTap: () => _elegirBus(b.id),
         child: Row(children: [
@@ -452,13 +471,14 @@ class _ReportesScreenState extends ConsumerState<ReportesScreen> {
               ),
             ]),
           ),
-          Text(pesosCortos(b.totales.dinero),
-              style: const TextStyle(
-                  fontFamily: Fuentes.titulo, fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.dinero)),
+          if (conRecaudo)
+            Text(pesosCortos(b.totales.recaudo),
+                style: const TextStyle(
+                    fontFamily: Fuentes.titulo, fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.dinero)),
         ]),
       );
 
-  Widget _tablaGrupos(Map<String, Totales> grupos, String Function(Totales) detalle) {
+  Widget _tablaGrupos(Map<String, Totales> grupos, bool conRecaudo, String Function(Totales) detalle) {
     if (grupos.isEmpty) {
       return const TarjetaAurora(child: Text('Sin datos en este periodo.', style: TextStyle(color: AppColors.muted)));
     }
@@ -479,8 +499,9 @@ class _ReportesScreenState extends ConsumerState<ReportesScreen> {
               const SizedBox(width: 8),
               Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
                 Text('${miles(e.value.pasajeros)} pax', style: const TextStyle(fontWeight: FontWeight.w700)),
-                Text(pesosCortos(e.value.dinero),
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.dinero)),
+                if (conRecaudo)
+                  Text(pesosCortos(e.value.recaudo),
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.dinero)),
               ]),
             ]),
           ),
@@ -489,8 +510,9 @@ class _ReportesScreenState extends ConsumerState<ReportesScreen> {
     );
   }
 
-  Widget _filaDia(Map<String, dynamic> f) {
+  Widget _filaDia(Map<String, dynamic> f, Reporte r) {
     final pax = asInt(f['pasajeros']) ?? 0;
+    final recaudo = r.recaudoDe(f);
     final conductor = conductorReporte(f);
     final ruta = rutaReporte(f);
     final novedad = asStr(f['novedades']).trim();
@@ -518,8 +540,11 @@ class _ReportesScreenState extends ConsumerState<ReportesScreen> {
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
             Text('${miles(pax)} pax · ${miles(asInt(f['vueltas']) ?? 0)} v',
                 style: const TextStyle(fontWeight: FontWeight.w700)),
-            Text(pesos(dineroLiquidar(pax)),
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.dinero)),
+            if (recaudo != null)
+              Text(pesos(recaudo),
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.dinero))
+            else if (r.conRecaudo)
+              const Text('Sin liquidar', style: TextStyle(fontSize: 11, color: AppColors.muted)),
           ]),
         ]),
         if (novedad.isNotEmpty) ...[

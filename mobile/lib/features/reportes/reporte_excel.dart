@@ -37,44 +37,47 @@ List<int> excelReporte(Reporte r) {
   final res = libro['Resumen'];
   fila(res, [t('Reporte de movilidad — Flota La Milagrosa')], titulo);
   fila(res, [t('Periodo'), t('${Fechas.corta(r.rango.desde)} a ${Fechas.corta(r.rango.hasta)}'), t('${r.diasPeriodo} días')]);
-  fila(res, [t('Valor del pasaje'), n(tarifaPasaje)]);
+  fila(res, [t('Recaudo'), t(r.conRecaudo
+      ? 'Lo que entregaron los conductores al liquidar: pasajeros × tarifa del vehículo (bus o micro) menos gastos'
+      : 'No disponible para esta cuenta')]);
   if (!r.conDespacho) {
     fila(res, [t('Sin datos de despacho: los días sin movilidad figuran como "Sin registro".')]);
   }
   res.appendRow([t('')]);
   fila(res, [
     t('Bus'), t('Placa'), t('Días trabajados'), t('Taller'), t('Descanso'), t('Sin registro'),
-    t('Vueltas'), t('Pasajeros'), t('Km'), t('IPK'), t('Pasajeros por vuelta'), t('Dinero bruto'),
+    t('Vueltas'), t('Pasajeros'), t('Km'), t('IPK'), t('Pasajeros por vuelta'), t('Gastos'), t('Recaudo'),
   ], encabezado);
   for (final b in r.buses) {
     fila(res, [
       t(b.numero), t(b.placa), n(b.cuantos(EstadoDia.trabajado)), n(b.cuantos(EstadoDia.taller)),
       n(b.cuantos(EstadoDia.descanso)), n(b.cuantos(EstadoDia.sinRegistro)), n(b.totales.vueltas),
       n(b.totales.pasajeros), d(b.totales.km), d(b.totales.ipkValor, 2), d(b.totales.pasajerosPorVuelta),
-      n(b.totales.dinero),
+      n(b.totales.gastos), n(b.totales.recaudo),
     ]);
   }
   fila(res, [
     t('TOTAL'), t(''), n(r.cuantos(EstadoDia.trabajado)), n(r.cuantos(EstadoDia.taller)),
     n(r.cuantos(EstadoDia.descanso)), n(r.cuantos(EstadoDia.sinRegistro)), n(r.total.vueltas),
-    n(r.total.pasajeros), d(r.total.km), d(r.total.ipkValor, 2), d(r.total.pasajerosPorVuelta), n(r.total.dinero),
+    n(r.total.pasajeros), d(r.total.km), d(r.total.ipkValor, 2), d(r.total.pasajerosPorVuelta), n(r.total.gastos),
+    n(r.total.recaudo),
   ], totalEstilo);
 
   res.appendRow([t('')]);
-  fila(res, [t('Ruta'), t('Días'), t('Buses'), t('Vueltas'), t('Pasajeros'), t('Km'), t('Dinero bruto')], encabezado);
+  fila(res, [t('Ruta'), t('Días'), t('Buses'), t('Vueltas'), t('Pasajeros'), t('Km'), t('Recaudo')], encabezado);
   for (final e in r.porRuta.entries) {
     final v = e.value;
-    fila(res, [t(e.key), n(v.dias.length), n(v.buses.length), n(v.vueltas), n(v.pasajeros), d(v.km), n(v.dinero)]);
+    fila(res, [t(e.key), n(v.dias.length), n(v.buses.length), n(v.vueltas), n(v.pasajeros), d(v.km), n(v.recaudo)]);
   }
 
   res.appendRow([t('')]);
-  fila(res, [t('Conductor'), t('Días'), t('Vueltas'), t('Pasajeros'), t('Pasajeros por vuelta'), t('Dinero bruto')],
+  fila(res, [t('Conductor'), t('Días'), t('Vueltas'), t('Pasajeros'), t('Pasajeros por vuelta'), t('Recaudo')],
       encabezado);
   for (final e in r.porConductor.entries) {
     final v = e.value;
-    fila(res, [t(e.key), n(v.dias.length), n(v.vueltas), n(v.pasajeros), d(v.pasajerosPorVuelta), n(v.dinero)]);
+    fila(res, [t(e.key), n(v.dias.length), n(v.vueltas), n(v.pasajeros), d(v.pasajerosPorVuelta), n(v.recaudo)]);
   }
-  for (final (c, ancho) in [(0, 26.0), (1, 22.0), (2, 15.0), (10, 20.0), (11, 16.0)]) {
+  for (final (c, ancho) in [(0, 26.0), (1, 22.0), (2, 15.0), (10, 20.0), (11, 14.0), (12, 16.0)]) {
     res.setColumnWidth(c, ancho);
   }
 
@@ -82,14 +85,15 @@ List<int> excelReporte(Reporte r) {
   final det = libro['Detalle'];
   fila(det, [
     t('Fecha'), t('Bus'), t('Placa'), t('Conductor'), t('Ruta'), t('Vueltas'), t('Pasajeros'), t('Km'),
-    t('IPK'), t('Dinero bruto'), t('Estado despacho'), t('Novedades'),
+    t('IPK'), t('Recaudo'), t('Estado despacho'), t('Novedades'),
   ], encabezado);
   for (final f in r.diario.reversed) {
     final pax = asInt(f['pasajeros']) ?? 0;
     final km = asDouble(f['km_recorridos']) ?? 0;
     fila(det, [
       t(Fechas.corta(f['fecha'])), t(asStr(f['numero'])), t(asStr(f['placa'])), t(conductorReporte(f)),
-      t(rutaReporte(f)), n(asInt(f['vueltas']) ?? 0), n(pax), d(km), d(ipk(pax, km), 2), n(dineroLiquidar(pax)),
+      t(rutaReporte(f)), n(asInt(f['vueltas']) ?? 0), n(pax), d(km), d(ipk(pax, km), 2),
+      r.recaudoDe(f) == null ? t(r.conRecaudo ? 'Sin liquidar' : '') : n(r.recaudoDe(f)!),
       t(asStr(f['despacho_estado'])), t(asStr(f['novedades']).trim()),
     ]);
   }

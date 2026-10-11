@@ -1,0 +1,109 @@
+"""Utilidades compartidas del módulo Recaudo.
+
+Igual que Monitoreo, vive fuera de app.py: app.py le inyecta sus dependencias
+con `configurar()` al arrancar, lo que evita la importación circular."""
+from functools import wraps
+
+# Mientras exista una sola empresa, todo lo nuevo queda en la #1 (La Milagrosa).
+EMPRESA_POR_DEFECTO = 1
+
+# Escritura y lectura del recaudo. Eliminar y cambiar tarifas: solo Administrador.
+ROLES_RECAUDO = ("Administrador", "Recaudador")
+
+# Tarifa inicial por grupo de vehículo (A = buses, B = micros), en pesos.
+TARIFAS_INICIALES = {"A": 3050, "B": 3200}
+
+# Gastos que el conductor reporta al liquidar (el Administrador agrega más desde Recaudo).
+# fijo: siempre a la vista en el formulario (los más frecuentes); los demás se agregan
+# desde la lista "+ Agregar otro gasto". detalle: exige escribir la descripción.
+TIPOS_GASTO_INICIALES = (
+    {"nombre": "ACPM", "fijo": 1},
+    {"nombre": "Varios", "fijo": 1},
+    {"nombre": "Taller"},
+    {"nombre": "Auxilio de transporte"},
+    # Pedidos por el usuario el 2026-10-10
+    {"nombre": "Extras", "fijo": 1},
+    {"nombre": "Patio"},
+    {"nombre": "Anticipo propietario"},
+    {"nombre": "Bonificación"},
+    {"nombre": "Otros", "detalle": 1},
+)
+
+# Conceptos contables de la caja (tabla que pasó el usuario el 2026-10-09).
+# tercero: PROPIETARIO (del vehículo, según la tarjeta de propiedad), PAGADOR (quien
+# paga, p. ej. el arrendador del local), NINGUNO o FIJO (nit_fijo). signo: 1 débito,
+# 2 crédito. `uso` = los que arma el sistema en el archivo plano del cierre.
+CONCEPTOS_INICIALES = (
+    {"nombre": "CIERRE DE CAJA", "cuenta": "138005", "tercero": "FIJO", "nit_fijo": "1001577609",
+     "signo": 1, "centro_costo": "1", "uso": "CIERRE_CAJA"},
+    {"nombre": "RECAUDOS CU", "cuenta": "28050504", "tercero": "PROPIETARIO", "signo": 2,
+     "descripcion": "RECAUDO CU VH X", "referencia": "VEHICULO", "uso": "RECAUDO_VEHICULO"},
+    {"nombre": "PAGO ADMON", "cuenta": "28050501", "tercero": "PROPIETARIO", "signo": 2},
+    {"nombre": "PAGO SERVICIOS", "cuenta": "28150530", "tercero": "PAGADOR", "signo": 2},
+    {"nombre": "PAGO LOCALES", "cuenta": "28150530", "tercero": "PAGADOR", "signo": 2},
+    {"nombre": "PAGO PARQUEOS", "cuenta": "28150530", "tercero": "PAGADOR", "signo": 2},
+    {"nombre": "PAGO LAVADAS", "cuenta": "28150530", "tercero": "PAGADOR", "signo": 2},
+    {"nombre": "PAGO FICHO", "cuenta": "28150595", "tercero": "PAGADOR", "signo": 2},
+    {"nombre": "PAGO TABLA", "cuenta": "28150595", "tercero": "PAGADOR", "signo": 2},
+    {"nombre": "PAGO EXAMEN MEDICO", "cuenta": "425050", "tercero": "PAGADOR", "signo": 2, "centro_costo": "1"},
+    {"nombre": "ABONO SINIESTRO", "cuenta": "132507", "tercero": "PAGADOR", "signo": 2},
+    {"nombre": "ABONO PRESTAMO PROPIETARIO", "cuenta": "28050504", "tercero": "PROPIETARIO", "signo": 2},
+    {"nombre": "ABONO PRESTAMO EMPRESA", "cuenta": "138095", "tercero": "PAGADOR", "signo": 2},
+    {"nombre": "ANTICIPO VEHICULOS", "cuenta": "28050504", "tercero": "PROPIETARIO", "signo": 1,
+     "descripcion": "CREADA POR XIMENA"},
+    {"nombre": "REEMBOLSO CAJA OFICINA", "cuenta": "11050501", "tercero": "NINGUNO", "signo": 1},
+    {"nombre": "OTROS PAGOS DE CAJA XIMENA", "cuenta": "11050501", "tercero": "NINGUNO", "signo": 1,
+     "descripcion": "CREADA POR XIMENA"},
+)
+
+# Datos fijos del comprobante contable (archivo plano).
+CONFIG_CONTABLE_INICIAL = {"nit_compania": "890901489", "tipo_comprobante": "CU", "moneda": "1"}
+
+# Máximo de conductores que pueden liquidar un mismo bus en el día (relevos).
+MAX_CONDUCTORES = 3
+
+# Puesta en marcha por etapas: el recaudo solo responde a estos roles; los demás
+# reciben 403. Desde el 2026-10-10: el Administrador y el Propietario (ve la
+# liquidación real de SUS buses en Mis Buses, web y app). El Recaudador todavía
+# no: queda sin vistas. Para abrírselo, agregar "Recaudador".
+ROLES_HABILITADOS = ("Administrador", "Propietario")
+
+_deps = {}
+
+
+def configurar(get_db, require_role, database_url, hoy_bogota, sync_pax_movilidad, relevos_por_bus):
+    _deps.update(get_db=get_db, require_role=require_role, database_url=database_url or "",
+                 hoy_bogota=hoy_bogota, sync_pax_movilidad=sync_pax_movilidad,
+                 relevos_por_bus=relevos_por_bus)
+
+
+def db():
+    return _deps["get_db"]()
+
+
+def es_pg():
+    return bool(_deps.get("database_url"))
+
+
+def hoy_bogota():
+    return _deps["hoy_bogota"]()
+
+
+def sync_pax_movilidad(conn, fecha, pax_por_bus):
+    return _deps["sync_pax_movilidad"](conn, fecha, pax_por_bus)
+
+
+def relevos_por_bus(conn, fecha, bus_id=None):
+    """Relevos que anotó el despachador: {bus_id: [{orden, conductor_id, ruta_id, registradora, viajes}]}."""
+    return _deps["relevos_por_bus"](conn, fecha, bus_id)
+
+
+def rol(*roles):
+    """Igual que require_role de app.py, resuelto en tiempo de request."""
+    def wrapper(f):
+        @wraps(f)
+        def inner(*args, **kwargs):
+            permitidos = tuple(r for r in roles if r in ROLES_HABILITADOS)
+            return _deps["require_role"](*permitidos)(f)(*args, **kwargs)
+        return inner
+    return wrapper

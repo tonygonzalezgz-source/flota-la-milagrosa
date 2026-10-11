@@ -1,11 +1,14 @@
 import 'fechas.dart';
 import 'modelos.dart';
 import 'movilidad.dart';
+import 'recaudo.dart';
 
 /// Reporte de movilidad para el propietario, el mismo de "Reporte" en
 /// historial-movilidad.html más los días trabajados de cada bus:
 ///   - Movilidad: filas de `/api/movilidad/rango`.
 ///   - Estado del día (trabajando / taller / descanso): `/api/despacho/historial`.
+///   - Dinero: lo RECAUDADO en las liquidaciones (`/api/recaudo/propietario/diario`),
+///     por conductor; con relevo, cada conductor suma a su ruta.
 
 /// Rango de fechas del reporte ('YYYY-MM-DD', ambos incluidos).
 typedef Rango = ({String desde, String hasta});
@@ -64,8 +67,19 @@ class Totales {
   int vueltas = 0;
   int pasajeros = 0;
   double km = 0;
+
+  /// Lo recaudado en las liquidaciones (ya descontados los gastos) y esos gastos.
+  int recaudo = 0;
+  int gastos = 0;
   final Set<String> dias = {};
   final Set<int> buses = {};
+
+  void sumarRecaudo(TramoDiario t) {
+    recaudo += t.recaudado;
+    gastos += t.totalGastos;
+    dias.add(t.fecha);
+    buses.add(t.busId);
+  }
 
   void sumar(Map<String, dynamic> f) {
     vueltas += asInt(f['vueltas']) ?? 0;
@@ -75,7 +89,6 @@ class Totales {
     if (asInt(f['bus_id']) case final b?) buses.add(b);
   }
 
-  int get dinero => dineroLiquidar(pasajeros);
   double get ipkValor => ipk(pasajeros, km);
 
   /// Pasajeros por vuelta (0 si no hubo vueltas).
@@ -120,21 +133,32 @@ class Reporte {
   /// "sin registro" porque no se sabe si fueron taller o descanso.
   final bool conDespacho;
 
+  /// false si el recaudo no está habilitado o no se pudo leer: no se muestra dinero.
+  final bool conRecaudo;
+
+  /// Recaudo de cada bus por día ('busId|fecha').
+  final Map<String, int> _recaudoDia;
+
   Reporte._(this.rango, this.fechas, this.buses, this.total, this.porRuta, this.porConductor, this.diario,
-      this.conDespacho);
+      this.conDespacho, this.conRecaudo, this._recaudoDia);
+
+  /// Lo recaudado ese día por el bus de la fila de movilidad [f]; null si no se liquidó.
+  int? recaudoDe(Map<String, dynamic> f) => _recaudoDia['${asInt(f['bus_id'])}|${Fechas.normalizar(f['fecha'])}'];
 
   int get diasPeriodo => fechas.length;
   int cuantos(EstadoDia e) => buses.fold(0, (s, b) => s + b.cuantos(e));
 
   /// Arma el reporte. [buses] son los vehículos visibles (de `/api/buses`),
   /// [movilidad] las filas de `/api/movilidad/rango` y [despacho] las de
-  /// `/api/despacho/historial` (null si no se pudo consultar). Con [busId] el
-  /// reporte queda de un solo bus.
+  /// `/api/despacho/historial` (null si no se pudo consultar) y [recaudo] las
+  /// de `/api/recaudo/propietario/diario` (null si no hay recaudo). Con [busId]
+  /// el reporte queda de un solo bus.
   factory Reporte.armar({
     required Rango rango,
     required List<Map<String, dynamic>> buses,
     required List<Map<String, dynamic>> movilidad,
     List<Map<String, dynamic>>? despacho,
+    List<TramoDiario>? recaudo,
     int? busId,
     DateTime? hoy,
   }) {
@@ -177,6 +201,18 @@ class Reporte {
       return c != 0 ? c : (int.tryParse(asStr(a['numero'])) ?? 0).compareTo(int.tryParse(asStr(b['numero'])) ?? 0);
     });
 
+    // Recaudo de cada conductor en sus liquidaciones del rango.
+    final recaudoDia = <String, int>{};
+    for (final t in recaudo ?? const <TramoDiario>[]) {
+      final r = porId[t.busId];
+      if (r == null || !fechas.contains(t.fecha)) continue;
+      r.totales.sumarRecaudo(t);
+      total.sumarRecaudo(t);
+      porRuta.putIfAbsent(t.ruta.isEmpty ? 'Sin ruta' : t.ruta, Totales.new).sumarRecaudo(t);
+      porConductor.putIfAbsent(t.conductor.isEmpty ? 'Sin conductor' : t.conductor, Totales.new).sumarRecaudo(t);
+      recaudoDia['${r.id}|${t.fecha}'] = (recaudoDia['${r.id}|${t.fecha}'] ?? 0) + t.recaudado;
+    }
+
     // Estado del despacho por bus y día.
     final estadoDespacho = <String, String>{};
     for (final d in despacho ?? const <Map<String, dynamic>>[]) {
@@ -215,6 +251,8 @@ class Reporte {
       ordenado(porConductor),
       diario,
       despacho != null,
+      recaudo != null,
+      recaudoDia,
     );
   }
 }
