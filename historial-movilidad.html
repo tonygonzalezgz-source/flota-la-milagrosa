@@ -388,6 +388,7 @@
     .estado-badge.guardado   { background: rgba(34,197,94,.12);  color: var(--green); }
     .estado-badge.modificado { background: rgba(245,158,11,.12); color: var(--yellow); }
     .estado-badge.no-guardado { background: rgba(239,68,68,.12); color: var(--red); }
+    .estado-badge.conflicto  { background: rgba(234,88,12,.14);  color: #c2410c; cursor: help; }
 
     /* ── Cambios sin guardar (borrador) ── */
     .pend-bar {
@@ -729,7 +730,7 @@
     </div>
 
     <div class="topbar-right">
-      <span class="live-pill" id="livePill" title="Auto-refresh cada 60 segundos (solo en el día de hoy)"></span>
+      <span class="live-pill" id="livePill" title="Trae cada 60 segundos lo que guardan los demás (se pausa mientras escribes en la tabla)"></span>
       <button class="btn-refresh" id="btnRefresh" onclick="refrescar(true)" title="Traer los últimos cambios ahora">
         <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
@@ -1039,6 +1040,8 @@
   let tickTimer     = null;
   let lastLoad      = null;
   let prevUpdated   = {};      // bus_id → updated_at del ciclo anterior (para el flash)
+  let guardando     = 0;       // guardados en curso
+  let seqGuardado   = 0;       // sube al terminar cada guardado (descarta cargas que quedaron viejas)
 
   /* ── CAMBIOS SIN GUARDAR (borrador) ──
      Lo que se escribe y aún no se guarda vive en `pendientes`
@@ -1047,11 +1050,32 @@
      volver, "Actualizar", cambiar de fecha, recargar, cerrar la pestaña o que
      venza la sesión. Solo se borra al guardar con éxito o con "Descartar".
      Campos = prefijo del id del input: v vueltas, p pasajeros, k km,
-     c conductor, ruta, n novedades (k-12, ruta-12…). */
+     c conductor, ruta, n novedades (k-12, ruta-12…). Además `_antes` guarda
+     lo que la fila mostraba antes del primer cambio de cada campo: al guardar
+     se envían SOLO los campos cambiados con ese valor, y si otra persona
+     cambió ese mismo dato mientras tanto el servidor no lo pisa y se avisa. */
   const BORRADOR_DIAS = 7;
   let pendientes     = {};
   const errorGuardado = new Set();   // "fecha|bus_id" cuyo último intento de guardar falló
+  const conflictos    = new Set();   // "fecha|bus_id" con un campo que otra persona cambió (no se pisó)
   const restaurados   = new Set();   // "fecha|bus_id" recuperados de una sesión anterior
+
+  const CAMPOS_API = { v: 'vueltas', p: 'pasajeros', k: 'km_recorridos', c: 'conductor_id', ruta: 'ruta_id', n: 'novedades' };
+  const CAMPO_DE_API = Object.fromEntries(Object.entries(CAMPOS_API).map(([c, api]) => [api, c]));
+  const CAMPO_LABEL  = { v: 'Vueltas', p: 'Pasajeros', k: 'Km', c: 'Conductor', ruta: 'Ruta', n: 'Novedades' };
+
+  /* Valor de un campo tal como lo guarda la API (igual que _MOV_CAMPOS en api/app.py). */
+  function valorApi(campo, valor) {
+    if (campo === 'v' || campo === 'p') return parseInt(valor) || 0;
+    if (campo === 'k')                  return Math.round((parseFloat(valor) || 0) * 10) / 10;
+    if (campo === 'c' || campo === 'ruta') return parseInt(valor) || null;
+    return String(valor ?? '').trim();
+  }
+  function mismoValor(campo, a, b) {
+    return campo === 'k' ? Math.abs((a || 0) - (b || 0)) < 0.05 : a === b;
+  }
+  /* Campos con cambios de un bus (sin `_antes`). */
+  function camposPend(pend) { return Object.keys(pend || {}).filter(c => c in CAMPOS_API); }
 
   function borradorKey() { return `movilidad_borrador_v1:${currentUser?.id ?? 'anon'}`; }
 
@@ -1108,6 +1132,7 @@
       if (!Object.keys(pendientes[fecha]).length) delete pendientes[fecha];
     }
     errorGuardado.delete(`${fecha}|${busId}`);
+    conflictos.delete(`${fecha}|${busId}`);
     restaurados.delete(`${fecha}|${busId}`);
     respaldarBus(fecha, busId);
   }
@@ -1126,6 +1151,7 @@
         delete pendientes[fecha][busId];
         restaurados.delete(k);
         errorGuardado.delete(k);
+        conflictos.delete(k);
         soltados++;
       });
       if (!Object.keys(pendientes[fecha]).length) delete pendientes[fecha];
@@ -1189,24 +1215,27 @@
   }
 
   /* ── Auto-refresh en vivo (60s + botón manual) ──
-     Solo hace polling automático cuando la fecha del picker es hoy Bogotá.
-     El refresh se salta si el foco está en un input de la tabla o hay un
-     modal abierto. Las filas con cambios sin guardar no se pierden: después
-     de pintar se les vuelve a poner lo escrito (aplicarPendientes). El botón
-     "Actualizar" ignora esas guardas porque es un acto explícito del usuario. */
+     En cualquier fecha (el analista suele llenar el día anterior mientras
+     otros también lo hacen), para ver lo que guardan los demás.
+     El refresh se salta si el foco está en un input de la tabla, hay un
+     modal abierto, la vista está oculta en el menú (al volver, VIEW_SHOWN
+     recarga) o hay un guardado en curso. Las filas con cambios sin guardar no
+     se pierden: después de pintar se les vuelve a poner lo escrito
+     (aplicarPendientes). El botón "Actualizar" ignora esas guardas porque es
+     un acto explícito del usuario. */
   function esHoyPicker() {
     return document.getElementById('datePicker').value === hoyBogota();
   }
 
   function reiniciarPolling() {
-    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-    if (esHoyPicker()) {
-      pollTimer = setInterval(() => refrescar(false), 60000);
-    }
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(() => refrescar(false), 60000);
   }
 
   async function refrescar(manual) {
     if (!manual) {
+      if (document.hidden || window.innerWidth === 0) return;   // vista oculta en el menú
+      if (guardando) return;
       if (document.querySelector('.modal-overlay:not(.hidden)')) return;
       const foco = document.activeElement;
       if (foco && foco.closest && foco.closest('#tbody')) return;
@@ -1217,11 +1246,10 @@
   function actualizarLivePill() {
     const el = document.getElementById('livePill');
     if (!el) return;
-    if (!esHoyPicker()) { el.innerHTML = `<span class="muted">Vista histórica</span>`; return; }
     if (!lastLoad) { el.innerHTML = ''; return; }
     const s = Math.max(0, Math.round((Date.now() - lastLoad.getTime()) / 1000));
     const txt = s < 60 ? `hace ${s}s` : `hace ${Math.round(s / 60)} min`;
-    el.innerHTML = `<span class="live-dot"></span> En vivo · actualizado ${txt}`;
+    el.innerHTML = `<span class="live-dot"></span> ${esHoyPicker() ? 'En vivo' : 'Vista histórica'} · actualizado ${txt}`;
   }
 
   /* ── HELPERS ── */
@@ -1326,6 +1354,7 @@
     if (!fecha) return;
 
     const auto = opts.silencioso ? { headers: { 'X-Refresco-Auto': '1' } } : {};
+    const seq  = seqGuardado;
     const [res, despRes] = await Promise.all([
       apiFetch(`${API}/movilidad?fecha=${fecha}`, auto),
       apiFetch(`${API}/despacho?fecha=${fecha}`, auto),
@@ -1339,6 +1368,13 @@
     /* Si mientras cargaba se cambió de fecha, esta respuesta ya no sirve: pintarla
        mostraría datos de otro día bajo la fecha nueva (y se guardarían ahí). */
     if (fecha !== fechaSel()) return;
+
+    /* Si mientras cargaba terminó un guardado, esta respuesta puede ser de
+       antes y pintaría valores viejos en las filas recién guardadas. */
+    if (seq !== seqGuardado) {
+      if (opts.silencioso) return;
+      if (!opts.repetida) return loadFecha({ ...opts, repetida: true });
+    }
 
     /* Detectar filas cuyo updated_at cambió desde el último ciclo:
        se usa para el flash amarillo en refresh silencioso. */
@@ -1385,7 +1421,8 @@
   }
 
   /* Valores que muestra una fila según lo guardado y el despacho del día,
-     sin los cambios pendientes. Lo usan renderTable() y valoresFila(). */
+     sin los cambios pendientes. Lo usan filaHtml(), markDirty() (valor de
+     `_antes`) y registroCambios(). Debe coincidir con _vigente() en api/app.py. */
   function valoresBase(b, fecha) {
     const rec  = records[b.id];
     const desp = despachoMap[b.id];
@@ -1426,14 +1463,20 @@
   }
 
   /* Etiqueta de estado de la fila: Sin datos / Guardado / Modificado /
-     No guardado (el último intento falló; lo escrito sigue pendiente). */
+     No guardado (el último intento falló; lo escrito sigue pendiente) /
+     Conflicto (otra persona cambió ese dato: no se pisó, lo escrito sigue pendiente). */
   function estadoFila(busId, fecha = fechaSel()) {
     if (tienePendiente(busId, fecha)) {
-      return errorGuardado.has(`${fecha}|${busId}`) ? 'no-guardado' : 'modificado';
+      const k = `${fecha}|${busId}`;
+      return errorGuardado.has(k) ? 'no-guardado' : conflictos.has(k) ? 'conflicto' : 'modificado';
     }
     return records[busId] ? 'guardado' : 'sin-datos';
   }
-  const ESTADO_LABEL = { 'sin-datos': 'Sin datos', guardado: 'Guardado', modificado: 'Modificado', 'no-guardado': 'No guardado' };
+  const ESTADO_LABEL = { 'sin-datos': 'Sin datos', guardado: 'Guardado', modificado: 'Modificado', 'no-guardado': 'No guardado', conflicto: 'Conflicto' };
+  const ESTADO_TITLE = {
+    conflicto: 'Otra persona cambió este dato mientras tenías la vista abierta. No se pisó: lo que escribiste sigue en la fila. Si es lo correcto, vuelve a guardar; si no, haz clic aquí para descartarlo.',
+    'no-guardado': 'El último intento de guardar falló. Lo que escribiste sigue en la fila.',
+  };
 
   function pintarEstado(busId) {
     const el = document.getElementById(`est-${busId}`);
@@ -1441,6 +1484,7 @@
     const est = estadoFila(busId);
     el.className   = `estado-badge ${est}`;
     el.textContent = ESTADO_LABEL[est];
+    el.title       = ESTADO_TITLE[est] || '';
   }
 
   /* ── RENDER ──
@@ -1458,101 +1502,104 @@
       return;
     }
 
-    const nuevoHtml = buses.map(b => {
-      const base     = valoresBase(b, fecha);
-      const { rec, desp } = base;
-      const cls      = rec ? 'has-data' : '';
-      const est      = estadoFila(b.id, fecha);
-
-      /* Etiqueta informativa del despacho del día (no bloquea la captura) */
-      const despBadge = !desp
-        ? `<span class="desp-badge sin-despacho">Sin despacho</span>`
-        : desp.estado === 'taller'   ? `<span class="desp-badge taller">Taller</span>`
-        : desp.estado === 'descanso' ? `<span class="desp-badge descanso">Descanso</span>`
-        : '';
-
-      /* Conductor: editable siempre. Si hay despacho, viene preseleccionado
-         del despacho y el analista puede corregirlo cuando el despachador
-         se equivocó. El servidor propaga la corrección al despacho. */
-      const condOptions = allConductores.map(c =>
-        `<option value="${c.id}" ${base.c == c.id ? 'selected' : ''}>${escHtml(c.nombre)}</option>`
-      ).join('');
-      const condTitle = desp && desp.conductor_id
-        ? 'Asignado por el despachador — puedes corregirlo si es necesario'
-        : 'Sin despacho — selección manual';
-      const conductorCell = `<select class="ruta-select" id="c-${b.id}" title="${condTitle}" onchange="markDirty(${b.id}, this)">
-               <option value="">— Sin conductor —</option>
-               ${condOptions}
-             </select>`;
-
-      /* Ruta: editable siempre. Misma lógica que conductor. */
-      let rutaCell;
-      if (base.rutasParaBus.length) {
-        const rutaOptions = base.rutasParaBus.map(r =>
-          `<option value="${r.id}" ${base.ruta == r.id ? 'selected' : ''}>${r.nombre}</option>`
-        ).join('');
-        const rutaTitle = desp && desp.ruta_id
-          ? 'Asignada por el despachador — puedes corregirla si es necesario'
-          : 'Sin despacho — selección manual';
-        rutaCell = `<select class="ruta-select" id="ruta-${b.id}" title="${rutaTitle}" onchange="markDirty(${b.id}, this)">
-                 <option value="">— Sin ruta —</option>
-                 ${rutaOptions}
-               </select>`;
-      } else {
-        rutaCell = `<span class="no-rutas-tip">Sin rutas Gr.${b.grupo}</span>`;
-      }
-
-      /* Vueltas sincronizadas del despacho: al escribir se quita la marca. */
-      const vueltasAttrs = base.vueltasFromDesp
-        ? `data-from-despacho="1" title="Sincronizado del despacho — puedes corregirlo si es necesario"` : '';
-
-      /* Pasajeros de la registradora: solo lectura (se corrige en Despacho).
-         Sin lecturas válidas se mantiene la captura manual / importación BEA. */
-      let pasajerosCell;
-      if (base.paxReg != null) {
-        const paxTitle = `Registradora del despacho: ${Number(desp.registradora_fin).toLocaleString('es-CO')} − ${Number(desp.registradora_inicio).toLocaleString('es-CO')} = ${base.paxReg.toLocaleString('es-CO')}. Para corregirlo, edita la registradora en Despacho.`;
-        pasajerosCell = `<div class="pax-reg-wrap" title="${paxTitle}">
-                 <input class="num-input from-registradora" id="p-${b.id}" type="number" value="${base.paxReg}" readonly tabindex="-1" />
-                 <span class="pax-reg-tag">REG</span>
-               </div>`;
-      } else {
-        const paxTitle = usaRegistradora(fecha) && desp && desp.estado === 'trabajando'
-          ? 'title="Sin lectura válida de registradora en el despacho — captura manual"' : '';
-        pasajerosCell = `<input  class="num-input"   id="p-${b.id}"    type="number" min="0" inputmode="numeric"
-                    value="${base.p}" placeholder="0" ${paxTitle}
-                    oninput="markDirty(${b.id}, this)" />`;
-      }
-
-      const flashCls = cambiadas.has(b.id) ? ' flash' : '';
-
-      return `
-      <tr id="row-${b.id}" class="${cls}${flashCls}">
-        <td class="cell-unidad">
-          <div class="bus-num">${b.numero}</div>
-          <div class="bus-placa">${b.placa || '—'}</div>
-          ${despBadge}
-        </td>
-        <td data-label="Grupo"><span class="badge-grupo badge-${(b.grupo || 'A').toLowerCase()}">${b.grupo}</span></td>
-        <td data-label="Vueltas"><input  class="num-input${base.vueltasFromDesp ? ' from-despacho' : ''}"   id="v-${b.id}"    type="number" min="0" inputmode="numeric"
-                    value="${base.v}" placeholder="0" ${vueltasAttrs}
-                    oninput="markDirty(${b.id}, this)" /></td>
-        <td data-label="Pasajeros">${pasajerosCell}</td>
-        <td data-label="Km"><input  class="num-input"   id="k-${b.id}"    type="number" min="0" step="0.1" inputmode="decimal"
-                    value="${base.k}" placeholder="0"
-                    oninput="markDirty(${b.id}, this)" /></td>
-        <td data-label="Conductor">${conductorCell}</td>
-        <td data-label="Ruta">${rutaCell}</td>
-        <td data-label="Novedades"><input  class="nov-input"   id="n-${b.id}"    type="text"
-                    value="${escHtml(base.n)}" placeholder="Sin novedades"
-                    oninput="markDirty(${b.id}, this)" /></td>
-        <td data-label="Estado"><span class="estado-badge ${est}" id="est-${b.id}">${ESTADO_LABEL[est]}</span></td>
-        <td class="cell-acciones"><button class="btn-row-save" id="brs-${b.id}" onclick="saveRow(${b.id})">Guardar</button></td>
-      </tr>`;
-    }).join('');
-
-    tbody.innerHTML = nuevoHtml;
+    tbody.innerHTML = buses.map(b => filaHtml(b, fecha, cambiadas.has(b.id))).join('');
     aplicarPendientes();
     actualizarBarraPendientes();
+  }
+
+  /* HTML de la fila de un bus con lo guardado y el despacho (lo escrito sin
+     guardar se pone encima después: aplicarPendientes / aplicarPendientesBus).
+     flash: animar la fila porque cambió en el servidor. */
+  function filaHtml(b, fecha, flash) {
+    const base     = valoresBase(b, fecha);
+    const { rec, desp } = base;
+    const cls      = rec ? 'has-data' : '';
+    const est      = estadoFila(b.id, fecha);
+
+    /* Etiqueta informativa del despacho del día (no bloquea la captura) */
+    const despBadge = !desp
+      ? `<span class="desp-badge sin-despacho">Sin despacho</span>`
+      : desp.estado === 'taller'   ? `<span class="desp-badge taller">Taller</span>`
+      : desp.estado === 'descanso' ? `<span class="desp-badge descanso">Descanso</span>`
+      : '';
+
+    /* Conductor: editable siempre. Si hay despacho, viene preseleccionado
+       del despacho y el analista puede corregirlo cuando el despachador
+       se equivocó. El servidor propaga la corrección al despacho. */
+    const condOptions = allConductores.map(c =>
+      `<option value="${c.id}" ${base.c == c.id ? 'selected' : ''}>${escHtml(c.nombre)}</option>`
+    ).join('');
+    const condTitle = desp && desp.conductor_id
+      ? 'Asignado por el despachador — puedes corregirlo si es necesario'
+      : 'Sin despacho — selección manual';
+    const conductorCell = `<select class="ruta-select" id="c-${b.id}" title="${condTitle}" onchange="markDirty(${b.id}, this)">
+             <option value="">— Sin conductor —</option>
+             ${condOptions}
+           </select>`;
+
+    /* Ruta: editable siempre. Misma lógica que conductor. */
+    let rutaCell;
+    if (base.rutasParaBus.length) {
+      const rutaOptions = base.rutasParaBus.map(r =>
+        `<option value="${r.id}" ${base.ruta == r.id ? 'selected' : ''}>${r.nombre}</option>`
+      ).join('');
+      const rutaTitle = desp && desp.ruta_id
+        ? 'Asignada por el despachador — puedes corregirla si es necesario'
+        : 'Sin despacho — selección manual';
+      rutaCell = `<select class="ruta-select" id="ruta-${b.id}" title="${rutaTitle}" onchange="markDirty(${b.id}, this)">
+               <option value="">— Sin ruta —</option>
+               ${rutaOptions}
+             </select>`;
+    } else {
+      rutaCell = `<span class="no-rutas-tip">Sin rutas Gr.${b.grupo}</span>`;
+    }
+
+    /* Vueltas sincronizadas del despacho: al escribir se quita la marca. */
+    const vueltasAttrs = base.vueltasFromDesp
+      ? `data-from-despacho="1" title="Sincronizado del despacho — puedes corregirlo si es necesario"` : '';
+
+    /* Pasajeros de la registradora: solo lectura (se corrige en Despacho).
+       Sin lecturas válidas se mantiene la captura manual / importación BEA. */
+    let pasajerosCell;
+    if (base.paxReg != null) {
+      const paxTitle = `Registradora del despacho: ${Number(desp.registradora_fin).toLocaleString('es-CO')} − ${Number(desp.registradora_inicio).toLocaleString('es-CO')} = ${base.paxReg.toLocaleString('es-CO')}. Para corregirlo, edita la registradora en Despacho.`;
+      pasajerosCell = `<div class="pax-reg-wrap" title="${paxTitle}">
+               <input class="num-input from-registradora" id="p-${b.id}" type="number" value="${base.paxReg}" readonly tabindex="-1" />
+               <span class="pax-reg-tag">REG</span>
+             </div>`;
+    } else {
+      const paxTitle = usaRegistradora(fecha) && desp && desp.estado === 'trabajando'
+        ? 'title="Sin lectura válida de registradora en el despacho — captura manual"' : '';
+      pasajerosCell = `<input  class="num-input"   id="p-${b.id}"    type="number" min="0" inputmode="numeric"
+                  value="${base.p}" placeholder="0" ${paxTitle}
+                  oninput="markDirty(${b.id}, this)" />`;
+    }
+
+    const flashCls = flash ? ' flash' : '';
+
+    return `
+    <tr id="row-${b.id}" class="${cls}${flashCls}">
+      <td class="cell-unidad">
+        <div class="bus-num">${b.numero}</div>
+        <div class="bus-placa">${b.placa || '—'}</div>
+        ${despBadge}
+      </td>
+      <td data-label="Grupo"><span class="badge-grupo badge-${(b.grupo || 'A').toLowerCase()}">${b.grupo}</span></td>
+      <td data-label="Vueltas"><input  class="num-input${base.vueltasFromDesp ? ' from-despacho' : ''}"   id="v-${b.id}"    type="number" min="0" inputmode="numeric"
+                  value="${base.v}" placeholder="0" ${vueltasAttrs}
+                  oninput="markDirty(${b.id}, this)" /></td>
+      <td data-label="Pasajeros">${pasajerosCell}</td>
+      <td data-label="Km"><input  class="num-input"   id="k-${b.id}"    type="number" min="0" step="0.1" inputmode="decimal"
+                  value="${base.k}" placeholder="0"
+                  oninput="markDirty(${b.id}, this)" /></td>
+      <td data-label="Conductor">${conductorCell}</td>
+      <td data-label="Ruta">${rutaCell}</td>
+      <td data-label="Novedades"><input  class="nov-input"   id="n-${b.id}"    type="text"
+                  value="${escHtml(base.n)}" placeholder="Sin novedades"
+                  oninput="markDirty(${b.id}, this)" /></td>
+      <td data-label="Estado"><span class="estado-badge ${est}" id="est-${b.id}" title="${ESTADO_TITLE[est] || ''}" onclick="descartarFila(${b.id})">${ESTADO_LABEL[est]}</span></td>
+      <td class="cell-acciones"><button class="btn-row-save" id="brs-${b.id}" onclick="saveRow(${b.id})">Guardar</button></td>
+    </tr>`;
   }
 
   /* Pone de nuevo en pantalla lo escrito sin guardar encima de lo que se
@@ -1560,15 +1607,37 @@
      tecleado: al filtrar por grupo o refrescar, los valores se perdían y la
      fila seguía diciendo "Modificado". */
   function aplicarPendientes() {
-    Object.entries(pendientesDe(fechaSel())).forEach(([busId, campos]) => {
-      if (!document.getElementById(`row-${busId}`)) return;
-      Object.entries(campos).forEach(([campo, valor]) => {
-        const el = document.getElementById(`${campo}-${busId}`);
-        if (!el || el.readOnly) return;   // p.ej. pasajeros que ahora salen de la registradora
-        el.value = valor;
-        marcarCampoTocado(el);
-      });
+    Object.keys(pendientesDe(fechaSel())).forEach(aplicarPendientesBus);
+  }
+
+  function aplicarPendientesBus(busId) {
+    const pend = pendientesDe(fechaSel())[busId];
+    if (!pend || !document.getElementById(`row-${busId}`)) return;
+    camposPend(pend).forEach(campo => {
+      const el = document.getElementById(`${campo}-${busId}`);
+      if (!el || el.readOnly) return;   // p.ej. pasajeros que ahora salen de la registradora
+      el.value = pend[campo];
+      marcarCampoTocado(el);
     });
+  }
+
+  /* Vuelve a pintar una fila con lo que hay en records/despachoMap (p.ej.
+     después de guardar, con lo que devolvió el servidor). Si la persona sigue
+     escribiendo en esa fila, conserva el foco y el cursor. */
+  function repintarFila(busId) {
+    const tr  = document.getElementById(`row-${busId}`);
+    const bus = allBuses.find(b => b.id == busId);
+    if (!tr || !bus) return;
+    const foco = tr.contains(document.activeElement) ? document.activeElement : null;
+    let cursor = null;
+    try { if (foco && foco.type === 'text') cursor = [foco.selectionStart, foco.selectionEnd]; } catch (_) {}
+    tr.outerHTML = filaHtml(bus, fechaSel(), false).trim();
+    aplicarPendientesBus(busId);
+    const el = foco && foco.id ? document.getElementById(foco.id) : null;
+    if (el) {
+      el.focus();
+      if (cursor) try { el.setSelectionRange(cursor[0], cursor[1]); } catch (_) {}
+    }
   }
 
   function marcarCampoTocado(el) {
@@ -1587,7 +1656,13 @@
     if (el && el.id) {
       const campo = el.id.slice(0, el.id.lastIndexOf('-'));
       pendientes[fecha] = pendientes[fecha] || {};
-      pendientes[fecha][busId] = { ...(pendientes[fecha][busId] || {}), [campo]: el.value };
+      const prev  = pendientes[fecha][busId] || {};
+      /* Lo que la fila mostraba antes del primer cambio de este campo (un
+         borrador viejo sin `_antes` se guarda sin esa comprobación). */
+      const antes = { ...(prev._antes || {}) };
+      const bus   = allBuses.find(b => b.id === busId);
+      if (!(campo in prev) && bus) antes[campo] = valorApi(campo, valoresBase(bus, fecha)[campo]);
+      pendientes[fecha][busId] = { ...prev, [campo]: el.value, _antes: antes };
       restaurados.delete(`${fecha}|${busId}`);
       respaldarBus(fecha, busId);
       marcarCampoTocado(el);
@@ -1666,84 +1741,131 @@
     document.getElementById('progressText').textContent  = `${conDatos} de ${total} buses con datos para esta fecha`;
   }
 
-  /* Registro de una fila tal como se envía. Si la fila no está en pantalla
-     (la oculta el filtro de grupo) se arma con lo cargado + lo pendiente. */
-  function valoresFila(b) {
-    const el = campo => document.getElementById(`${campo}-${b.id}`);
-    if (document.getElementById(`row-${b.id}`)) {
-      /* Selects editables incluso con despacho: si el analista los cambia,
-         el servidor detecta la diferencia y corrige el despacho del día. */
-      const rutaEl = el('ruta'), condEl = el('c');
-      return {
-        bus_id:        b.id,
-        vueltas:       parseInt(el('v')?.value)   || 0,
-        pasajeros:     parseInt(el('p')?.value)   || 0,
-        km_recorridos: parseFloat(el('k')?.value) || 0,
-        ruta_id:       rutaEl ? (parseInt(rutaEl.value) || null) : null,
-        conductor_id:  condEl ? (parseInt(condEl.value) || null) : null,
-        novedades:     el('n')?.value.trim() || '',
-      };
-    }
-    const base = valoresBase(b, fechaSel());
-    const pend = pendientesDe(fechaSel())[b.id] || {};
-    const val  = campo => (campo in pend ? pend[campo] : base[campo]);
-    return {
-      bus_id:        b.id,
-      vueltas:       parseInt(val('v')) || 0,
-      pasajeros:     base.paxReg != null ? base.paxReg : (parseInt(val('p')) || 0),
-      km_recorridos: parseFloat(val('k')) || 0,
-      ruta_id:       base.rutasParaBus.length ? (parseInt(val('ruta')) || null) : null,
-      conductor_id:  parseInt(val('c')) || null,
-      novedades:     String(val('n') ?? '').trim(),
-    };
+  /* Registro que se envía de un bus: SOLO los campos que la persona cambió,
+     con el valor que veía antes (`antes`). Lo que no se envía queda como está
+     en el servidor: así una ventana abierta hace rato no pisa los km o las
+     novedades que guardaron otros, ni revierte el conductor/ruta del despacho
+     (la corrección del despacho solo ocurre si se cambió ese select).
+     `enviados` = lo pendiente que cubre este envío (se suelta al confirmar). */
+  function registroCambios(b, fecha) {
+    const pend  = pendientesDe(fecha)[b.id] || {};
+    const antes = pend._antes || {};
+    const base  = valoresBase(b, fecha);
+    const reg   = { bus_id: b.id };
+    const enviados = {};
+    camposPend(pend).forEach(campo => {
+      enviados[campo] = pend[campo];
+      if (campo === 'p' && base.paxReg != null) return;   // la registradora manda
+      const nuevo = valorApi(campo, pend[campo]);
+      if (campo in antes && mismoValor(campo, nuevo, antes[campo])) return;   // lo dejó como estaba
+      reg[CAMPOS_API[campo]] = nuevo;
+      if (campo in antes) (reg.antes = reg.antes || {})[CAMPOS_API[campo]] = antes[campo];
+    });
+    return { reg, enviados };
   }
 
   async function guardarRegistros(fecha, registros) {
-    const res = await apiFetch(`${API}/movilidad/batch`, {
-      method: 'PUT',
-      body: JSON.stringify({ fecha, usuario_id: currentUser?.id, registros }),
-    });
-    const json = await leerRespuesta(res);
-    if (!json.ok) throw new Error(json.error || 'El servidor no confirmó el guardado');
-    return json;
+    guardando++;
+    try {
+      const res = await apiFetch(`${API}/movilidad/batch`, {
+        method: 'PUT',
+        body: JSON.stringify({ fecha, usuario_id: currentUser?.id, registros }),
+      });
+      const json = await leerRespuesta(res);
+      if (!json.ok) throw new Error(json.error || 'El servidor no confirmó el guardado');
+      return json;
+    } finally {
+      guardando--;
+      seqGuardado++;
+    }
   }
 
-  /* Foto de lo pendiente de cada bus al momento de enviar: si la persona
-     siguió escribiendo en la fila mientras se guardaba, eso queda pendiente. */
-  function fotoPendientes(fecha, busIds) {
-    const foto = {};
-    busIds.forEach(id => { foto[id] = JSON.stringify(pendientesDe(fecha)[id] || null); });
-    return foto;
+  /* El servidor confirmó: solo ahora se marca "Guardado". Se suelta campo por
+     campo lo enviado; si la persona siguió escribiendo en la fila mientras se
+     guardaba, eso queda pendiente. Un campo en conflicto (otra persona lo
+     cambió) no se guardó: sigue pendiente y su `_antes` pasa a ser el valor
+     actual, para que volver a guardar sí lo reemplace (decisión explícita). */
+  function confirmarGuardados(fecha, enviadosPorBus, json) {
+    const choques = {};   // bus_id → {campo: conflicto}
+    (json.conflictos || []).forEach(c => {
+      (choques[c.bus_id] = choques[c.bus_id] || {})[CAMPO_DE_API[c.campo]] = c;
+    });
+    Object.entries(enviadosPorBus).forEach(([busId, enviados]) => {
+      const k = `${fecha}|${busId}`;
+      errorGuardado.delete(k);
+      conflictos.delete(k);
+      const pend = pendientes[fecha] && pendientes[fecha][busId];
+      if (!pend) return;
+      const delBus = choques[busId] || {};
+      Object.entries(enviados).forEach(([campo, valor]) => {
+        pend._antes = pend._antes || {};
+        if (delBus[campo]) { pend._antes[campo] = valorApi(campo, delBus[campo].actual); return; }
+        if (pend[campo] === valor) delete pend[campo];
+        else pend._antes[campo] = valorApi(campo, valor);   // siguió escribiendo: la base es lo recién guardado
+      });
+      if (Object.keys(delBus).length) conflictos.add(k);
+      if (camposPend(pend).length) respaldarBus(fecha, busId);
+      else quitarPendiente(fecha, busId);
+    });
+    if (fecha === fechaSel()) pintarFilas(json.filas || [], Object.keys(enviadosPorBus));
+    actualizarBarraPendientes();
+    if (json.conflictos && json.conflictos.length) avisarConflictos(json.conflictos);
+    else flashSaved();
   }
 
-  /* El servidor confirmó: solo ahora se marca "Guardado". */
-  function confirmarGuardados(fecha, registros, foto) {
-    const mismaFecha = fecha === fechaSel();
-    registros.forEach(r => {
-      errorGuardado.delete(`${fecha}|${r.bus_id}`);
-      const siguioEditando = JSON.stringify(pendientesDe(fecha)[r.bus_id] || null) !== foto[r.bus_id];
-      if (!siguioEditando) quitarPendiente(fecha, r.bus_id);
-      if (!mismaFecha) return;   // se cambió de fecha mientras guardaba
-
-      records[r.bus_id] = { ...(records[r.bus_id] || {}), ...r };
-
-      /* El servidor propaga la corrección del analista al despacho del día
-         (conductor/ruta). Reflejarla también en el despacho local para que un
-         re-render posterior (cambio de grupo, refresco silencioso) no revierta
-         el valor recién corregido al que traía el despacho. */
-      if (despachoMap[r.bus_id]) {
-        despachoMap[r.bus_id].conductor_id = r.conductor_id;
-        despachoMap[r.bus_id].ruta_id      = r.ruta_id;
+  /* Pinta las filas que devolvió el servidor tal como quedaron guardadas
+     (incluye lo que cambiaron otras personas y el despacho del día). */
+  function pintarFilas(filas, busIds) {
+    filas.forEach(f => {
+      records[f.bus_id]     = f;
+      prevUpdated[f.bus_id] = f.updated_at || null;
+      if (f.tiene_despacho) {
+        despachoMap[f.bus_id] = {
+          estado:              f.despacho_estado,
+          conductor_id:        f.despacho_conductor_id,
+          ruta_id:             f.despacho_ruta_id,
+          viajes_realizados:   f.despacho_viajes,
+          registradora_inicio: f.despacho_reg_inicio,
+          registradora_fin:    f.despacho_reg_fin,
+        };
+      } else {
+        delete despachoMap[f.bus_id];
       }
-
-      const row = document.getElementById(`row-${r.bus_id}`);
-      if (row) row.classList.add('has-data');
-      if (!siguioEditando) {
-        document.querySelectorAll(`#row-${r.bus_id} .touched`).forEach(i => i.classList.remove('touched'));
-      }
-      pintarEstado(r.bus_id);
     });
-    if (mismaFecha) updateStats();
+    busIds.forEach(repintarFila);
+    updateStats();
+  }
+
+  function textoValor(campo, v) {
+    if (campo === 'c')    return v ? conductorNombre(v) : 'sin conductor';
+    if (campo === 'ruta') return v ? rutaNombreById(v) : 'sin ruta';
+    if (campo === 'n') {
+      const s = String(v || '');
+      return s ? `«${s.length > 40 ? s.slice(0, 40) + '…' : s}»` : 'vacío';
+    }
+    if (campo === 'k') return Number(v || 0).toLocaleString('es-CO', { maximumFractionDigits: 1 });
+    return String(v ?? 0);
+  }
+
+  function avisarConflictos(lista) {
+    const det = lista.slice(0, 4).map(c => {
+      const campo = CAMPO_DE_API[c.campo];
+      const bus   = allBuses.find(b => b.id == c.bus_id);
+      return `bus ${bus ? bus.numero : c.bus_id}, ${CAMPO_LABEL[campo]}: ahora ${textoValor(campo, c.actual)} (tú: ${textoValor(campo, c.tuyo)})`;
+    }).join('; ') + (lista.length > 4 ? `; y ${lista.length - 4} más` : '');
+    mostrarError(`Otra persona cambió estos datos mientras tenías la vista abierta y no se pisaron — ${det}. ` +
+      `Lo tuyo sigue en la fila marcada «Conflicto»: si es lo correcto, vuelve a guardar; si no, haz clic en «Conflicto» para descartarlo.`, 30000);
+  }
+
+  /* Clic en «Conflicto»: descartar lo escrito en esa fila y quedarse con lo
+     que guardó la otra persona. */
+  function descartarFila(busId) {
+    const fecha = fechaSel();
+    if (estadoFila(busId, fecha) !== 'conflicto') return;
+    const bus = allBuses.find(b => b.id === busId);
+    if (!confirm(`¿Descartar lo que escribiste en el bus ${bus ? bus.numero : busId} y dejar lo que guardó la otra persona?`)) return;
+    quitarPendiente(fecha, busId);
+    repintarFila(busId);
     actualizarBarraPendientes();
   }
 
@@ -1761,21 +1883,20 @@
     mostrarError(`No se guardó: ${mensajeError(err).replace(/\.$/, '')}. Lo que escribiste sigue en pantalla; intenta de nuevo.`);
   }
 
-  /* ── GUARDAR FILA ── */
+  /* ── GUARDAR FILA ── (sin cambios propios igual crea/actualiza el registro
+     con lo del despacho y trae la fila al día) */
   async function saveRow(busId) {
     const fecha = fechaSel();
     const bus   = allBuses.find(b => b.id === busId);
     const btn   = document.getElementById(`brs-${busId}`);
     if (!bus || !btn || btn.disabled) return;
 
-    const reg  = valoresFila(bus);
-    const foto = fotoPendientes(fecha, [busId]);
+    const { reg, enviados } = registroCambios(bus, fecha);
     btn.textContent = '…'; btn.disabled = true;
 
     try {
-      await guardarRegistros(fecha, [reg]);
-      confirmarGuardados(fecha, [reg], foto);
-      flashSaved();
+      const json = await guardarRegistros(fecha, [reg]);
+      confirmarGuardados(fecha, { [busId]: enviados }, json);
     } catch (err) {
       marcarError(fecha, [busId], err, `fila-${busId}`, () => saveRow(busId));
     } finally {
@@ -1785,7 +1906,12 @@
     }
   }
 
-  /* ── GUARDAR TODO ── */
+  /* ── GUARDAR TODO ──
+     Envía solo los buses con cambios sin guardar (también los que oculta el
+     filtro de grupo), cada uno con solo sus campos cambiados. Además crea el
+     registro de los buses visibles que aún no tienen y ya traen vueltas o
+     registradora del despacho (se envía solo bus_id: el servidor lo completa),
+     como antes al dar "Guardar Todo" sobre los datos prellenados. */
   let guardandoTodo = false;
   async function saveAll() {
     if (guardandoTodo) return;
@@ -1796,24 +1922,24 @@
     const htmlBtn = btn.innerHTML;
 
     const visibles = grupoFiltro === 'todos' ? allBuses : allBuses.filter(b => b.grupo === grupoFiltro);
-    /* También los buses con cambios sin guardar que el filtro de grupo oculta */
-    const ocultos  = allBuses.filter(b => pend[b.id] && !visibles.includes(b));
-    const registros = [...visibles, ...ocultos].map(valoresFila)
-      /* Solo filas con datos digitados o con cambios sin guardar. */
-      .filter(r => r.vueltas > 0 || r.pasajeros > 0 || r.km_recorridos > 0 || r.novedades || pend[r.bus_id]);
-    if (!registros.length) return;
+    const prellenados = visibles.filter(b => {
+      if (records[b.id] || pend[b.id]) return false;
+      const base = valoresBase(b, fecha);
+      return base.vueltasFromDesp || base.paxReg != null;
+    });
+    const lote = [...busesPendientes(fecha), ...prellenados].map(b => ({ id: b.id, ...registroCambios(b, fecha) }));
+    if (!lote.length) { flashSaved(); return; }
 
-    const foto = fotoPendientes(fecha, registros.map(r => r.bus_id));
+    const enviadosPorBus = Object.fromEntries(lote.map(x => [x.id, x.enviados]));
     guardandoTodo = true;
     btn.disabled = true; btn.textContent = 'Guardando…';
     if (btnPend) btnPend.disabled = true;
 
     try {
-      await guardarRegistros(fecha, registros);
-      confirmarGuardados(fecha, registros, foto);
-      flashSaved();
+      const json = await guardarRegistros(fecha, lote.map(x => x.reg));
+      confirmarGuardados(fecha, enviadosPorBus, json);
     } catch (err) {
-      marcarError(fecha, registros.map(r => r.bus_id), err, 'todo', () => saveAll());
+      marcarError(fecha, lote.map(x => x.id), err, 'todo', () => saveAll());
     } finally {
       guardandoTodo = false;
       btn.disabled = false; btn.innerHTML = htmlBtn;
@@ -1829,11 +1955,11 @@
 
   /* ── AVISO DE ERROR ── (queda visible hasta cerrarlo o 12 s) */
   let _errorTimer = null;
-  function mostrarError(msg) {
+  function mostrarError(msg, ms = 12000) {
     document.getElementById('errorToastMsg').textContent = msg;
     document.getElementById('errorToast').classList.add('show');
     clearTimeout(_errorTimer);
-    _errorTimer = setTimeout(cerrarError, 12000);
+    _errorTimer = setTimeout(cerrarError, ms);
   }
   function cerrarError() {
     document.getElementById('errorToast').classList.remove('show');
