@@ -3190,9 +3190,96 @@ def get_movilidad_rango():
     return jsonify([dict(r) for r in rows])
 
 
+def _mov_int(v):
+    try:
+        return int(float(v)) if v not in (None, "") else 0
+    except (TypeError, ValueError):
+        return 0
+
+
+def _mov_km(v):
+    try:
+        return round(float(v), 1) if v not in (None, "") else 0.0
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _mov_txt(v):
+    return str(v if v is not None else "").strip()
+
+
+def _mov_id(v):
+    try:
+        return (int(v) or None) if v not in (None, "") else None
+    except (TypeError, ValueError):
+        return None
+
+
+# Campos de un registro de movilidad que puede enviar el cliente. El valor
+# nuevo, el que el cliente veía (`antes`) y el guardado se normalizan igual
+# para poder compararlos.
+_MOV_CAMPOS = {
+    "vueltas":       _mov_int,
+    "pasajeros":     _mov_int,
+    "km_recorridos": _mov_km,
+    "novedades":     _mov_txt,
+    "conductor_id":  _mov_id,
+    "ruta_id":       _mov_id,
+}
+
+
+def _mov_igual(campo, a, b):
+    if campo == "km_recorridos":
+        return abs(a - b) < 0.05
+    return a == b
+
+
+def _filas_movilidad(db, fecha, bus_ids):
+    """Filas de movilidad de esos buses en la fecha, con la misma forma que
+    GET /api/movilidad más las lecturas de la registradora del despacho: la
+    ventana que guardó las pinta y así ve también lo que cambiaron otros."""
+    if not bus_ids:
+        return []
+    ph = ",".join("?" * len(bus_ids))
+    rows = db.execute(
+        f"""SELECT rm.*, b.numero, b.placa, b.modelo, b.grupo,
+                   ru.nombre AS ruta_nombre,
+                   cm.nombre AS conductor_nombre,
+                   CASE WHEN d.id IS NOT NULL THEN 1 ELSE 0 END AS tiene_despacho,
+                   d.estado              AS despacho_estado,
+                   d.conductor_id        AS despacho_conductor_id,
+                   dc.nombre             AS despacho_conductor_nombre,
+                   d.ruta_id             AS despacho_ruta_id,
+                   dr.nombre             AS despacho_ruta_nombre,
+                   d.viajes_realizados   AS despacho_viajes,
+                   d.registradora_inicio AS despacho_reg_inicio,
+                   d.registradora_fin    AS despacho_reg_fin
+            FROM registros_movilidad rm
+            JOIN buses b ON b.id = rm.bus_id
+            LEFT JOIN rutas ru ON ru.id = rm.ruta_id
+            LEFT JOIN conductores cm ON cm.id = rm.conductor_id
+            LEFT JOIN despacho_diario d ON d.bus_id = rm.bus_id AND d.fecha = rm.fecha
+            LEFT JOIN conductores dc ON dc.id = d.conductor_id
+            LEFT JOIN rutas dr ON dr.id = d.ruta_id
+            WHERE rm.fecha = ? AND rm.bus_id IN ({ph})
+            ORDER BY b.numero""",
+        [fecha] + list(bus_ids),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 @app.route("/api/movilidad/batch", methods=["PUT"])
 @require_auth
 def batch_upsert_movilidad():
+    """Guarda la movilidad del día por bus.
+
+    Cada registro trae SOLO los campos que la persona cambió (más bus_id) y,
+    opcionalmente, `antes`: {campo: valor que veía}. Lo que no viene queda como
+    está, así varias personas con la vista abierta no se pisan, y una ventana
+    abierta hace rato no revierte el conductor/ruta del despacho. Si otra
+    persona cambió ese mismo campo después (lo guardado ya no es `antes`), no
+    se pisa: se devuelve en `conflictos` para que el cliente avise.
+    La respuesta trae las filas de esos buses tal como quedaron (`filas`)."""
     data       = request.get_json(force=True)
     fecha      = data.get("fecha")
     registros  = data.get("registros", [])
@@ -3208,13 +3295,15 @@ def batch_upsert_movilidad():
     db    = get_db()
     saved = 0
     buses_afectados = set()
+    conflictos = []
 
     # Sincronización despacho → movilidad: para la MISMA fecha del batch
     # (nunca se desplazan días), el conductor y la ruta del despacho mandan.
     # Lo que envíe el cliente solo se usa como respaldo cuando no hay
     # despacho o el despacho tiene ese campo vacío.
     desp_rows = db.execute(
-        """SELECT bus_id, conductor_id, ruta_id, registradora_inicio, registradora_fin
+        """SELECT bus_id, conductor_id, ruta_id, viajes_realizados,
+                  registradora_inicio, registradora_fin
              FROM despacho_diario WHERE fecha = ?""",
         (fecha,),
     ).fetchall()
@@ -3225,17 +3314,43 @@ def batch_upsert_movilidad():
     # Sin lecturas válidas se usa el valor enviado como respaldo.
     usa_registradora = fecha >= PAX_REGISTRADORA_DESDE
 
-    def _pasajeros(r, d):
+    def _pax_reg(d):
         if usa_registradora and d:
-            pax = _pax_registradora(d.get("registradora_inicio"), d.get("registradora_fin"))
-            if pax is not None:
-                return pax
-        return r.get("pasajeros", 0)
+            return _pax_registradora(d.get("registradora_inicio"), d.get("registradora_fin"))
+        return None
+
+    def _pasajeros(r, d):
+        pax = _pax_reg(d)
+        return pax if pax is not None else r.get("pasajeros", 0)
+
+    def _vigente(campo, row, d):
+        """Valor que ve en pantalla quien abre Movilidad para ese bus y fecha
+        (misma regla que valoresBase() en historial-movilidad.html)."""
+        guardado = _MOV_CAMPOS[campo](row.get(campo) if row else None)
+        if campo in ("conductor_id", "ruta_id"):
+            return d[campo] if d and d.get(campo) else guardado
+        if campo == "vueltas":
+            viajes = _mov_int(d.get("viajes_realizados")) if d else 0
+            return viajes if not guardado and viajes > 0 else guardado
+        if campo == "pasajeros":
+            pax = _pax_reg(d)
+            return pax if pax is not None else guardado
+        return guardado
 
     # Administrador y Analista pueden corregir el conductor/ruta del despacho
     # cuando el despachador se equivocó. La corrección se propaga al despacho
     # del día para que reportes y demás vistas reflejen la realidad.
     puede_corregir_despacho = getattr(request, "jwt_user_rol", None) in ("Administrador", "Analista")
+
+    existentes = {}
+    if not solo_datos:
+        existentes = {
+            e["bus_id"]: dict(e) for e in db.execute(
+                """SELECT bus_id, vueltas, pasajeros, km_recorridos, novedades, conductor_id, ruta_id
+                     FROM registros_movilidad WHERE fecha = ?""",
+                (fecha,),
+            ).fetchall()
+        }
 
     for r in registros:
         bus_id = r.get("bus_id")
@@ -3263,44 +3378,80 @@ def batch_upsert_movilidad():
             saved += 1
             continue
 
-        cli_cond = r.get("conductor_id") or None
-        cli_ruta = r.get("ruta_id")      or None
+        row   = existentes.get(bus_id)
+        antes = r.get("antes") if isinstance(r.get("antes"), dict) else {}
+        nuevos = {}   # columna → valor que debe quedar
 
-        # Corrección de despacho: si el analista/admin envía un valor distinto
-        # al del despacho para conductor o ruta, se actualiza el despacho.
-        if puede_corregir_despacho and d and (
-            (cli_cond and cli_cond != d.get("conductor_id")) or
-            (cli_ruta and cli_ruta != d.get("ruta_id"))
-        ):
-            nuevo_cond = cli_cond if cli_cond else d.get("conductor_id")
-            nuevo_ruta = cli_ruta if cli_ruta else d.get("ruta_id")
+        # 1. Solo los campos que vienen en el registro (los que la persona cambió).
+        for campo, norm in _MOV_CAMPOS.items():
+            if campo not in r:
+                continue
+            if campo == "pasajeros" and _pax_reg(d) is not None:
+                continue   # la registradora manda (paso 2)
+            valor   = norm(r.get(campo))
+            vigente = _vigente(campo, row, d)
+            if _mov_igual(campo, valor, vigente):
+                continue
+            if campo in antes and not _mov_igual(campo, norm(antes[campo]), vigente):
+                # Otra persona cambió este mismo campo después de que esta
+                # ventana lo cargó: no se pisa en silencio, el cliente avisa.
+                conflictos.append({"bus_id": bus_id, "campo": campo,
+                                   "actual": vigente, "tuyo": valor})
+                continue
+            # Corrección del despacho (solo Admin/Analista): únicamente del
+            # campo que el cliente envió, nunca del otro.
+            if (campo in ("conductor_id", "ruta_id") and puede_corregir_despacho
+                    and d and valor and valor != d.get(campo)):
+                db.execute(
+                    f"UPDATE despacho_diario SET {campo} = ? WHERE bus_id = ? AND fecha = ?",
+                    (valor, bus_id, fecha),
+                )
+                d[campo] = valor
+            nuevos[campo] = valor
+
+        # 2. Lo que impone o completa el servidor desde el despacho del mismo
+        #    (bus, fecha): pasajeros de la registradora, conductor y ruta, y
+        #    vueltas = viajes realizados mientras movilidad no tenga.
+        pax = _pax_reg(d)
+        if pax is not None:
+            nuevos["pasajeros"] = pax
+        for campo in ("conductor_id", "ruta_id"):
+            if d and d.get(campo):
+                nuevos[campo] = d[campo]
+        if "vueltas" not in nuevos and not _mov_int(row.get("vueltas") if row else None):
+            viajes = _mov_int(d.get("viajes_realizados")) if d else 0
+            if viajes > 0:
+                nuevos["vueltas"] = viajes
+
+        # 3. Escribir solo lo que cambia (updated_at no se toca si nada cambió).
+        if row:
+            cambios = {c: v for c, v in nuevos.items()
+                       if not _mov_igual(c, v, _MOV_CAMPOS[c](row.get(c)))}
+            if cambios:
+                sets = ", ".join(f"{c} = ?" for c in cambios)
+                db.execute(
+                    f"""UPDATE registros_movilidad
+                           SET {sets}, usuario_id = ?, updated_at = CURRENT_TIMESTAMP
+                         WHERE bus_id = ? AND fecha = ?""",
+                    list(cambios.values()) + [usuario_id, bus_id, fecha],
+                )
+        else:
+            cambios = nuevos
+            fila = {"vueltas": 0, "pasajeros": 0, "km_recorridos": 0, "novedades": "",
+                    "ruta_id": None, "conductor_id": None, **nuevos}
+            cols = ", ".join(fila)
+            # Si otra persona lo creó en este mismo instante, solo se aplica lo propio.
+            al_chocar = ("UPDATE SET " + ", ".join(f"{c} = excluded.{c}" for c in cambios)
+                         + ", usuario_id = excluded.usuario_id, updated_at = CURRENT_TIMESTAMP"
+                         ) if cambios else "NOTHING"
             db.execute(
-                "UPDATE despacho_diario SET conductor_id = ?, ruta_id = ? WHERE bus_id = ? AND fecha = ?",
-                (nuevo_cond, nuevo_ruta, bus_id, fecha),
+                f"""INSERT INTO registros_movilidad (bus_id, fecha, {cols}, usuario_id, updated_at)
+                    VALUES (?, ?, {", ".join("?" * len(fila))}, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(bus_id, fecha) DO {al_chocar}""",
+                [bus_id, fecha] + list(fila.values()) + [usuario_id],
             )
-            d["conductor_id"] = nuevo_cond
-            d["ruta_id"]      = nuevo_ruta
-
-        conductor_id = (d["conductor_id"] if d and d["conductor_id"] else None) or cli_cond
-        ruta_id      = (d["ruta_id"]      if d and d["ruta_id"]      else None) or cli_ruta
-        db.execute(
-            """INSERT INTO registros_movilidad
-                   (bus_id, fecha, vueltas, pasajeros, km_recorridos, novedades, ruta_id, conductor_id, usuario_id, updated_at)
-               VALUES (?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
-               ON CONFLICT(bus_id, fecha) DO UPDATE SET
-                   vueltas       = excluded.vueltas,
-                   pasajeros     = excluded.pasajeros,
-                   km_recorridos = excluded.km_recorridos,
-                   novedades     = excluded.novedades,
-                   ruta_id       = excluded.ruta_id,
-                   conductor_id  = excluded.conductor_id,
-                   usuario_id    = excluded.usuario_id,
-                   updated_at    = CURRENT_TIMESTAMP""",
-            (bus_id, fecha, r.get("vueltas", 0), _pasajeros(r, d),
-             r.get("km_recorridos", 0), r.get("novedades", ""),
-             ruta_id, conductor_id, usuario_id),
-        )
-        buses_afectados.add(bus_id)
+        if "km_recorridos" in cambios:
+            buses_afectados.add(bus_id)
         saved += 1
 
     # Recalcula km_actuales para cada bus afectado: idempotente.
@@ -3318,8 +3469,9 @@ def batch_upsert_movilidad():
             pass
 
     db.commit()
+    filas = _filas_movilidad(db, fecha, sorted({r.get("bus_id") for r in registros if r.get("bus_id")}))
     db.close()
-    return jsonify({"ok": True, "saved": saved})
+    return jsonify({"ok": True, "saved": saved, "filas": filas, "conflictos": conflictos})
 
 
 @app.route("/api/movilidad/fecha/<fecha>", methods=["DELETE"])
