@@ -3,7 +3,7 @@ La Milagrosa — API Flask
 Corre en: http://localhost:8001
 Soporta SQLite (local) y PostgreSQL/Supabase (producción).
 """
-from flask import Flask, jsonify, request, send_from_directory, Response, stream_with_context
+from flask import Flask, jsonify, request, send_from_directory, Response, stream_with_context, after_this_request
 from flask_cors import CORS
 import os
 import time
@@ -48,7 +48,50 @@ app = Flask(__name__, static_folder=None)
 
 # Orígenes permitidos: en producción ajustar ALLOWED_ORIGINS en las variables de entorno
 _allowed = os.environ.get("ALLOWED_ORIGINS", "*")
-CORS(app, origins=_allowed)
+# X-Token-Renovado se expone para que el frontend en localhost:3030 (otro
+# origen que la API de desarrollo) pueda leerlo; en producción es mismo origen.
+CORS(app, origins=_allowed, expose_headers=["X-Token-Renovado"])
+
+
+def _emitir_token(user_id, rol):
+    payload = {
+        "user_id": user_id,
+        "rol":     rol,
+        "exp":     datetime.utcnow() + timedelta(hours=JWT_EXPIRY_HOURS),
+    }
+    return _jwt.encode(payload, SECRET_KEY, algorithm="HS256")
+
+
+def _renovar_token_si_conviene(payload):
+    """Sesión deslizante: si al token le queda menos de la mitad de su vida,
+    la respuesta trae uno nuevo en X-Token-Renovado. Así quien está trabajando
+    no se queda sin sesión a mitad de la jornada (y sin poder guardar).
+    Las consultas automáticas (X-Refresco-Auto: 1) no renuevan: una pestaña
+    olvidada abierta debe vencer igual. Un fallo aquí nunca tumba la petición."""
+    if request.headers.get("X-Refresco-Auto") == "1":
+        return
+    if payload.get("exp", 0) - time.time() > JWT_EXPIRY_HOURS * 3600 / 2:
+        return
+    try:
+        db = get_db()
+        try:
+            u = db.execute(
+                "SELECT rol FROM usuarios WHERE id = ? AND activo = 1",
+                (payload.get("user_id"),),
+            ).fetchone()
+        finally:
+            db.close()
+        if not u:
+            return  # usuario desactivado: su sesión vence normalmente
+        nuevo = _emitir_token(payload.get("user_id"), u["rol"])
+    except Exception as e:
+        print(f"[auth] no se pudo renovar el token: {e}")
+        return
+
+    @after_this_request
+    def _adjuntar_token(resp):
+        resp.headers["X-Token-Renovado"] = nuevo
+        return resp
 
 
 # ── Decorador de autenticación JWT ──
@@ -67,6 +110,7 @@ def require_auth(f):
             return jsonify({"error": "Sesión expirada. Inicia sesión nuevamente."}), 401
         except _jwt.InvalidTokenError:
             return jsonify({"error": "Token inválido"}), 401
+        _renovar_token_si_conviene(payload)
         return f(*args, **kwargs)
     return decorated
 
@@ -1202,13 +1246,7 @@ def login():
 
     db.close()
 
-    # Generar token JWT
-    payload = {
-        "user_id": user["id"],
-        "rol":     rol,
-        "exp":     datetime.utcnow() + timedelta(hours=JWT_EXPIRY_HOURS),
-    }
-    token = _jwt.encode(payload, SECRET_KEY, algorithm="HS256")
+    token = _emitir_token(user["id"], rol)
 
     # Estado del aviso de tratamiento de datos (Ley 1581/2012):
     # el frontend usa este bool para decidir si mostrar el modal de aceptación.
