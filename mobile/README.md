@@ -72,7 +72,8 @@ flutter test
 ## Compilar para publicar
 
 ```bash
-# Android (para Play Store se necesita firmar: ver android/app/build.gradle.kts)
+# Android para Play Store: firmado con la clave de subida si existe
+# android/key.properties (ver android/app/build.gradle.kts); si no, con la debug.
 flutter build appbundle
 flutter build apk          # APK para instalar directo en un celular
 
@@ -81,8 +82,14 @@ flutter build ipa
 ```
 
 El workflow `.github/workflows/mobile.yml` corre el análisis y las pruebas en
-cada cambio dentro de `mobile/` y deja un **APK de prueba descargable** en la
-pestaña *Actions* de GitHub.
+cada cambio dentro de `mobile/` y deja en la pestaña *Actions* de GitHub un
+**APK de prueba** (`buscontrol-apk`) y el **AAB firmado para Google Play**
+(`buscontrol-aab`). La firma sale de los secretos `ANDROID_KEYSTORE_BASE64`,
+`ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` y `ANDROID_KEY_PASSWORD`; el
+número de compilación es el de la ejecución del workflow.
+
+Paquete: `net.buscontrol.app` (Android) / bundle id igual en iOS. El ícono
+sale del logo de BusControl; el de 512×512 para la ficha está en `play-store/`.
 
 ## Notas
 

@@ -1,4 +1,6 @@
+import java.io.FileInputStream
 import java.util.Base64
+import java.util.Properties
 
 plugins {
     id("com.android.application")
@@ -18,6 +20,19 @@ val dartDefines: Map<String, String> =
         ?.toMap()
         ?: emptyMap()
 
+// Firma de subida a Google Play. En GitHub Actions llega por variables de
+// entorno (secretos del repo); en un computador, por android/key.properties
+// (ignorado por git). Sin ninguna de las dos, release se firma con la clave
+// debug: sirve para instalar el APK de prueba, no para la Play Store.
+val firmaLocal = Properties().apply {
+    val archivo = rootProject.file("key.properties")
+    if (archivo.exists()) FileInputStream(archivo).use { load(it) }
+}
+fun datoFirma(propiedad: String, variable: String): String? =
+    firmaLocal.getProperty(propiedad) ?: System.getenv(variable)?.takeIf { it.isNotBlank() }
+val almacenFirma = datoFirma("storeFile", "ANDROID_KEYSTORE_PATH")
+val hayFirmaPropia = almacenFirma != null && file(almacenFirma).exists()
+
 android {
     namespace = "net.buscontrol.app"
     compileSdk = flutter.compileSdkVersion
@@ -29,7 +44,7 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        // Identificador en Google Play: no se puede cambiar después de publicar.
         applicationId = "net.buscontrol.app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
@@ -45,11 +60,20 @@ android {
         manifestPlaceholders["googleMapsKey"] = dartDefines["GOOGLE_MAPS_API_KEY"] ?: ""
     }
 
+    signingConfigs {
+        if (hayFirmaPropia) {
+            create("subida") {
+                storeFile = file(almacenFirma!!)
+                storePassword = datoFirma("storePassword", "ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = datoFirma("keyAlias", "ANDROID_KEY_ALIAS")
+                keyPassword = datoFirma("keyPassword", "ANDROID_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(if (hayFirmaPropia) "subida" else "debug")
         }
     }
 }
