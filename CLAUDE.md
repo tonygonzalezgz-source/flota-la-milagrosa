@@ -1,6 +1,8 @@
 # BusControl — memoria del proyecto
 
-Plataforma de gestión de flota de Flota La Milagrosa: web (HTML por módulo +
+BusControl (buscontrol.net) es el producto; Flota La Milagrosa es solo un cliente
+(el primero): la marca, el paquete y la ficha de la app dicen "BusControl", nunca
+"La Milagrosa". Plataforma de gestión de flota: web (HTML por módulo +
 API Flask en `api/app.py`, desplegada en Vercel en https://buscontrol.net) y app
 móvil Flutter en `mobile/` (detalle técnico en `mobile/README.md`). La app usa la
 misma API; los permisos salen de `ROLE_VIEWS` → `allowedViews`.
@@ -82,8 +84,14 @@ misma API; los permisos salen de `ROLE_VIEWS` → `allowedViews`.
 - Conductor: limitar despacho y alistamiento a su propio bus.
 - Consumo de combustible por vuelta, cuando exista el valor del tanqueo del día.
 - Mapa: flechas de sentido sobre el trazado.
-- Firma release de Android para Play Store; luego restringir la clave de Maps
-  por paquete (`co.lamilagrosa.buscontrol`) y SHA-1.
+- Play Store: paquete `net.buscontrol.app` (no se puede cambiar al publicar).
+  CI arma el AAB firmado (artefacto `buscontrol-aab`) con la clave de subida de
+  los secretos `ANDROID_*`; la clave está en `~/Documents/BusControl-firma-android`
+  del Mac del usuario. Falta: política de privacidad pública, cuenta demo para
+  los revisores, botón "reportar respuesta" en el asistente, y restringir la
+  clave de Maps por paquete + SHA-1 de la firma de Play.
+- El aviso de tratamiento de datos (`tratamiento_screen.dart`) nombra a Flota La
+  Milagrosa como responsable: con más clientes debe salir del servidor.
 - El chatbot de la web no guarda historial.
 - Excel directo a Descargas (hoy abre el menú de compartir).
 
