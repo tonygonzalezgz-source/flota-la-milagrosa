@@ -680,9 +680,9 @@ class _MapaVivoScreenState extends ConsumerState<MapaVivoScreen> {
         },
       ),
       children: [
-        TileLayer(urlTemplate: capa.url, maxNativeZoom: capa.maxNativo, userAgentPackageName: 'co.lamilagrosa.buscontrol'),
+        TileLayer(urlTemplate: capa.url, maxNativeZoom: capa.maxNativo, userAgentPackageName: 'net.buscontrol.app'),
         if (capa.etiquetas case final etiquetas?)
-          TileLayer(urlTemplate: etiquetas, maxNativeZoom: capa.maxNativo, userAgentPackageName: 'co.lamilagrosa.buscontrol'),
+          TileLayer(urlTemplate: etiquetas, maxNativeZoom: capa.maxNativo, userAgentPackageName: 'net.buscontrol.app'),
         PolylineLayer(polylines: [
           for (final l in _lineas)
             Polyline(

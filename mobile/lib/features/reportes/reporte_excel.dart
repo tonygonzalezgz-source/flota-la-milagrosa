@@ -35,7 +35,7 @@ List<int> excelReporte(Reporte r) {
 
   // ── Resumen ──
   final res = libro['Resumen'];
-  fila(res, [t('Reporte de movilidad — Flota La Milagrosa')], titulo);
+  fila(res, [t('Reporte de movilidad — BusControl')], titulo);
   fila(res, [t('Periodo'), t('${Fechas.corta(r.rango.desde)} a ${Fechas.corta(r.rango.hasta)}'), t('${r.diasPeriodo} días')]);
   fila(res, [t('Recaudo'), t(r.conRecaudo
       ? 'Lo que entregaron los conductores al liquidar: pasajeros × tarifa del vehículo (bus o micro) menos gastos'

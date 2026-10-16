@@ -1,4 +1,4 @@
-package co.lamilagrosa.buscontrol
+package net.buscontrol.app
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -156,7 +156,7 @@ class SubtituloBusControl extends StatelessWidget {
   Widget build(BuildContext context) => const Material(
         type: MaterialType.transparency,
         child: Text(
-          'FLOTA LA MILAGROSA',
+          'GESTIÓN DE FLOTAS',
           textAlign: TextAlign.center,
           style: TextStyle(
             fontFamily: Marca.cuerpo,
