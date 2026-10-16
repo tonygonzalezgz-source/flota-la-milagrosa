@@ -2,4 +2,6 @@
 <resources>
     <!-- Fondo de arranque: mismo azul noche de la intro de BusControl -->
     <color name="fondo_arranque">#050B18</color>
+    <!-- Fondo del ícono adaptativo -->
+    <color name="ic_launcher_fondo">#FFFFFF</color>
 </resources>
