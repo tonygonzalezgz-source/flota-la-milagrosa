@@ -387,6 +387,77 @@
     .estado-badge.sin-datos  { background: rgba(85,85,85,.15);   color: var(--txt3); }
     .estado-badge.guardado   { background: rgba(34,197,94,.12);  color: var(--green); }
     .estado-badge.modificado { background: rgba(245,158,11,.12); color: var(--yellow); }
+    .estado-badge.no-guardado { background: rgba(239,68,68,.12); color: var(--red); }
+    .estado-badge.conflicto  { background: rgba(234,88,12,.14);  color: #c2410c; cursor: help; }
+
+    /* ── Cambios sin guardar (borrador) ── */
+    .pend-bar {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      padding: 9px 24px;
+      background: rgba(245,158,11,.10);
+      border-bottom: 1px solid rgba(245,158,11,.35);
+      font-size: 12px; color: #92400e;
+      flex-shrink: 0;
+    }
+    .pend-bar.hidden { display: none; }
+    .pend-bar svg { flex-shrink: 0; }
+    .pend-text { flex: 1; min-width: 200px; }
+    .pend-text b { font-weight: 700; }
+    .pend-link {
+      background: none; border: none; padding: 0;
+      color: #92400e; font: inherit; font-weight: 700;
+      text-decoration: underline; cursor: pointer;
+    }
+    .pend-btn {
+      padding: 5px 12px; border-radius: 7px;
+      border: 1px solid rgba(146,64,14,.35); background: var(--surface);
+      color: #92400e; font-size: 12px; font-weight: 600; cursor: pointer;
+    }
+    .pend-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+    .pend-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+    /* ── Aviso de error (no se guardó / no cargó) ── */
+    .error-toast {
+      position: fixed; left: 50%; bottom: 20px; z-index: 250;
+      transform: translate(-50%, 20px);
+      width: max-content; max-width: min(560px, calc(100vw - 32px));
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 12px 14px;
+      background: var(--surface); color: var(--txt);
+      border: 1px solid rgba(239,68,68,.35); border-left: 4px solid var(--red);
+      border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.18);
+      font-size: 13px; line-height: 1.4;
+      opacity: 0; pointer-events: none;
+      transition: opacity .2s, transform .2s;
+    }
+    .error-toast.show { opacity: 1; pointer-events: auto; transform: translate(-50%, 0); }
+    .error-toast svg { color: var(--red); flex-shrink: 0; margin-top: 1px; }
+    .error-toast-msg { flex: 1; }
+    .error-toast-close {
+      background: none; border: none; color: var(--txt3);
+      cursor: pointer; padding: 0 2px; font-size: 18px; line-height: 1;
+    }
+
+    /* ── Sesión vencida: volver a entrar sin salir de la vista ── */
+    .reingreso-modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      width: 100%; max-width: 400px;
+      padding: 22px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .reingreso-modal h2 { font-size: 16px; font-weight: 700; }
+    .reingreso-modal p  { font-size: 13px; color: var(--txt2); line-height: 1.5; }
+    .reingreso-input {
+      width: 100%;
+      background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+      padding: 9px 12px; font-size: 16px; color: var(--txt); outline: none;
+    }
+    .reingreso-input:focus { border-color: var(--accent); }
+    .reingreso-input[readonly] { color: var(--txt2); }
+    .reingreso-error { font-size: 12px; color: var(--red); min-height: 16px; }
+    .reingreso-foot { display: flex; justify-content: flex-end; gap: 10px; margin-top: 4px; }
 
     /* Estado del despacho del día (sincronizado, informativo) */
     .desp-badge {
@@ -581,6 +652,7 @@
       .topbar-title { font-size: 14px; }
       .topbar-sep { display: none; }
       .stats-bar { flex-wrap: wrap; gap: 8px; padding: 10px 12px; }
+      .pend-bar { padding: 9px 12px; }
       .content-area { padding: 12px; overflow: visible; flex: unset; }
 
       /* Tabla → tarjetas apiladas (cada bus es una tarjeta) */
@@ -658,7 +730,7 @@
     </div>
 
     <div class="topbar-right">
-      <span class="live-pill" id="livePill" title="Auto-refresh cada 60 segundos (solo en el día de hoy)"></span>
+      <span class="live-pill" id="livePill" title="Trae cada 60 segundos lo que guardan los demás (se pausa mientras escribes en la tabla)"></span>
       <button class="btn-refresh" id="btnRefresh" onclick="refrescar(true)" title="Traer los últimos cambios ahora">
         <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
@@ -742,6 +814,17 @@
     </div>
   </div>
 
+  <!-- CAMBIOS SIN GUARDAR -->
+  <div class="pend-bar hidden" id="pendBar">
+    <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+      <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+    </svg>
+    <span class="pend-text" id="pendText"></span>
+    <button class="pend-btn" id="btnDescartar" onclick="descartarPendientes()">Descartar</button>
+    <button class="pend-btn primary" id="btnPendGuardar" onclick="saveAll()">Guardar Todo</button>
+  </div>
+
   <!-- TABLE -->
   <div class="table-area">
     <div class="table-wrap">
@@ -765,6 +848,32 @@
     </div>
   </div>
 
+</div>
+
+<!-- AVISO DE ERROR -->
+<div class="error-toast" id="errorToast" role="alert">
+  <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+  </svg>
+  <span class="error-toast-msg" id="errorToastMsg"></span>
+  <button class="error-toast-close" onclick="cerrarError()" title="Cerrar">&times;</button>
+</div>
+
+<!-- SESIÓN VENCIDA -->
+<div class="modal-overlay hidden" id="reingresoOverlay" style="z-index:300">
+  <form class="reingreso-modal" onsubmit="event.preventDefault(); reingresar();">
+    <h2>Tu sesión venció</h2>
+    <p>Lo que escribiste <b>no se ha perdido</b>: sigue en pantalla. Vuelve a entrar y se guardará.</p>
+    <span class="lbl">Usuario</span>
+    <input class="reingreso-input" id="reUser" autocomplete="username" />
+    <span class="lbl">Contraseña</span>
+    <input class="reingreso-input" id="rePass" type="password" autocomplete="current-password" required />
+    <div class="reingreso-error" id="reError"></div>
+    <div class="reingreso-foot">
+      <button type="button" class="btn-cancel-imp" onclick="cerrarReingreso()">Ahora no</button>
+      <button type="submit" class="btn-save-all" id="btnReingresar">Entrar y guardar</button>
+    </div>
+  </form>
 </div>
 
 <!-- IMPORT MODAL -->
@@ -882,10 +991,41 @@
 
 <script>
   const API = (window.location.port === '3030') ? 'http://localhost:8001/api' : (window.location.origin + '/api');
-  function apiFetch(url, options = {}) {
+  /* Si la API renovó el token (sesión deslizante, ver
+     _renovar_token_si_conviene en api/app.py) se guarda el nuevo, salvo que
+     mientras tanto la sesión se haya cerrado o cambiado en otra pestaña.
+     OJO: fetch NO lanza error con un 401/500 — usar leerRespuesta(). */
+  async function apiFetch(url, options = {}) {
     const token = localStorage.getItem('authToken');
-    return fetch(url, { ...options, headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}), ...(options.headers || {}) } });
+    const res = await fetch(url, { ...options, headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}), ...(options.headers || {}) } });
+    const renovado = res.headers.get('X-Token-Renovado');
+    if (renovado && token && localStorage.getItem('authToken') === token) {
+      try { localStorage.setItem('authToken', renovado); } catch (_) {}
+    }
+    return res;
   }
+
+  /* Devuelve el JSON de la respuesta o lanza un Error con .status. Así una
+     sesión vencida (401), un error del servidor (500) o una respuesta que
+     tardó demasiado (504) nunca se confunden con "Guardado". */
+  async function leerRespuesta(res) {
+    const text = await res.text();
+    let json = null;
+    try { json = text ? JSON.parse(text) : {}; } catch (_) {}
+    if (!res.ok || json === null) {
+      const msg = (json && json.error)
+        || (res.status === 504 ? 'El servidor tardó demasiado en responder' : `Error del servidor (${res.status})`);
+      const err = new Error(msg);
+      err.status = res.status;
+      throw err;
+    }
+    return json;
+  }
+
+  function mensajeError(err) {
+    return err && err.status ? err.message : 'Sin conexión con el servidor. Revisa el internet e intenta de nuevo.';
+  }
+
   let currentUser    = null;
   let allBuses       = [];
   let allRutas       = [];
@@ -894,71 +1034,222 @@
   let records        = {};   // bus_id → record
   let despachoMap    = {};   // bus_id → {estado, conductor_id, ruta_id, viajes_realizados, registradora_inicio, registradora_fin} del despacho de la fecha
   let grupoFiltro    = 'todos';
-  let dirty          = new Set();
 
   /* ── Estado del auto-refresh en vivo ── */
   let pollTimer     = null;
   let tickTimer     = null;
   let lastLoad      = null;
   let prevUpdated   = {};      // bus_id → updated_at del ciclo anterior (para el flash)
-  let modalAbierto  = false;   // pausa el polling mientras un modal está abierto
+  let guardando     = 0;       // guardados en curso
+  let seqGuardado   = 0;       // sube al terminar cada guardado (descarta cargas que quedaron viejas)
+
+  /* ── CAMBIOS SIN GUARDAR (borrador) ──
+     Lo que se escribe y aún no se guarda vive en `pendientes`
+     (fecha → bus_id → {campo: valor}) y se respalda en localStorage por
+     usuario. Sobrevive a cambiar el filtro de grupo, cambiar de módulo y
+     volver, "Actualizar", cambiar de fecha, recargar, cerrar la pestaña o que
+     venza la sesión. Solo se borra al guardar con éxito o con "Descartar".
+     Campos = prefijo del id del input: v vueltas, p pasajeros, k km,
+     c conductor, ruta, n novedades (k-12, ruta-12…). Además `_antes` guarda
+     lo que la fila mostraba antes del primer cambio de cada campo: al guardar
+     se envían SOLO los campos cambiados con ese valor, y si otra persona
+     cambió ese mismo dato mientras tanto el servidor no lo pisa y se avisa. */
+  const BORRADOR_DIAS = 7;
+  let pendientes     = {};
+  const errorGuardado = new Set();   // "fecha|bus_id" cuyo último intento de guardar falló
+  const conflictos    = new Set();   // "fecha|bus_id" con un campo que otra persona cambió (no se pisó)
+  const restaurados   = new Set();   // "fecha|bus_id" recuperados de una sesión anterior
+
+  const CAMPOS_API = { v: 'vueltas', p: 'pasajeros', k: 'km_recorridos', c: 'conductor_id', ruta: 'ruta_id', n: 'novedades' };
+  const CAMPO_DE_API = Object.fromEntries(Object.entries(CAMPOS_API).map(([c, api]) => [api, c]));
+  const CAMPO_LABEL  = { v: 'Vueltas', p: 'Pasajeros', k: 'Km', c: 'Conductor', ruta: 'Ruta', n: 'Novedades' };
+
+  /* Valor de un campo tal como lo guarda la API (igual que _MOV_CAMPOS en api/app.py). */
+  function valorApi(campo, valor) {
+    if (campo === 'v' || campo === 'p') return parseInt(valor) || 0;
+    if (campo === 'k')                  return Math.round((parseFloat(valor) || 0) * 10) / 10;
+    if (campo === 'c' || campo === 'ruta') return parseInt(valor) || null;
+    return String(valor ?? '').trim();
+  }
+  function mismoValor(campo, a, b) {
+    return campo === 'k' ? Math.abs((a || 0) - (b || 0)) < 0.05 : a === b;
+  }
+  /* Campos con cambios de un bus (sin `_antes`). */
+  function camposPend(pend) { return Object.keys(pend || {}).filter(c => c in CAMPOS_API); }
+
+  function borradorKey() { return `movilidad_borrador_v1:${currentUser?.id ?? 'anon'}`; }
+
+  function leerBorradorGuardado() {
+    try { return JSON.parse(localStorage.getItem(borradorKey()) || '{}') || {}; }
+    catch (_) { return {}; }
+  }
+
+  /* Lee-modifica-escribe solo ese bus: otra pestaña del mismo usuario puede
+     tener sus propios pendientes en el mismo respaldo y no se deben pisar. */
+  function respaldarBus(fecha, busId) {
+    try {
+      const todo   = leerBorradorGuardado();
+      const campos = pendientes[fecha] && pendientes[fecha][busId];
+      if (campos) {
+        todo[fecha] = todo[fecha] || { buses: {} };
+        todo[fecha].buses[busId] = campos;
+        todo[fecha].ts = Date.now();
+      } else if (todo[fecha]) {
+        delete todo[fecha].buses[busId];
+        if (!Object.keys(todo[fecha].buses).length) delete todo[fecha];
+      }
+      localStorage.setItem(borradorKey(), JSON.stringify(todo));
+    } catch (_) {}
+  }
+
+  function restaurarBorrador() {
+    const todo   = leerBorradorGuardado();
+    const limite = Date.now() - BORRADOR_DIAS * 86400000;
+    let purgado  = false;
+    pendientes = {};
+    Object.entries(todo).forEach(([fecha, entry]) => {
+      if (!entry || !entry.buses || (entry.ts || 0) < limite) { delete todo[fecha]; purgado = true; return; }
+      pendientes[fecha] = entry.buses;
+      Object.keys(entry.buses).forEach(id => restaurados.add(`${fecha}|${id}`));
+    });
+    if (purgado) { try { localStorage.setItem(borradorKey(), JSON.stringify(todo)); } catch (_) {} }
+  }
+
+  function fechaSel() { return document.getElementById('datePicker').value; }
+  function pendientesDe(fecha) { return pendientes[fecha] || {}; }
+  function tienePendiente(busId, fecha = fechaSel()) { return !!pendientesDe(fecha)[busId]; }
+  function hayPendientes() { return Object.values(pendientes).some(p => Object.keys(p).length > 0); }
+
+  /* Solo cuenta buses que siguen en la flota (uno retirado no se puede ver ni guardar). */
+  function busesPendientes(fecha = fechaSel()) {
+    const pend = pendientesDe(fecha);
+    return allBuses.filter(b => pend[b.id]);
+  }
+
+  function quitarPendiente(fecha, busId) {
+    if (pendientes[fecha]) {
+      delete pendientes[fecha][busId];
+      if (!Object.keys(pendientes[fecha]).length) delete pendientes[fecha];
+    }
+    errorGuardado.delete(`${fecha}|${busId}`);
+    conflictos.delete(`${fecha}|${busId}`);
+    restaurados.delete(`${fecha}|${busId}`);
+    respaldarBus(fecha, busId);
+  }
+
+  /* Otra pestaña del mismo usuario guardó o descartó un pendiente que esta
+     pestaña solo había recuperado del respaldo (no lo editó aquí): se suelta
+     y se traen los datos al día, para no reenviarlo después con valores viejos. */
+  window.addEventListener('storage', e => {
+    if (e.key !== borradorKey()) return;
+    const todo = leerBorradorGuardado();
+    let soltados = 0;
+    Object.keys(pendientes).forEach(fecha => {
+      Object.keys(pendientes[fecha]).forEach(busId => {
+        const k = `${fecha}|${busId}`;
+        if (!restaurados.has(k) || (todo[fecha] && todo[fecha].buses[busId])) return;
+        delete pendientes[fecha][busId];
+        restaurados.delete(k);
+        errorGuardado.delete(k);
+        conflictos.delete(k);
+        soltados++;
+      });
+      if (!Object.keys(pendientes[fecha]).length) delete pendientes[fecha];
+    });
+    if (soltados) { actualizarBarraPendientes(); refrescar(false); }
+  });
+
+  /* Al cerrar o recargar con cambios sin guardar, el navegador pregunta.
+     (Aunque se salga, el borrador queda respaldado y se recupera al volver.) */
+  window.addEventListener('beforeunload', e => {
+    if (!hayPendientes()) return;
+    e.preventDefault();
+    e.returnValue = '';
+  });
 
   /* ── INIT ── */
   document.addEventListener('DOMContentLoaded', async () => {
     currentUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
+    restaurarBorrador();
 
     document.getElementById('datePicker').value = shiftIso(hoyBogota(), -1);
-    document.getElementById('datePicker').addEventListener('change', () => { loadFecha().then(() => { lastLoad = new Date(); reiniciarPolling(); actualizarLivePill(); }); });
+    document.getElementById('datePicker').addEventListener('change', () => recargarFecha());
     document.getElementById('btnPrevDay').onclick = () => shiftDay(-1);
     document.getElementById('btnNextDay').onclick = () => shiftDay(1);
 
-    await Promise.all([loadBuses(), loadRutas(), loadConductores(), loadPropietarios()]);
-    await loadFecha();
-    lastLoad = new Date();
-    reiniciarPolling();
-    actualizarLivePill();
     tickTimer = setInterval(actualizarLivePill, 1000);
+    await iniciar();
   });
 
+  /* Catálogos + fecha. Si falla no se pinta la tabla: con rutas o conductores
+     vacíos los selects quedarían en "— Sin conductor —" y al guardar se
+     borrarían los valores reales. */
+  async function iniciar() {
+    try {
+      await Promise.all([loadBuses(), loadRutas(), loadConductores(), loadPropietarios()]);
+    } catch (err) {
+      console.error('iniciar:', err);
+      if (err.status === 401) { abrirReingreso('iniciar', iniciar); return; }
+      document.getElementById('tbody').innerHTML = `<tr><td colspan="10"><div class="empty-state">
+        <p>No se pudieron cargar los datos: ${escHtml(mensajeError(err))}</p>
+        <p style="margin-top:10px"><button class="pend-btn" onclick="iniciar()">Reintentar</button></p>
+      </div></td></tr>`;
+      return;
+    }
+    await recargarFecha();
+  }
+
+  /* Carga la fecha del picker y avisa si falla (antes un error dejaba la
+     tabla desactualizada sin decir nada). */
+  async function recargarFecha(opts = {}) {
+    try {
+      await loadFecha(opts);
+      lastLoad = new Date();
+      if (!opts.silencioso) reiniciarPolling();
+      actualizarLivePill();
+    } catch (err) {
+      console.error('loadFecha:', err);
+      if (err.status === 401) abrirReingreso('cargar', () => recargarFecha(opts));
+      else if (!opts.silencioso) mostrarError(`No se pudieron cargar los datos: ${mensajeError(err)}`);
+    }
+  }
+
   /* ── Auto-refresh en vivo (60s + botón manual) ──
-     Solo hace polling automático cuando la fecha del picker es hoy Bogotá.
-     El refresh se salta si otra persona (o esta misma) está editando: hay
-     filas en `dirty`, el foco está en un input de la tabla, o un modal
-     (import/reporte) está abierto. El botón "Actualizar" ignora esas guardas
-     porque es un acto explícito del usuario. */
+     En cualquier fecha (el analista suele llenar el día anterior mientras
+     otros también lo hacen), para ver lo que guardan los demás.
+     El refresh se salta si el foco está en un input de la tabla, hay un
+     modal abierto, la vista está oculta en el menú (al volver, VIEW_SHOWN
+     recarga) o hay un guardado en curso. Las filas con cambios sin guardar no
+     se pierden: después de pintar se les vuelve a poner lo escrito
+     (aplicarPendientes). El botón "Actualizar" ignora esas guardas porque es
+     un acto explícito del usuario. */
   function esHoyPicker() {
     return document.getElementById('datePicker').value === hoyBogota();
   }
 
   function reiniciarPolling() {
-    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-    if (esHoyPicker()) {
-      pollTimer = setInterval(() => refrescar(false), 60000);
-    }
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(() => refrescar(false), 60000);
   }
 
   async function refrescar(manual) {
     if (!manual) {
-      if (modalAbierto) return;
-      if (dirty.size > 0) return;
+      if (document.hidden || window.innerWidth === 0) return;   // vista oculta en el menú
+      if (guardando) return;
+      if (document.querySelector('.modal-overlay:not(.hidden)')) return;
       const foco = document.activeElement;
       if (foco && foco.closest && foco.closest('#tbody')) return;
     }
-    try {
-      await loadFecha({ silencioso: !manual });
-      lastLoad = new Date();
-      actualizarLivePill();
-    } catch (e) { console.error('refrescar:', e); }
+    await recargarFecha({ silencioso: !manual });
   }
 
   function actualizarLivePill() {
     const el = document.getElementById('livePill');
     if (!el) return;
-    if (!esHoyPicker()) { el.innerHTML = `<span class="muted">Vista histórica</span>`; return; }
     if (!lastLoad) { el.innerHTML = ''; return; }
     const s = Math.max(0, Math.round((Date.now() - lastLoad.getTime()) / 1000));
     const txt = s < 60 ? `hace ${s}s` : `hace ${Math.round(s / 60)} min`;
-    el.innerHTML = `<span class="live-dot"></span> En vivo · actualizado ${txt}`;
+    el.innerHTML = `<span class="live-dot"></span> ${esHoyPicker() ? 'En vivo' : 'Vista histórica'} · actualizado ${txt}`;
   }
 
   /* ── HELPERS ── */
@@ -993,7 +1284,7 @@
   function shiftDay(delta) {
     const picker = document.getElementById('datePicker');
     picker.value = shiftIso(picker.value, delta);
-    loadFecha().then(() => { lastLoad = new Date(); reiniciarPolling(); actualizarLivePill(); });
+    recargarFecha();
   }
 
   function escHtml(s) { return (s || '').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
@@ -1020,31 +1311,27 @@
   /* ── CARGAR BUSES ── */
   async function loadBuses() {
     const res = await apiFetch(`${API}/buses`);
-    allBuses = await res.json();
+    allBuses = await leerRespuesta(res);
     document.getElementById('statTotal').textContent = allBuses.length;
   }
 
-  /* ── CARGAR RUTAS ── */
+  /* ── CARGAR RUTAS ── (si falla, iniciar() avisa en vez de pintar selects vacíos) */
   async function loadRutas() {
-    try {
-      const res = await apiFetch(`${API}/rutas`);
-      allRutas = await res.json();
-    } catch (_) { allRutas = []; }
+    const res = await apiFetch(`${API}/rutas`);
+    allRutas = await leerRespuesta(res);
   }
 
   /* ── CARGAR CONDUCTORES ── */
   async function loadConductores() {
-    try {
-      const res = await apiFetch(`${API}/conductores`);
-      allConductores = await res.json();
-    } catch (_) { allConductores = []; }
+    const res = await apiFetch(`${API}/conductores`);
+    allConductores = await leerRespuesta(res);
   }
 
   /* ── CARGAR PROPIETARIOS ── (para enviar la liquidación por WhatsApp) */
   async function loadPropietarios() {
     try {
       const res = await apiFetch(`${API}/propietarios`);
-      allPropietarios = await res.json();
+      allPropietarios = await leerRespuesta(res);
     } catch (_) { allPropietarios = []; }
   }
 
@@ -1059,18 +1346,35 @@
   }
 
   /* ── CARGAR REGISTROS + DESPACHO DE LA MISMA FECHA ──
-     opts.silencioso=true: refresh en vivo, no borra `dirty` ni pisa las filas
-     que otra persona (o esta misma) está editando en este mismo instante. */
+     opts.silencioso=true: refresh en vivo (marca las filas que cambiaron y no
+     renueva la sesión). Nunca borra los cambios sin guardar: renderTable()
+     los vuelve a poner encima de lo que llegó del servidor. */
   async function loadFecha(opts = {}) {
-    const fecha = document.getElementById('datePicker').value;
+    const fecha = fechaSel();
     if (!fecha) return;
-    if (!opts.silencioso) dirty.clear();
 
+    const auto = opts.silencioso ? { headers: { 'X-Refresco-Auto': '1' } } : {};
+    const seq  = seqGuardado;
     const [res, despRes] = await Promise.all([
-      apiFetch(`${API}/movilidad?fecha=${fecha}`),
-      apiFetch(`${API}/despacho?fecha=${fecha}`),
+      apiFetch(`${API}/movilidad?fecha=${fecha}`, auto),
+      apiFetch(`${API}/despacho?fecha=${fecha}`, auto),
     ]);
-    const data = await res.json();
+    const data = await leerRespuesta(res);
+    if (!Array.isArray(data)) throw new Error('Respuesta inválida del servidor');
+    /* Sin el despacho no se pinta: los selects mostrarían otro conductor/ruta
+       y al guardar el servidor lo tomaría como una corrección del despacho. */
+    const despJson = await leerRespuesta(despRes);
+
+    /* Si mientras cargaba se cambió de fecha, esta respuesta ya no sirve: pintarla
+       mostraría datos de otro día bajo la fecha nueva (y se guardarían ahí). */
+    if (fecha !== fechaSel()) return;
+
+    /* Si mientras cargaba terminó un guardado, esta respuesta puede ser de
+       antes y pintaría valores viejos en las filas recién guardadas. */
+    if (seq !== seqGuardado) {
+      if (opts.silencioso) return;
+      if (!opts.repetida) return loadFecha({ ...opts, repetida: true });
+    }
 
     /* Detectar filas cuyo updated_at cambió desde el último ciclo:
        se usa para el flash amarillo en refresh silencioso. */
@@ -1092,21 +1396,18 @@
 
     /* estado === null ⇔ el bus no tiene despacho para esta fecha */
     despachoMap = {};
-    try {
-      const despJson = await despRes.json();
-      (despJson.buses || []).forEach(b => {
-        if (b.estado != null) {
-          despachoMap[b.id] = {
-            estado:            b.estado,
-            conductor_id:      b.conductor_id,
-            ruta_id:           b.ruta_id,
-            viajes_realizados:   b.viajes_realizados,
-            registradora_inicio: b.registradora_inicio,
-            registradora_fin:    b.registradora_fin,
-          };
-        }
-      });
-    } catch (_) { despachoMap = {}; }
+    (despJson.buses || []).forEach(b => {
+      if (b.estado != null) {
+        despachoMap[b.id] = {
+          estado:            b.estado,
+          conductor_id:      b.conductor_id,
+          ruta_id:           b.ruta_id,
+          viajes_realizados:   b.viajes_realizados,
+          registradora_inicio: b.registradora_inicio,
+          registradora_fin:    b.registradora_fin,
+        };
+      }
+    });
 
     renderTable(cambiadas);
     updateStats();
@@ -1119,159 +1420,303 @@
     renderTable();
   }
 
+  /* Valores que muestra una fila según lo guardado y el despacho del día,
+     sin los cambios pendientes. Lo usan filaHtml(), markDirty() (valor de
+     `_antes`) y registroCambios(). Debe coincidir con _vigente() en api/app.py. */
+  function valoresBase(b, fecha) {
+    const rec  = records[b.id];
+    const desp = despachoMap[b.id];
+
+    /* Conductor y ruta: si hay despacho, vienen del despacho (el analista
+       puede corregirlos y el servidor propaga la corrección); si no, lo
+       guardado en movilidad. */
+    const c    = desp && desp.conductor_id ? desp.conductor_id
+               : (rec && rec.conductor_id ? rec.conductor_id : null);
+    const ruta = desp && desp.ruta_id ? desp.ruta_id
+               : (rec && rec.ruta_id ? rec.ruta_id : null);
+
+    /* Se muestran las rutas del grupo del bus; si el despacho traía una ruta
+       de otro grupo, se agrega para no perderla en la selección. */
+    const rutasParaBus = rutasForGrupo(b.grupo).slice();
+    if (ruta && !rutasParaBus.some(r => r.id == ruta)) {
+      const extra = allRutas.find(r => r.id == ruta);
+      if (extra) rutasParaBus.push(extra);
+    }
+
+    /* Vueltas: prellenar con el valor del despacho cuando movilidad todavía
+       no tiene un valor > 0 guardado. El analista puede sobrescribirlo. */
+    const vueltasSaved    = rec && rec.vueltas != null ? Number(rec.vueltas) : null;
+    const vueltasDespacho = desp && desp.viajes_realizados != null ? Number(desp.viajes_realizados) : null;
+    const vueltasFromDesp = (vueltasSaved == null || vueltasSaved === 0) && vueltasDespacho != null && vueltasDespacho > 0;
+
+    /* Pasajeros: desde PAX_REGISTRADORA_DESDE salen de la registradora que
+       anota el despachador (fin − inicio) y quedan de solo lectura. */
+    const paxReg = usaRegistradora(fecha) ? paxRegistradora(desp) : null;
+
+    return {
+      rec, desp, c, ruta, rutasParaBus, vueltasFromDesp, paxReg,
+      v: vueltasFromDesp ? vueltasDespacho : (vueltasSaved != null ? vueltasSaved : ''),
+      p: paxReg != null ? paxReg : (rec ? rec.pasajeros : ''),
+      k: rec && rec.km_recorridos != null ? Math.round(rec.km_recorridos * 10) / 10 : '',
+      n: rec ? (rec.novedades || '') : '',
+    };
+  }
+
+  /* Etiqueta de estado de la fila: Sin datos / Guardado / Modificado /
+     No guardado (el último intento falló; lo escrito sigue pendiente) /
+     Conflicto (otra persona cambió ese dato: no se pisó, lo escrito sigue pendiente). */
+  function estadoFila(busId, fecha = fechaSel()) {
+    if (tienePendiente(busId, fecha)) {
+      const k = `${fecha}|${busId}`;
+      return errorGuardado.has(k) ? 'no-guardado' : conflictos.has(k) ? 'conflicto' : 'modificado';
+    }
+    return records[busId] ? 'guardado' : 'sin-datos';
+  }
+  const ESTADO_LABEL = { 'sin-datos': 'Sin datos', guardado: 'Guardado', modificado: 'Modificado', 'no-guardado': 'No guardado', conflicto: 'Conflicto' };
+  const ESTADO_TITLE = {
+    conflicto: 'Otra persona cambió este dato mientras tenías la vista abierta. No se pisó: lo que escribiste sigue en la fila. Si es lo correcto, vuelve a guardar; si no, haz clic aquí para descartarlo.',
+    'no-guardado': 'El último intento de guardar falló. Lo que escribiste sigue en la fila.',
+  };
+
+  function pintarEstado(busId) {
+    const el = document.getElementById(`est-${busId}`);
+    if (!el) return;
+    const est = estadoFila(busId);
+    el.className   = `estado-badge ${est}`;
+    el.textContent = ESTADO_LABEL[est];
+    el.title       = ESTADO_TITLE[est] || '';
+  }
+
   /* ── RENDER ──
      cambiadas: Set<bus_id> con filas que se actualizaron desde el último ciclo
      (se usa en refresh silencioso para animarlas con flash). */
   function renderTable(cambiadas) {
     cambiadas = cambiadas || new Set();
-    const fecha = document.getElementById('datePicker').value;
+    const fecha = fechaSel();
     const buses = grupoFiltro === 'todos' ? allBuses : allBuses.filter(b => b.grupo === grupoFiltro);
     const tbody = document.getElementById('tbody');
 
     if (!buses.length) {
       tbody.innerHTML = `<tr><td colspan="10"><div class="empty-state"><p>No hay buses para mostrar</p></div></td></tr>`;
+      actualizarBarraPendientes();
       return;
     }
 
-    /* Filas con edición pendiente no se re-renderizan en refresh silencioso:
-       preservan el foco, los valores que se están tecleando y el estado
-       "modificado". Sí se re-renderizan cuando el usuario guarda o cambia
-       explícitamente (dirty se limpia). */
-    const preservar = new Set();
-    dirty.forEach(id => { if (document.getElementById(`row-${id}`)) preservar.add(id); });
-
-    const nuevoHtml = buses.map(b => {
-      if (preservar.has(b.id)) {
-        return document.getElementById(`row-${b.id}`).outerHTML;
-      }
-      const rec      = records[b.id];
-      const desp     = despachoMap[b.id];
-      const cls      = rec ? 'has-data' : '';
-      const est      = dirty.has(b.id) ? 'modificado' : (rec ? 'guardado' : 'sin-datos');
-      const estLabel = { 'sin-datos': 'Sin datos', guardado: 'Guardado', modificado: 'Modificado' }[est];
-      const rutasBus = rutasForGrupo(b.grupo);
-
-      /* Etiqueta informativa del despacho del día (no bloquea la captura) */
-      const despBadge = !desp
-        ? `<span class="desp-badge sin-despacho">Sin despacho</span>`
-        : desp.estado === 'taller'   ? `<span class="desp-badge taller">Taller</span>`
-        : desp.estado === 'descanso' ? `<span class="desp-badge descanso">Descanso</span>`
-        : '';
-
-      /* Conductor: editable siempre. Si hay despacho, viene preseleccionado
-         del despacho y el analista puede corregirlo cuando el despachador
-         se equivocó. El servidor propaga la corrección al despacho. */
-      const condSel = desp && desp.conductor_id ? desp.conductor_id
-                    : (rec && rec.conductor_id ? rec.conductor_id : null);
-      const condOptions = allConductores.map(c =>
-        `<option value="${c.id}" ${condSel == c.id ? 'selected' : ''}>${escHtml(c.nombre)}</option>`
-      ).join('');
-      const condTitle = desp && desp.conductor_id
-        ? 'Asignado por el despachador — puedes corregirlo si es necesario'
-        : 'Sin despacho — selección manual';
-      const conductorCell = `<select class="ruta-select" id="c-${b.id}" title="${condTitle}" onchange="markDirty(${b.id})">
-               <option value="">— Sin conductor —</option>
-               ${condOptions}
-             </select>`;
-
-      /* Ruta: editable siempre. Misma lógica que conductor. Se muestran las
-         rutas del grupo del bus; si el despacho traía una ruta de otro grupo,
-         se agrega para no perderla en la selección. */
-      let rutaCell;
-      const rutaSel = desp && desp.ruta_id ? desp.ruta_id
-                    : (rec && rec.ruta_id ? rec.ruta_id : null);
-      const rutasParaBus = rutasBus.slice();
-      if (rutaSel && !rutasParaBus.some(r => r.id == rutaSel)) {
-        const extra = allRutas.find(r => r.id == rutaSel);
-        if (extra) rutasParaBus.push(extra);
-      }
-      if (rutasParaBus.length) {
-        const rutaOptions = rutasParaBus.map(r =>
-          `<option value="${r.id}" ${rutaSel == r.id ? 'selected' : ''}>${r.nombre}</option>`
-        ).join('');
-        const rutaTitle = desp && desp.ruta_id
-          ? 'Asignada por el despachador — puedes corregirla si es necesario'
-          : 'Sin despacho — selección manual';
-        rutaCell = `<select class="ruta-select" id="ruta-${b.id}" title="${rutaTitle}" onchange="markDirty(${b.id})">
-                 <option value="">— Sin ruta —</option>
-                 ${rutaOptions}
-               </select>`;
-      } else {
-        rutaCell = `<span class="no-rutas-tip">Sin rutas Gr.${b.grupo}</span>`;
-      }
-
-      /* Vueltas: prellenar con el valor del despacho cuando movilidad todavía
-         no tiene un valor > 0 guardado. El analista puede sobrescribirlo; al
-         escribir, markDirty() borra el atributo data-from-despacho y en el
-         próximo refresh silencioso esa fila queda protegida por `dirty`. */
-      const vueltasSaved     = rec && rec.vueltas != null ? Number(rec.vueltas) : null;
-      const vueltasDespacho  = desp && desp.viajes_realizados != null ? Number(desp.viajes_realizados) : null;
-      const vueltasFromDesp  = (vueltasSaved == null || vueltasSaved === 0) && vueltasDespacho != null && vueltasDespacho > 0;
-      const vueltasValue     = vueltasFromDesp ? vueltasDespacho
-                              : (vueltasSaved != null ? vueltasSaved : '');
-      const vueltasTitle     = vueltasFromDesp
-        ? 'Sincronizado del despacho — puedes corregirlo si es necesario'
-        : '';
-      const vueltasAttrs     = vueltasFromDesp ? `data-from-despacho="1" title="${vueltasTitle}"` : '';
-
-      /* Pasajeros: desde PAX_REGISTRADORA_DESDE salen de la registradora que
-         anota el despachador (fin − inicio) y quedan de solo lectura; si la
-         lectura está mal se corrige en Despacho. Sin lecturas válidas se
-         mantiene la captura manual / importación BEA. */
-      const paxReg     = usaRegistradora(fecha) ? paxRegistradora(desp) : null;
-      const paxFromReg = paxReg != null;
-      let pasajerosCell;
-      if (paxFromReg) {
-        const paxTitle = `Registradora del despacho: ${Number(desp.registradora_fin).toLocaleString('es-CO')} − ${Number(desp.registradora_inicio).toLocaleString('es-CO')} = ${paxReg.toLocaleString('es-CO')}. Para corregirlo, edita la registradora en Despacho.`;
-        pasajerosCell = `<div class="pax-reg-wrap" title="${paxTitle}">
-                 <input class="num-input from-registradora" id="p-${b.id}" type="number" value="${paxReg}" readonly tabindex="-1" />
-                 <span class="pax-reg-tag">REG</span>
-               </div>`;
-      } else {
-        const paxTitle = usaRegistradora(fecha) && desp && desp.estado === 'trabajando'
-          ? 'title="Sin lectura válida de registradora en el despacho — captura manual"' : '';
-        pasajerosCell = `<input  class="num-input"   id="p-${b.id}"    type="number" min="0" inputmode="numeric"
-                    value="${rec ? rec.pasajeros : ''}" placeholder="0" ${paxTitle}
-                    oninput="markDirty(${b.id})" />`;
-      }
-
-      const flashCls = cambiadas.has(b.id) ? ' flash' : '';
-
-      return `
-      <tr id="row-${b.id}" class="${cls}${flashCls}">
-        <td class="cell-unidad">
-          <div class="bus-num">${b.numero}</div>
-          <div class="bus-placa">${b.placa || '—'}</div>
-          ${despBadge}
-        </td>
-        <td data-label="Grupo"><span class="badge-grupo badge-${(b.grupo || 'A').toLowerCase()}">${b.grupo}</span></td>
-        <td data-label="Vueltas"><input  class="num-input${vueltasFromDesp ? ' from-despacho' : ''}"   id="v-${b.id}"    type="number" min="0" inputmode="numeric"
-                    value="${vueltasValue}" placeholder="0" ${vueltasAttrs}
-                    oninput="markDirty(${b.id}); this.classList.remove('from-despacho'); this.removeAttribute('data-from-despacho'); this.removeAttribute('title');" /></td>
-        <td data-label="Pasajeros">${pasajerosCell}</td>
-        <td data-label="Km"><input  class="num-input"   id="k-${b.id}"    type="number" min="0" step="0.1" inputmode="decimal"
-                    value="${rec && rec.km_recorridos != null ? Math.round(rec.km_recorridos * 10) / 10 : ''}" placeholder="0"
-                    oninput="markDirty(${b.id})" /></td>
-        <td data-label="Conductor">${conductorCell}</td>
-        <td data-label="Ruta">${rutaCell}</td>
-        <td data-label="Novedades"><input  class="nov-input"   id="n-${b.id}"    type="text"
-                    value="${rec ? escHtml(rec.novedades) : ''}" placeholder="Sin novedades"
-                    oninput="markDirty(${b.id})" /></td>
-        <td data-label="Estado"><span class="estado-badge ${est}" id="est-${b.id}">${estLabel}</span></td>
-        <td class="cell-acciones"><button class="btn-row-save" id="brs-${b.id}" onclick="saveRow(${b.id})">Guardar</button></td>
-      </tr>`;
-    }).join('');
-
-    tbody.innerHTML = nuevoHtml;
+    tbody.innerHTML = buses.map(b => filaHtml(b, fecha, cambiadas.has(b.id))).join('');
+    aplicarPendientes();
+    actualizarBarraPendientes();
   }
 
-  /* ── MARCAR MODIFICADO ── */
-  function markDirty(busId) {
-    dirty.add(busId);
-    const est = document.getElementById(`est-${busId}`);
-    if (est) { est.className = 'estado-badge modificado'; est.textContent = 'Modificado'; }
-    document.querySelectorAll(`#row-${busId} .num-input, #row-${busId} .nov-input, #row-${busId} .ruta-select`)
-      .forEach(i => i.classList.add('touched'));
+  /* HTML de la fila de un bus con lo guardado y el despacho (lo escrito sin
+     guardar se pone encima después: aplicarPendientes / aplicarPendientesBus).
+     flash: animar la fila porque cambió en el servidor. */
+  function filaHtml(b, fecha, flash) {
+    const base     = valoresBase(b, fecha);
+    const { rec, desp } = base;
+    const cls      = rec ? 'has-data' : '';
+    const est      = estadoFila(b.id, fecha);
+
+    /* Etiqueta informativa del despacho del día (no bloquea la captura) */
+    const despBadge = !desp
+      ? `<span class="desp-badge sin-despacho">Sin despacho</span>`
+      : desp.estado === 'taller'   ? `<span class="desp-badge taller">Taller</span>`
+      : desp.estado === 'descanso' ? `<span class="desp-badge descanso">Descanso</span>`
+      : '';
+
+    /* Conductor: editable siempre. Si hay despacho, viene preseleccionado
+       del despacho y el analista puede corregirlo cuando el despachador
+       se equivocó. El servidor propaga la corrección al despacho. */
+    const condOptions = allConductores.map(c =>
+      `<option value="${c.id}" ${base.c == c.id ? 'selected' : ''}>${escHtml(c.nombre)}</option>`
+    ).join('');
+    const condTitle = desp && desp.conductor_id
+      ? 'Asignado por el despachador — puedes corregirlo si es necesario'
+      : 'Sin despacho — selección manual';
+    const conductorCell = `<select class="ruta-select" id="c-${b.id}" title="${condTitle}" onchange="markDirty(${b.id}, this)">
+             <option value="">— Sin conductor —</option>
+             ${condOptions}
+           </select>`;
+
+    /* Ruta: editable siempre. Misma lógica que conductor. */
+    let rutaCell;
+    if (base.rutasParaBus.length) {
+      const rutaOptions = base.rutasParaBus.map(r =>
+        `<option value="${r.id}" ${base.ruta == r.id ? 'selected' : ''}>${r.nombre}</option>`
+      ).join('');
+      const rutaTitle = desp && desp.ruta_id
+        ? 'Asignada por el despachador — puedes corregirla si es necesario'
+        : 'Sin despacho — selección manual';
+      rutaCell = `<select class="ruta-select" id="ruta-${b.id}" title="${rutaTitle}" onchange="markDirty(${b.id}, this)">
+               <option value="">— Sin ruta —</option>
+               ${rutaOptions}
+             </select>`;
+    } else {
+      rutaCell = `<span class="no-rutas-tip">Sin rutas Gr.${b.grupo}</span>`;
+    }
+
+    /* Vueltas sincronizadas del despacho: al escribir se quita la marca. */
+    const vueltasAttrs = base.vueltasFromDesp
+      ? `data-from-despacho="1" title="Sincronizado del despacho — puedes corregirlo si es necesario"` : '';
+
+    /* Pasajeros de la registradora: solo lectura (se corrige en Despacho).
+       Sin lecturas válidas se mantiene la captura manual / importación BEA. */
+    let pasajerosCell;
+    if (base.paxReg != null) {
+      const paxTitle = `Registradora del despacho: ${Number(desp.registradora_fin).toLocaleString('es-CO')} − ${Number(desp.registradora_inicio).toLocaleString('es-CO')} = ${base.paxReg.toLocaleString('es-CO')}. Para corregirlo, edita la registradora en Despacho.`;
+      pasajerosCell = `<div class="pax-reg-wrap" title="${paxTitle}">
+               <input class="num-input from-registradora" id="p-${b.id}" type="number" value="${base.paxReg}" readonly tabindex="-1" />
+               <span class="pax-reg-tag">REG</span>
+             </div>`;
+    } else {
+      const paxTitle = usaRegistradora(fecha) && desp && desp.estado === 'trabajando'
+        ? 'title="Sin lectura válida de registradora en el despacho — captura manual"' : '';
+      pasajerosCell = `<input  class="num-input"   id="p-${b.id}"    type="number" min="0" inputmode="numeric"
+                  value="${base.p}" placeholder="0" ${paxTitle}
+                  oninput="markDirty(${b.id}, this)" />`;
+    }
+
+    const flashCls = flash ? ' flash' : '';
+
+    return `
+    <tr id="row-${b.id}" class="${cls}${flashCls}">
+      <td class="cell-unidad">
+        <div class="bus-num">${b.numero}</div>
+        <div class="bus-placa">${b.placa || '—'}</div>
+        ${despBadge}
+      </td>
+      <td data-label="Grupo"><span class="badge-grupo badge-${(b.grupo || 'A').toLowerCase()}">${b.grupo}</span></td>
+      <td data-label="Vueltas"><input  class="num-input${base.vueltasFromDesp ? ' from-despacho' : ''}"   id="v-${b.id}"    type="number" min="0" inputmode="numeric"
+                  value="${base.v}" placeholder="0" ${vueltasAttrs}
+                  oninput="markDirty(${b.id}, this)" /></td>
+      <td data-label="Pasajeros">${pasajerosCell}</td>
+      <td data-label="Km"><input  class="num-input"   id="k-${b.id}"    type="number" min="0" step="0.1" inputmode="decimal"
+                  value="${base.k}" placeholder="0"
+                  oninput="markDirty(${b.id}, this)" /></td>
+      <td data-label="Conductor">${conductorCell}</td>
+      <td data-label="Ruta">${rutaCell}</td>
+      <td data-label="Novedades"><input  class="nov-input"   id="n-${b.id}"    type="text"
+                  value="${escHtml(base.n)}" placeholder="Sin novedades"
+                  oninput="markDirty(${b.id}, this)" /></td>
+      <td data-label="Estado"><span class="estado-badge ${est}" id="est-${b.id}" title="${ESTADO_TITLE[est] || ''}" onclick="descartarFila(${b.id})">${ESTADO_LABEL[est]}</span></td>
+      <td class="cell-acciones"><button class="btn-row-save" id="brs-${b.id}" onclick="saveRow(${b.id})">Guardar</button></td>
+    </tr>`;
+  }
+
+  /* Pone de nuevo en pantalla lo escrito sin guardar encima de lo que se
+     acaba de pintar. Antes se copiaba el HTML de la fila, que NO incluye lo
+     tecleado: al filtrar por grupo o refrescar, los valores se perdían y la
+     fila seguía diciendo "Modificado". */
+  function aplicarPendientes() {
+    Object.keys(pendientesDe(fechaSel())).forEach(aplicarPendientesBus);
+  }
+
+  function aplicarPendientesBus(busId) {
+    const pend = pendientesDe(fechaSel())[busId];
+    if (!pend || !document.getElementById(`row-${busId}`)) return;
+    camposPend(pend).forEach(campo => {
+      const el = document.getElementById(`${campo}-${busId}`);
+      if (!el || el.readOnly) return;   // p.ej. pasajeros que ahora salen de la registradora
+      el.value = pend[campo];
+      marcarCampoTocado(el);
+    });
+  }
+
+  /* Vuelve a pintar una fila con lo que hay en records/despachoMap (p.ej.
+     después de guardar, con lo que devolvió el servidor). Si la persona sigue
+     escribiendo en esa fila, conserva el foco y el cursor. */
+  function repintarFila(busId) {
+    const tr  = document.getElementById(`row-${busId}`);
+    const bus = allBuses.find(b => b.id == busId);
+    if (!tr || !bus) return;
+    const foco = tr.contains(document.activeElement) ? document.activeElement : null;
+    let cursor = null;
+    try { if (foco && foco.type === 'text') cursor = [foco.selectionStart, foco.selectionEnd]; } catch (_) {}
+    tr.outerHTML = filaHtml(bus, fechaSel(), false).trim();
+    aplicarPendientesBus(busId);
+    const el = foco && foco.id ? document.getElementById(foco.id) : null;
+    if (el) {
+      el.focus();
+      if (cursor) try { el.setSelectionRange(cursor[0], cursor[1]); } catch (_) {}
+    }
+  }
+
+  function marcarCampoTocado(el) {
+    el.classList.add('touched');
+    if (el.dataset.fromDespacho) {
+      el.classList.remove('from-despacho');
+      el.removeAttribute('data-from-despacho');
+      el.removeAttribute('title');
+    }
+  }
+
+  /* ── MARCAR MODIFICADO ──
+     Guarda el valor del campo en el borrador (pendientes + localStorage). */
+  function markDirty(busId, el) {
+    const fecha = fechaSel();
+    if (el && el.id) {
+      const campo = el.id.slice(0, el.id.lastIndexOf('-'));
+      pendientes[fecha] = pendientes[fecha] || {};
+      const prev  = pendientes[fecha][busId] || {};
+      /* Lo que la fila mostraba antes del primer cambio de este campo (un
+         borrador viejo sin `_antes` se guarda sin esa comprobación). */
+      const antes = { ...(prev._antes || {}) };
+      const bus   = allBuses.find(b => b.id === busId);
+      if (!(campo in prev) && bus) antes[campo] = valorApi(campo, valoresBase(bus, fecha)[campo]);
+      pendientes[fecha][busId] = { ...prev, [campo]: el.value, _antes: antes };
+      restaurados.delete(`${fecha}|${busId}`);
+      respaldarBus(fecha, busId);
+      marcarCampoTocado(el);
+    }
+    pintarEstado(busId);
+    actualizarBarraPendientes();
+  }
+
+  /* ── BARRA DE CAMBIOS SIN GUARDAR ── */
+  function fechaCorta(iso) {
+    const [y, m, d] = iso.split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, d, 12)).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+  }
+
+  function irAFecha(fecha) {
+    document.getElementById('datePicker').value = fecha;
+    recargarFecha();
+  }
+
+  function actualizarBarraPendientes() {
+    const bar = document.getElementById('pendBar');
+    if (!bar) return;
+    const fecha = fechaSel();
+    const aqui  = busesPendientes(fecha);
+    const otras = Object.keys(pendientes)
+      .filter(f => f !== fecha && busesPendientes(f).length)
+      .sort();
+
+    if (!aqui.length && !otras.length) { bar.classList.add('hidden'); return; }
+
+    let html = '';
+    if (aqui.length) {
+      const nums = aqui.map(b => b.numero).slice(0, 8).join(', ') + (aqui.length > 8 ? '…' : '');
+      const recuperados = aqui.some(b => restaurados.has(`${fecha}|${b.id}`));
+      html = `<b>${aqui.length} ${aqui.length === 1 ? 'bus con cambios sin guardar' : 'buses con cambios sin guardar'}</b> (${nums}).`;
+      if (recuperados) html += ' Se recuperaron de una sesión anterior: revísalos antes de guardar.';
+    }
+    if (otras.length) {
+      const links = otras.map(f => `<button class="pend-link" onclick="irAFecha('${f}')">${fechaCorta(f)}</button>`).join(', ');
+      html += `${html ? ' ' : ''}${aqui.length ? 'También hay' : 'Hay'} cambios sin guardar del ${links}.`;
+    }
+    document.getElementById('pendText').innerHTML = html;
+    document.getElementById('btnDescartar').style.display   = aqui.length ? '' : 'none';
+    document.getElementById('btnPendGuardar').style.display = aqui.length ? '' : 'none';
+    bar.classList.remove('hidden');
+  }
+
+  function descartarPendientes() {
+    const fecha = fechaSel();
+    const aqui  = busesPendientes(fecha);
+    if (!aqui.length) return;
+    if (!confirm(`¿Descartar los cambios sin guardar de ${aqui.length} ${aqui.length === 1 ? 'bus' : 'buses'} del ${fecha}?\n\nVolverán los datos guardados.`)) return;
+    Object.keys(pendientesDe(fecha)).forEach(id => quitarPendiente(fecha, id));
+    renderTable();
   }
 
   /* ── STATS ── */
@@ -1296,119 +1741,210 @@
     document.getElementById('progressText').textContent  = `${conDatos} de ${total} buses con datos para esta fecha`;
   }
 
-  /* ── GUARDAR FILA ── */
-  async function saveRow(busId) {
-    const fecha   = document.getElementById('datePicker').value;
-    const vueltas = parseInt(document.getElementById(`v-${busId}`).value)   || 0;
-    const pax     = parseInt(document.getElementById(`p-${busId}`).value)   || 0;
-    const km      = parseFloat(document.getElementById(`k-${busId}`).value) || 0;
-    const rutaEl  = document.getElementById(`ruta-${busId}`);
-    const condEl  = document.getElementById(`c-${busId}`);
-    /* Selects son editables incluso con despacho: si el analista los cambia,
-       el servidor detecta la diferencia y corrige el despacho del día. */
-    const rutaId  = rutaEl ? (parseInt(rutaEl.value) || null) : null;
-    const condId  = condEl ? (parseInt(condEl.value) || null) : null;
-    const nov     = document.getElementById(`n-${busId}`).value.trim();
+  /* Registro que se envía de un bus: SOLO los campos que la persona cambió,
+     con el valor que veía antes (`antes`). Lo que no se envía queda como está
+     en el servidor: así una ventana abierta hace rato no pisa los km o las
+     novedades que guardaron otros, ni revierte el conductor/ruta del despacho
+     (la corrección del despacho solo ocurre si se cambió ese select).
+     `enviados` = lo pendiente que cubre este envío (se suelta al confirmar). */
+  function registroCambios(b, fecha) {
+    const pend  = pendientesDe(fecha)[b.id] || {};
+    const antes = pend._antes || {};
+    const base  = valoresBase(b, fecha);
+    const reg   = { bus_id: b.id };
+    const enviados = {};
+    camposPend(pend).forEach(campo => {
+      enviados[campo] = pend[campo];
+      if (campo === 'p' && base.paxReg != null) return;   // la registradora manda
+      const nuevo = valorApi(campo, pend[campo]);
+      if (campo in antes && mismoValor(campo, nuevo, antes[campo])) return;   // lo dejó como estaba
+      reg[CAMPOS_API[campo]] = nuevo;
+      if (campo in antes) (reg.antes = reg.antes || {})[CAMPOS_API[campo]] = antes[campo];
+    });
+    return { reg, enviados };
+  }
 
-    const btn = document.getElementById(`brs-${busId}`);
-    btn.textContent = '…'; btn.disabled = true;
-
+  async function guardarRegistros(fecha, registros) {
+    guardando++;
     try {
-      await apiFetch(`${API}/movilidad/batch`, {
+      const res = await apiFetch(`${API}/movilidad/batch`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fecha,
-          usuario_id: currentUser?.id,
-          registros: [{ bus_id: busId, vueltas, pasajeros: pax, km_recorridos: km, ruta_id: rutaId, conductor_id: condId, novedades: nov }],
-        }),
+        body: JSON.stringify({ fecha, usuario_id: currentUser?.id, registros }),
       });
-
-      records[busId] = { bus_id: busId, vueltas, pasajeros: pax, km_recorridos: km, ruta_id: rutaId, conductor_id: condId, novedades: nov };
-      dirty.delete(busId);
-
-      /* El servidor propaga la corrección del analista al despacho del día
-         (conductor/ruta). Reflejarla también en el despacho local para que un
-         re-render posterior (cambio de grupo, refresco silencioso) no revierta
-         el valor recién corregido al que traía el despacho. */
-      if (despachoMap[busId]) {
-        despachoMap[busId].conductor_id = condId;
-        despachoMap[busId].ruta_id      = rutaId;
-      }
-
-      const row = document.getElementById(`row-${busId}`);
-      if (row) row.classList.add('has-data');
-      const est = document.getElementById(`est-${busId}`);
-      if (est) { est.className = 'estado-badge guardado'; est.textContent = 'Guardado'; }
-
-      document.querySelectorAll(`#row-${busId} .num-input, #row-${busId} .nov-input, #row-${busId} .ruta-select`)
-        .forEach(i => i.classList.remove('touched'));
-
-      updateStats();
-      flashSaved();
-    } catch (e) {
-      console.error(e);
+      const json = await leerRespuesta(res);
+      if (!json.ok) throw new Error(json.error || 'El servidor no confirmó el guardado');
+      return json;
     } finally {
-      btn.textContent = 'Guardar'; btn.disabled = false;
+      guardando--;
+      seqGuardado++;
     }
   }
 
-  /* ── GUARDAR TODO ── */
-  async function saveAll() {
-    const fecha  = document.getElementById('datePicker').value;
-    const btn    = document.getElementById('btnSaveAll');
-    btn.disabled = true; btn.textContent = 'Guardando…';
+  /* El servidor confirmó: solo ahora se marca "Guardado". Se suelta campo por
+     campo lo enviado; si la persona siguió escribiendo en la fila mientras se
+     guardaba, eso queda pendiente. Un campo en conflicto (otra persona lo
+     cambió) no se guardó: sigue pendiente y su `_antes` pasa a ser el valor
+     actual, para que volver a guardar sí lo reemplace (decisión explícita). */
+  function confirmarGuardados(fecha, enviadosPorBus, json) {
+    const choques = {};   // bus_id → {campo: conflicto}
+    (json.conflictos || []).forEach(c => {
+      (choques[c.bus_id] = choques[c.bus_id] || {})[CAMPO_DE_API[c.campo]] = c;
+    });
+    Object.entries(enviadosPorBus).forEach(([busId, enviados]) => {
+      const k = `${fecha}|${busId}`;
+      errorGuardado.delete(k);
+      conflictos.delete(k);
+      const pend = pendientes[fecha] && pendientes[fecha][busId];
+      if (!pend) return;
+      const delBus = choques[busId] || {};
+      Object.entries(enviados).forEach(([campo, valor]) => {
+        pend._antes = pend._antes || {};
+        if (delBus[campo]) { pend._antes[campo] = valorApi(campo, delBus[campo].actual); return; }
+        if (pend[campo] === valor) delete pend[campo];
+        else pend._antes[campo] = valorApi(campo, valor);   // siguió escribiendo: la base es lo recién guardado
+      });
+      if (Object.keys(delBus).length) conflictos.add(k);
+      if (camposPend(pend).length) respaldarBus(fecha, busId);
+      else quitarPendiente(fecha, busId);
+    });
+    if (fecha === fechaSel()) pintarFilas(json.filas || [], Object.keys(enviadosPorBus));
+    actualizarBarraPendientes();
+    if (json.conflictos && json.conflictos.length) avisarConflictos(json.conflictos);
+    else flashSaved();
+  }
 
-    const buses = grupoFiltro === 'todos' ? allBuses : allBuses.filter(b => b.grupo === grupoFiltro);
-    const registros = buses.map(b => {
-      const rutaEl = document.getElementById(`ruta-${b.id}`);
-      const condEl = document.getElementById(`c-${b.id}`);
-      return {
-        bus_id:        b.id,
-        vueltas:       parseInt(document.getElementById(`v-${b.id}`)?.value)    || 0,
-        pasajeros:     parseInt(document.getElementById(`p-${b.id}`)?.value)    || 0,
-        km_recorridos: parseFloat(document.getElementById(`k-${b.id}`)?.value)  || 0,
-        /* Selects son editables incluso con despacho: si el analista los
-           cambia, el servidor detecta la diferencia y corrige el despacho. */
-        ruta_id:       rutaEl ? (parseInt(rutaEl.value) || null) : null,
-        conductor_id:  condEl ? (parseInt(condEl.value) || null) : null,
-        novedades:     document.getElementById(`n-${b.id}`)?.value.trim() || '',
-      };
-      /* Solo filas con datos digitados o tocadas por el usuario. */
-    }).filter(r => r.vueltas > 0 || r.pasajeros > 0 || r.km_recorridos > 0 || r.novedades || dirty.has(r.bus_id));
+  /* Pinta las filas que devolvió el servidor tal como quedaron guardadas
+     (incluye lo que cambiaron otras personas y el despacho del día). */
+  function pintarFilas(filas, busIds) {
+    filas.forEach(f => {
+      records[f.bus_id]     = f;
+      prevUpdated[f.bus_id] = f.updated_at || null;
+      if (f.tiene_despacho) {
+        despachoMap[f.bus_id] = {
+          estado:              f.despacho_estado,
+          conductor_id:        f.despacho_conductor_id,
+          ruta_id:             f.despacho_ruta_id,
+          viajes_realizados:   f.despacho_viajes,
+          registradora_inicio: f.despacho_reg_inicio,
+          registradora_fin:    f.despacho_reg_fin,
+        };
+      } else {
+        delete despachoMap[f.bus_id];
+      }
+    });
+    busIds.forEach(repintarFila);
+    updateStats();
+  }
 
-    if (!registros.length) {
-      btn.disabled = false; btn.textContent = 'Guardar Todo';
-      return;
+  function textoValor(campo, v) {
+    if (campo === 'c')    return v ? conductorNombre(v) : 'sin conductor';
+    if (campo === 'ruta') return v ? rutaNombreById(v) : 'sin ruta';
+    if (campo === 'n') {
+      const s = String(v || '');
+      return s ? `«${s.length > 40 ? s.slice(0, 40) + '…' : s}»` : 'vacío';
     }
+    if (campo === 'k') return Number(v || 0).toLocaleString('es-CO', { maximumFractionDigits: 1 });
+    return String(v ?? 0);
+  }
+
+  function avisarConflictos(lista) {
+    const det = lista.slice(0, 4).map(c => {
+      const campo = CAMPO_DE_API[c.campo];
+      const bus   = allBuses.find(b => b.id == c.bus_id);
+      return `bus ${bus ? bus.numero : c.bus_id}, ${CAMPO_LABEL[campo]}: ahora ${textoValor(campo, c.actual)} (tú: ${textoValor(campo, c.tuyo)})`;
+    }).join('; ') + (lista.length > 4 ? `; y ${lista.length - 4} más` : '');
+    mostrarError(`Otra persona cambió estos datos mientras tenías la vista abierta y no se pisaron — ${det}. ` +
+      `Lo tuyo sigue en la fila marcada «Conflicto»: si es lo correcto, vuelve a guardar; si no, haz clic en «Conflicto» para descartarlo.`, 30000);
+  }
+
+  /* Clic en «Conflicto»: descartar lo escrito en esa fila y quedarse con lo
+     que guardó la otra persona. */
+  function descartarFila(busId) {
+    const fecha = fechaSel();
+    if (estadoFila(busId, fecha) !== 'conflicto') return;
+    const bus = allBuses.find(b => b.id === busId);
+    if (!confirm(`¿Descartar lo que escribiste en el bus ${bus ? bus.numero : busId} y dejar lo que guardó la otra persona?`)) return;
+    quitarPendiente(fecha, busId);
+    repintarFila(busId);
+    actualizarBarraPendientes();
+  }
+
+  /* El servidor NO confirmó: lo escrito sigue en pantalla y en el borrador.
+     Con sesión vencida se pide entrar de nuevo y se reintenta solo. */
+  function marcarError(fecha, busIds, err, clave, reintentar) {
+    console.error(err);
+    busIds.forEach(id => {
+      if (!tienePendiente(id, fecha)) return;   // fila sin cambios propios: no se pierde nada
+      errorGuardado.add(`${fecha}|${id}`);
+      if (fecha === fechaSel()) pintarEstado(id);
+    });
+    actualizarBarraPendientes();
+    if (err.status === 401) { abrirReingreso(clave, reintentar); return; }
+    mostrarError(`No se guardó: ${mensajeError(err).replace(/\.$/, '')}. Lo que escribiste sigue en pantalla; intenta de nuevo.`);
+  }
+
+  /* ── GUARDAR FILA ── (sin cambios propios igual crea/actualiza el registro
+     con lo del despacho y trae la fila al día) */
+  async function saveRow(busId) {
+    const fecha = fechaSel();
+    const bus   = allBuses.find(b => b.id === busId);
+    const btn   = document.getElementById(`brs-${busId}`);
+    if (!bus || !btn || btn.disabled) return;
+
+    const { reg, enviados } = registroCambios(bus, fecha);
+    btn.textContent = '…'; btn.disabled = true;
 
     try {
-      await apiFetch(`${API}/movilidad/batch`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fecha, usuario_id: currentUser?.id, registros }),
-      });
+      const json = await guardarRegistros(fecha, [reg]);
+      confirmarGuardados(fecha, { [busId]: enviados }, json);
+    } catch (err) {
+      marcarError(fecha, [busId], err, `fila-${busId}`, () => saveRow(busId));
+    } finally {
+      /* La fila pudo re-pintarse mientras guardaba: buscar el botón de nuevo */
+      const b = document.getElementById(`brs-${busId}`);
+      if (b) { b.textContent = 'Guardar'; b.disabled = false; }
+    }
+  }
 
-      registros.forEach(r => {
-        records[r.bus_id] = r;
-        dirty.delete(r.bus_id);
-        /* Mantener el despacho local en sync con la corrección (ver saveRow). */
-        if (despachoMap[r.bus_id]) {
-          despachoMap[r.bus_id].conductor_id = r.conductor_id;
-          despachoMap[r.bus_id].ruta_id      = r.ruta_id;
-        }
-        const row = document.getElementById(`row-${r.bus_id}`);
-        if (row) row.classList.add('has-data');
-        const est = document.getElementById(`est-${r.bus_id}`);
-        if (est) { est.className = 'estado-badge guardado'; est.textContent = 'Guardado'; }
-        document.querySelectorAll(`#row-${r.bus_id} .num-input, #row-${r.bus_id} .nov-input, #row-${r.bus_id} .ruta-select`)
-          .forEach(i => i.classList.remove('touched'));
-      });
+  /* ── GUARDAR TODO ──
+     Envía solo los buses con cambios sin guardar (también los que oculta el
+     filtro de grupo), cada uno con solo sus campos cambiados. Además crea el
+     registro de los buses visibles que aún no tienen y ya traen vueltas o
+     registradora del despacho (se envía solo bus_id: el servidor lo completa),
+     como antes al dar "Guardar Todo" sobre los datos prellenados. */
+  let guardandoTodo = false;
+  async function saveAll() {
+    if (guardandoTodo) return;
+    const fecha = fechaSel();
+    const pend  = pendientesDe(fecha);
+    const btn   = document.getElementById('btnSaveAll');
+    const btnPend = document.getElementById('btnPendGuardar');
+    const htmlBtn = btn.innerHTML;
 
-      updateStats();
-      flashSaved();
-    } catch (e) { console.error(e); }
-    finally { btn.disabled = false; btn.textContent = 'Guardar Todo'; }
+    const visibles = grupoFiltro === 'todos' ? allBuses : allBuses.filter(b => b.grupo === grupoFiltro);
+    const prellenados = visibles.filter(b => {
+      if (records[b.id] || pend[b.id]) return false;
+      const base = valoresBase(b, fecha);
+      return base.vueltasFromDesp || base.paxReg != null;
+    });
+    const lote = [...busesPendientes(fecha), ...prellenados].map(b => ({ id: b.id, ...registroCambios(b, fecha) }));
+    if (!lote.length) { flashSaved(); return; }
+
+    const enviadosPorBus = Object.fromEntries(lote.map(x => [x.id, x.enviados]));
+    guardandoTodo = true;
+    btn.disabled = true; btn.textContent = 'Guardando…';
+    if (btnPend) btnPend.disabled = true;
+
+    try {
+      const json = await guardarRegistros(fecha, lote.map(x => x.reg));
+      confirmarGuardados(fecha, enviadosPorBus, json);
+    } catch (err) {
+      marcarError(fecha, lote.map(x => x.id), err, 'todo', () => saveAll());
+    } finally {
+      guardandoTodo = false;
+      btn.disabled = false; btn.innerHTML = htmlBtn;
+      if (btnPend) btnPend.disabled = false;
+    }
   }
 
   function flashSaved() {
@@ -1417,12 +1953,84 @@
     setTimeout(() => t.classList.remove('show'), 2500);
   }
 
-  window.addEventListener('message', e => {
-    if (e.data?.type === 'REFRESH_ROUTES') { loadRutas().then(() => renderTable()); }
-    // El shell mantiene el iframe vivo entre navegaciones y avisa al volver
-    if (e.data?.type === 'VIEW_SHOWN') {
-      loadFecha().then(() => { lastLoad = new Date(); reiniciarPolling(); actualizarLivePill(); });
+  /* ── AVISO DE ERROR ── (queda visible hasta cerrarlo o 12 s) */
+  let _errorTimer = null;
+  function mostrarError(msg, ms = 12000) {
+    document.getElementById('errorToastMsg').textContent = msg;
+    document.getElementById('errorToast').classList.add('show');
+    clearTimeout(_errorTimer);
+    _errorTimer = setTimeout(cerrarError, ms);
+  }
+  function cerrarError() {
+    document.getElementById('errorToast').classList.remove('show');
+  }
+
+  /* ── SESIÓN VENCIDA: volver a entrar sin salir de la vista ──
+     Ir al login del menú reinicia todas las vistas; aquí se renueva el token
+     sin recargar, así que lo escrito sigue en pantalla. Al entrar se reintenta
+     lo que falló (guardar o cargar). Solo con el mismo usuario. */
+  const _reintentos = new Map();   // clave → función (sin duplicados)
+
+  function abrirReingreso(clave, reintentar) {
+    if (reintentar) _reintentos.set(clave, reintentar);
+    const overlay = document.getElementById('reingresoOverlay');
+    const user    = document.getElementById('reUser');
+    const guarda  = [..._reintentos.keys()].some(k => k === 'todo' || k.startsWith('fila-') || k === 'importar');
+    document.getElementById('btnReingresar').textContent = guarda ? 'Entrar y guardar' : 'Entrar';
+    if (overlay.classList.contains('hidden')) {
+      user.value    = currentUser?.username || '';
+      user.readOnly = !!currentUser?.username;
+      document.getElementById('rePass').value = '';
+      document.getElementById('reError').textContent = '';
+      overlay.classList.remove('hidden');
+      setTimeout(() => (user.readOnly ? document.getElementById('rePass') : user).focus(), 50);
     }
+  }
+
+  function cerrarReingreso() {
+    document.getElementById('reingresoOverlay').classList.add('hidden');
+    _reintentos.clear();
+    mostrarError(hayPendientes()
+      ? 'Tu sesión sigue vencida. Lo escrito queda respaldado en este equipo: entra de nuevo para guardarlo.'
+      : 'Tu sesión está vencida. Vuelve a entrar para ver los datos al día.');
+  }
+
+  async function reingresar() {
+    const btn  = document.getElementById('btnReingresar');
+    const user = document.getElementById('reUser').value.trim();
+    const pass = document.getElementById('rePass').value;
+    const errEl = document.getElementById('reError');
+    if (!user || !pass) { errEl.textContent = 'Escribe usuario y contraseña.'; return; }
+
+    btn.disabled = true; errEl.textContent = '';
+    try {
+      const res  = await fetch(`${API}/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: user, password: pass }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.token) throw new Error(data.error || 'No se pudo iniciar sesión.');
+      if (currentUser?.id != null && data.id !== currentUser.id) {
+        throw new Error('Entra con el mismo usuario con el que estabas trabajando.');
+      }
+      localStorage.setItem('authToken', data.token);
+
+      document.getElementById('reingresoOverlay').classList.add('hidden');
+      const acciones = [..._reintentos.values()];
+      _reintentos.clear();
+      for (const accion of acciones) await accion();
+    } catch (err) {
+      errEl.textContent = err.message || 'No se pudo iniciar sesión.';
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  window.addEventListener('message', e => {
+    if (e.data?.type === 'REFRESH_ROUTES') { loadRutas().then(() => renderTable()).catch(err => console.error(err)); }
+    // El shell mantiene el iframe vivo entre navegaciones y avisa al volver
+    if (e.data?.type === 'VIEW_SHOWN') recargarFecha();
   });
 
   /* ── LIMPIAR DATOS DE LA FECHA ── */
@@ -1433,7 +2041,9 @@
     const conDatos = Object.keys(records).length;
     if (conDatos === 0) { alert('No hay datos cargados para esta fecha.'); return; }
 
-    if (!confirm(`¿Eliminar todos los registros de movilidad del ${fecha}?\n\nEsta acción no se puede deshacer.`)) return;
+    const nPend = busesPendientes(fecha).length;
+    const avisoPend = nPend ? `\nTambién se descartarán los cambios sin guardar de ${nPend} ${nPend === 1 ? 'bus' : 'buses'}.` : '';
+    if (!confirm(`¿Eliminar todos los registros de movilidad del ${fecha}?${avisoPend}\n\nEsta acción no se puede deshacer.`)) return;
 
     try {
       const res  = await apiFetch(`${API}/movilidad/fecha/${fecha}`, { method: 'DELETE' });
@@ -1443,7 +2053,7 @@
       if (!res.ok) throw new Error(json.error || 'Error del servidor');
 
       records = {};
-      dirty.clear();
+      Object.keys(pendientesDe(fecha)).forEach(id => quitarPendiente(fecha, id));
       renderTable();
       updateStats();
       flashSaved();
@@ -1464,7 +2074,6 @@
 
   function closeImportModal() {
     document.getElementById('importOverlay').classList.add('hidden');
-    modalAbierto = false;
     _importParsed = [];
   }
 
@@ -1669,7 +2278,6 @@
     btn.disabled    = validCount === 0;
 
     document.getElementById('importOverlay').classList.remove('hidden');
-    modalAbierto = true;
   }
 
   async function confirmImport() {
@@ -1707,12 +2315,13 @@
     });
 
     try {
+      /* Reintentar es seguro: la importación sobrescribe los mismos campos. */
       for (const [fecha, registros] of Object.entries(byFecha)) {
-        await apiFetch(`${API}/movilidad/batch`, {
+        const res = await apiFetch(`${API}/movilidad/batch`, {
           method : 'PUT',
-          headers: { 'Content-Type': 'application/json' },
           body   : JSON.stringify({ fecha, usuario_id: currentUser?.id, registros, solo_datos: true }),
         });
+        await leerRespuesta(res);
       }
 
       closeImportModal();
@@ -1720,12 +2329,13 @@
       /* Ajustar el date picker a la primera fecha importada y recargar */
       const primeraFecha = Object.keys(byFecha).sort()[0];
       document.getElementById('datePicker').value = primeraFecha;
-      await loadFecha();
+      await recargarFecha();
       flashSaved();
     } catch(err) {
       console.error(err);
-      alert('Error al guardar: ' + err.message);
       btn.disabled = false; btn.textContent = `Importar ${valid.length} registros`;
+      if (err.status === 401) abrirReingreso('importar', confirmImport);
+      else alert('No se importó: ' + mensajeError(err));
     }
   }
 
@@ -1770,7 +2380,6 @@
 
     if (!document.getElementById('repDesde').value) setRepMes(0);
     document.getElementById('reportOverlay').classList.remove('hidden');
-    modalAbierto = true;
   }
 
   /* Cuando el usuario elige un propietario, filtramos el select de Bus
@@ -1794,7 +2403,6 @@
 
   function closeReportModal() {
     document.getElementById('reportOverlay').classList.add('hidden');
-    modalAbierto = false;
   }
 
   /* offset 0 = mes actual, -1 = mes anterior (hasta nunca pasa de hoy) */
