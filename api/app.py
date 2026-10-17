@@ -3590,19 +3590,72 @@ def _normalizar_telefono_co(raw):
     return digitos
 
 
-def _green_api_send_file(chat_id, caption, filename, file_bytes):
-    """Envía un archivo por WhatsApp usando Green API sendFileByUpload.
-    Devuelve (ok:bool, detalle:str|dict). Requiere GREEN_API_ID_INSTANCE y GREEN_API_TOKEN."""
+# Green API: el texto que acompaña un archivo (caption) admite máximo 1024
+# caracteres; si se pasa responde HTTP 500. Un mensaje de texto admite 20.000.
+_WA_CAPTION_MAX = 1024
+
+
+def _largo_wa(texto):
+    """Largo como lo cuenta WhatsApp (UTF-16: los emojis cuentan doble)."""
+    return len(texto.encode("utf-16-le")) // 2
+
+
+def _green_api_url(metodo):
+    """URL completa de un método de Green API, o None si faltan credenciales."""
     id_instance = os.environ.get("GREEN_API_ID_INSTANCE", "").strip()
     token       = os.environ.get("GREEN_API_TOKEN", "").strip()
     if not id_instance or not token:
-        return False, "El servidor no tiene configurado Green API (GREEN_API_ID_INSTANCE / GREEN_API_TOKEN)."
+        return None
+    # Cada instancia tiene su host (p.ej. 7107.api.greenapi.com) y se declara en
+    # GREEN_API_HOST. Con el host genérico la subida de archivos falla con HTTP 500.
+    host = os.environ.get("GREEN_API_HOST", "").strip().rstrip("/") or "api.green-api.com"
+    return f"https://{host}/waInstance{id_instance}/{metodo}/{token}"
 
-    # Green API a veces asigna un host personal (p.ej. 7103.api.greenapi.com);
-    # si el usuario lo tiene, lo declara en GREEN_API_HOST. Default: api.green-api.com.
-    host   = os.environ.get("GREEN_API_HOST", "api.green-api.com").strip().rstrip("/")
-    scheme = "https"
-    url    = f"{scheme}://{host}/waInstance{id_instance}/sendFileByUpload/{token}"
+
+def _green_api_post(url, body, content_type):
+    """POST a Green API. Devuelve (ok:bool, detalle:str|dict)."""
+    req = urllib.request.Request(
+        url,
+        data=body,
+        headers={"Content-Type": content_type},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            raw = resp.read().decode("utf-8", errors="replace")
+            try:
+                data = json.loads(raw)
+            except Exception:
+                data = {"raw": raw}
+            return True, data
+    except urllib.error.HTTPError as e:
+        try:
+            detalle = e.read().decode("utf-8", errors="replace")
+        except Exception:
+            detalle = str(e)
+        return False, f"HTTP {e.code}: {detalle[:500]}"
+    except Exception as e:
+        return False, f"No se pudo conectar con Green API: {e}"
+
+
+_GREEN_API_SIN_CONFIG = "El servidor no tiene configurado Green API (GREEN_API_ID_INSTANCE / GREEN_API_TOKEN)."
+
+
+def _green_api_send_text(chat_id, texto):
+    """Envía un mensaje de texto por WhatsApp usando Green API sendMessage."""
+    url = _green_api_url("sendMessage")
+    if not url:
+        return False, _GREEN_API_SIN_CONFIG
+    body = json.dumps({"chatId": f"{chat_id}@c.us", "message": texto}).encode("utf-8")
+    return _green_api_post(url, body, "application/json")
+
+
+def _green_api_send_file(chat_id, caption, filename, file_bytes):
+    """Envía un archivo por WhatsApp usando Green API sendFileByUpload.
+    Devuelve (ok:bool, detalle:str|dict). Requiere GREEN_API_ID_INSTANCE y GREEN_API_TOKEN."""
+    url = _green_api_url("sendFileByUpload")
+    if not url:
+        return False, _GREEN_API_SIN_CONFIG
 
     # Multipart/form-data armado a mano (sin dependencias extra)
     boundary = "----GreenAPIBoundary" + os.urandom(8).hex()
@@ -3625,28 +3678,7 @@ def _green_api_send_file(chat_id, caption, filename, file_bytes):
     parts.append(_b(f"--{boundary}--\r\n"))
     body = b"".join(parts)
 
-    req = urllib.request.Request(
-        url,
-        data=body,
-        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            raw = resp.read().decode("utf-8", errors="replace")
-            try:
-                data = json.loads(raw)
-            except Exception:
-                data = {"raw": raw}
-            return True, data
-    except urllib.error.HTTPError as e:
-        try:
-            detalle = e.read().decode("utf-8", errors="replace")
-        except Exception:
-            detalle = str(e)
-        return False, f"HTTP {e.code}: {detalle[:500]}"
-    except Exception as e:
-        return False, f"No se pudo conectar con Green API: {e}"
+    return _green_api_post(url, body, f"multipart/form-data; boundary={boundary}")
 
 
 @app.route("/api/movilidad/enviar-whatsapp", methods=["POST"])
@@ -3659,11 +3691,14 @@ def enviar_liquidacion_whatsapp():
       - bus_id:          id del bus → propietario derivado del bus (modo 1 bus)
       - propietario_id:  id del propietario → un solo mensaje consolidado
       - mensaje:         texto que va como caption del archivo
+      - caption_corto (opc): línea que acompaña al Excel cuando el mensaje
+                         no cabe como caption (propietarios con muchos buses)
       - filename (opc):  nombre del archivo mostrado en WhatsApp
     """
     bus_id_raw  = request.form.get("bus_id")
     prop_id_raw = request.form.get("propietario_id")
     mensaje     = (request.form.get("mensaje") or "").strip()
+    caption_corto = (request.form.get("caption_corto") or "").strip() or "📎 Excel con el detalle de la liquidación"
     filename    = (request.form.get("filename") or "liquidacion.xlsx").strip()
     up          = request.files.get("file")
 
@@ -3720,9 +3755,19 @@ def enviar_liquidacion_whatsapp():
     if not file_bytes:
         return jsonify({"error": "El archivo Excel está vacío"}), 400
 
-    ok, detalle = _green_api_send_file(tel, mensaje, filename, file_bytes)
-    if not ok:
-        return jsonify({"error": f"No se pudo enviar por WhatsApp. {detalle}"}), 502
+    if _largo_wa(mensaje) <= _WA_CAPTION_MAX:
+        ok, detalle = _green_api_send_file(tel, mensaje, filename, file_bytes)
+        if not ok:
+            return jsonify({"error": f"No se pudo enviar por WhatsApp. {detalle}"}), 502
+    else:
+        # No cabe pegado al archivo: primero el resumen como texto y luego el
+        # Excel con una línea corta, para que lleguen juntos y en ese orden.
+        ok, detalle = _green_api_send_text(tel, mensaje)
+        if not ok:
+            return jsonify({"error": f"No se pudo enviar por WhatsApp. {detalle}"}), 502
+        ok, detalle = _green_api_send_file(tel, caption_corto[:_WA_CAPTION_MAX], filename, file_bytes)
+        if not ok:
+            return jsonify({"error": f"Se envió el resumen pero no el Excel. {detalle}"}), 502
 
     id_mensaje = detalle.get("idMessage") if isinstance(detalle, dict) else None
     return jsonify({

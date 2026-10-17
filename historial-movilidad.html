@@ -2591,14 +2591,35 @@
      - modo 'bus':          liquidación de UN bus (con totales por ruta).
      - modo 'propietario':  liquidación consolidada de VARIOS buses del propietario
        (con desglose "por bus" para que el propietario vea qué aportó cada uno). */
+  /* '2026-10-17' → '17/10/2026' */
+  function _fechaNumLiq(iso) {
+    const [y, m, d] = iso.split('-');
+    return `${d}/${m}/${y}`;
+  }
+
+  /* Cuándo es la liquidación, en lenguaje simple:
+     - un solo día con datos → 'del día sábado 17/10/2026'
+     - varios días           → 'del 01/10/2026 al 16/10/2026' */
+  function _cuandoLiquidacion(desde, hasta) {
+    const fechas = [...new Set(_reportRows.map(r => r.fecha))];
+    if (fechas.length === 1) {
+      const [y, m, d] = fechas[0].split('-').map(Number);
+      const dia = new Date(Date.UTC(y, m - 1, d, 12))
+        .toLocaleDateString('es-CO', { weekday: 'long', timeZone: 'UTC' });
+      return { unDia: true, texto: `del día ${dia} ${_fechaNumLiq(fechas[0])}` };
+    }
+    return { unDia: false, texto: `del ${_fechaNumLiq(desde)} al ${_fechaNumLiq(hasta)}` };
+  }
+
   function _armarMensajeLiquidacion({ modo, bus, prop }) {
     const desde = document.getElementById('repDesde').value;
     const hasta = document.getElementById('repHasta').value;
     const totV  = _reportRows.reduce((s, r) => s + r.vueltas, 0);
     const totP  = _reportRows.reduce((s, r) => s + r.pasajeros, 0);
     const totK  = Math.round(_reportRows.reduce((s, r) => s + r.km, 0) * 10) / 10;
-    const nDias = new Set(_reportRows.map(r => r.fecha)).size;
-    const saludo = (prop.nombre || '').trim().split(/\s+/)[0] || 'propietario';
+    const cuando = _cuandoLiquidacion(desde, hasta);
+    const nombre1 = (prop.nombre || '').trim().split(/\s+/)[0] || 'propietario';
+    const saludo  = nombre1.charAt(0).toUpperCase() + nombre1.slice(1).toLowerCase();
 
     if (modo === 'bus') {
       const porRuta = new Map();
@@ -2616,10 +2637,9 @@
 
       const busLabel = `Bus ${bus.numero}${bus.placa ? ' · ' + bus.placa : ''}`;
       return [
-        `Hola ${saludo}, te comparto la liquidación de movilidad:`,
+        `Hola ${saludo}, te comparto la liquidación de tu bus ${cuando.texto}:`,
         ``,
         `🚌 ${busLabel}`,
-        `🗓️ Periodo: ${desde} a ${hasta} (${nDias} día${nDias===1?'':'s'})`,
         ``,
         `Totales:`,
         `• Vueltas: ${totV.toLocaleString()}`,
@@ -2650,9 +2670,8 @@
     }).join('\n\n');
 
     return [
-      `Hola ${saludo}, te comparto la liquidación consolidada de tus buses:`,
+      `Hola ${saludo}, te comparto la liquidación consolidada de tus buses ${cuando.texto}:`,
       ``,
-      `🗓️ Periodo: ${desde} a ${hasta} (${nDias} día${nDias===1?'':'s'})`,
       `🚍 Buses: ${porBus.size}`,
       ``,
       busesLineas,
@@ -2662,7 +2681,7 @@
       `• Pasajeros: ${totP.toLocaleString()}`,
       `• Km: ${totK.toLocaleString(undefined,{maximumFractionDigits:1})}`,
       ``,
-      `Te adjunto el Excel con el detalle día a día.`,
+      cuando.unDia ? `Te adjunto el Excel con el detalle.` : `Te adjunto el Excel con el detalle día a día.`,
       `— Flota La Milagrosa`,
     ].join('\n');
   }
@@ -2707,11 +2726,16 @@
       if (!built) throw new Error('No se pudo generar el Excel.');
 
       const mensaje = _armarMensajeLiquidacion({ modo, bus, prop });
+      /* Si el mensaje no cabe junto al Excel (WhatsApp: máx. 1024 caracteres),
+         el servidor lo manda como texto y el Excel sale con esta línea corta. */
+      const cuando = _cuandoLiquidacion(
+        document.getElementById('repDesde').value, document.getElementById('repHasta').value);
 
       const fd = new FormData();
       if (modo === 'bus') fd.append('bus_id', String(busId));
       else                fd.append('propietario_id', String(prop.id));
       fd.append('mensaje', mensaje);
+      fd.append('caption_corto', `📎 Excel con el detalle de la liquidación ${cuando.texto}`);
       fd.append('filename', built.filename);
       fd.append('file', built.blob, built.filename);
 
