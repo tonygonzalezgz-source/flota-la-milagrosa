@@ -2636,6 +2636,98 @@ def guardar_relevos_despacho():
     return jsonify({"ok": True, "relevos": guardados, "viajes_realizados": total})
 
 
+@app.route("/api/despacho/registradora", methods=["PUT"])
+@require_role("Administrador")
+def corregir_registradora_despacho():
+    """Corrección de la registradora (inicial y/o final) de un despacho ya hecho,
+    desde Historial de Despacho, cuando el despachador digitó mal. Solo el
+    Administrador. Actualiza los pasajeros de movilidad y queda en la auditoría.
+    Si el bus ya fue liquidado, la registradora quedó en la liquidación: se
+    corrige anulándola y volviendo a liquidar (el recaudo corrige el despacho)."""
+    data = request.get_json(silent=True) or {}
+    fecha = data.get("fecha")
+    try:
+        fecha = date.fromisoformat(str(fecha)).isoformat()
+    except ValueError:
+        return jsonify({"error": "Fecha inválida (use AAAA-MM-DD)"}), 400
+    if fecha > hoy_bogota():   # ISO: el orden de texto es el de las fechas
+        return jsonify({"error": "No se puede corregir un día que aún no ha ocurrido"}), 400
+
+    def lectura(raw, etiqueta):
+        if raw in (None, "", "null"):
+            return None
+        try:
+            n = int(raw)
+        except (TypeError, ValueError):
+            raise ValueError(f"La registradora {etiqueta} debe ser un número entero")
+        if n < 0:
+            raise ValueError(f"La registradora {etiqueta} no puede ser negativa")
+        return n
+
+    motivo = (data.get("motivo") or "").strip()[:300]
+    db = get_db()
+    try:
+        try:
+            bus_id = int(data.get("bus_id"))
+        except (TypeError, ValueError):
+            raise ValueError("Falta el bus")
+        reg_inicio = lectura(data.get("registradora_inicio"), "inicial")
+        reg_fin = lectura(data.get("registradora_fin"), "final")
+        if reg_inicio is not None and reg_fin is not None and reg_fin < reg_inicio:
+            raise ValueError("La registradora final no puede ser menor que la inicial")
+
+        desp = db.execute(
+            """SELECT d.id, d.estado, d.registradora_inicio, d.registradora_fin,
+                      b.numero, b.placa
+                 FROM despacho_diario d JOIN buses b ON b.id = d.bus_id
+                WHERE d.bus_id = ? AND d.fecha = ?""",
+            (bus_id, fecha),
+        ).fetchone()
+        if not desp or desp["estado"] != "trabajando":
+            raise ValueError("Ese día el bus no estaba despachado como Trabajando")
+        desp = dict(desp)
+        if db.execute("SELECT 1 FROM recaudos WHERE bus_id = ? AND fecha = ? AND anulado_at IS NULL",
+                      (bus_id, fecha)).fetchone():
+            raise ValueError(f"El bus {desp['numero']} ya fue liquidado en Recaudo: para corregir la "
+                             "registradora anula la liquidación y vuelve a liquidar")
+        relevos = _relevos_por_bus(db, fecha, bus_id).get(bus_id, [])
+        err = _validar_lecturas_relevo(reg_inicio, reg_fin, [r["registradora"] for r in relevos])
+        if err:
+            raise ValueError("No cuadra con el relevo: " + err)
+    except ValueError as e:
+        db.close()
+        return jsonify({"error": str(e)}), 400
+
+    antes = (desp["registradora_inicio"], desp["registradora_fin"])
+    pax_antes = _pax_registradora(*antes)
+    pax = _pax_registradora(reg_inicio, reg_fin)
+    if antes != (reg_inicio, reg_fin):
+        db.execute(
+            """UPDATE despacho_diario
+                  SET registradora_inicio = ?, registradora_fin = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?""",
+            (reg_inicio, reg_fin, desp["id"]),
+        )
+        if pax is not None:
+            _sync_pax_movilidad(db, fecha, {bus_id: pax})
+        txt = lambda v: "—" if v is None else str(v)
+        auditoria.registrar(
+            db, "despacho", "despacho", desp["id"], "editar",
+            f"Corrigió la registradora del bus {desp['numero']} ({desp['placa'] or 's/placa'}) "
+            f"del {fecha}: {txt(antes[0])}–{txt(antes[1])} → {txt(reg_inicio)}–{txt(reg_fin)}"
+            + (f". Motivo: {motivo}" if motivo else ""),
+            {"fecha": fecha, "bus": desp["numero"],
+             **({"registradora_inicio": [antes[0], reg_inicio]} if antes[0] != reg_inicio else {}),
+             **({"registradora_fin": [antes[1], reg_fin]} if antes[1] != reg_fin else {}),
+             "pasajeros": [pax_antes, pax],
+             **({"motivo": motivo} if motivo else {})},
+        )
+        db.commit()
+    db.close()
+    return jsonify({"ok": True, "registradora_inicio": reg_inicio,
+                    "registradora_fin": reg_fin, "pasajeros": pax})
+
+
 @app.route("/api/cron/cierre-despacho", methods=["GET", "POST"])
 def cron_cierre_despacho():
     """Consolida (cierra) el despacho del día. Invocado por el cron de Vercel a las 23:59.

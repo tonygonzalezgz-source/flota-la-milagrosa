@@ -96,7 +96,7 @@
 <body>
   <div class="page-header">
     <div class="page-title">Historial de modificaciones</div>
-    <div class="page-sub">Quién cambió qué y cuándo en el Catálogo y en Recaudo. Toca una fila para ver el detalle del cambio (antes → después).</div>
+    <div class="page-sub">Quién cambió qué y cuándo en el Catálogo, en Recaudo y en las correcciones del Despacho. Toca una fila para ver el detalle del cambio (antes → después).</div>
     <div class="candado">
       <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
       Este registro no se puede editar ni borrar, ni siquiera por el administrador
@@ -112,6 +112,7 @@
           <option value="">Todos</option>
           <option value="catalogo">Catálogo</option>
           <option value="recaudo">Recaudo</option>
+          <option value="despacho">Despacho</option>
         </select></div>
       <div class="campo"><label>Usuario</label><select id="fUsuario"><option value="">Todos</option></select></div>
       <div class="campo ancho"><label>Buscar en el detalle</label>
@@ -131,11 +132,12 @@
 
 <script>
   const API = (window.location.port === '3030') ? 'http://localhost:8001' : window.location.origin;
-  const MODULOS = { catalogo: 'Catálogo', recaudo: 'Recaudo' };
+  const MODULOS = { catalogo: 'Catálogo', recaudo: 'Recaudo', despacho: 'Despacho' };
   const ENTIDADES = {
     bus: 'Bus', ruta: 'Ruta', conductor: 'Conductor', tarifa: 'Tarifa', puesto: 'Puesto',
     usuario: 'Cuenta', usuario_buses: 'Buses de una cuenta', usuario_rutas: 'Rutas de una cuenta',
     liquidacion: 'Liquidación', tipo_gasto: 'Tipo de gasto', cierre: 'Cierre de caja',
+    despacho: 'Despacho del día',
   };
   const CAMPOS = {
     numero: 'Número', placa: 'Placa', modelo: 'Modelo', grupo: 'Grupo', estado: 'Estado',
@@ -152,6 +154,7 @@
     despacho_antes: 'Registradora en el despacho (antes)', conductores: 'Conductores', motivo: 'Motivo',
     agregados: 'Agregados', quitados: 'Quitados',
     fijo: 'Siempre a la vista', requiere_detalle: 'Pide descripción',
+    registradora_inicio: 'Registradora inicial', registradora_fin: 'Registradora final',
   };
   const etiqueta = k => CAMPOS[k] || k;
   const ACCIONES = { crear: 'Creó', editar: 'Editó', eliminar: 'Eliminó', desactivar: 'Desactivó',
