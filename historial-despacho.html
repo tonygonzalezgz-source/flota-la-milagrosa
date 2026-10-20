@@ -585,6 +585,14 @@
     cargar();
   }
 
+  // En producción (Postgres) la API entrega las fechas como "Fri, 17 Oct 2026 00:00:00 GMT";
+  // en SQLite llegan como "2026-10-17". Todo el historial trabaja con AAAA-MM-DD.
+  function aISO(f) {
+    if (/^\d{4}-\d{2}-\d{2}/.test(f)) return f.slice(0, 10);
+    const d = new Date(f);
+    return isNaN(d) ? f : d.toISOString().slice(0, 10);
+  }
+
   // ── Formatear fecha para encabezado ──
   function formatFecha(iso) {
     const [y, m, d] = iso.split('-');
@@ -744,7 +752,10 @@
 
     try {
       const rows = await apiFetch(`/api/despacho/historial?desde=${desde}&hasta=${hasta}`);
-      if (rows !== null) { filasCargadas = rows; render(rows); }
+      if (rows !== null) {
+        filasCargadas = rows.map(r => ({ ...r, fecha: aISO(r.fecha) }));
+        render(filasCargadas);
+      }
     } catch (e) {
       area.innerHTML = `
         <div class="empty-state">

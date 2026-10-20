@@ -12,6 +12,7 @@ import urllib.request
 import urllib.parse
 import urllib.error
 from datetime import date, datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from functools import wraps
 from dotenv import load_dotenv
 
@@ -2647,9 +2648,13 @@ def corregir_registradora_despacho():
     data = request.get_json(silent=True) or {}
     fecha = data.get("fecha")
     try:
-        fecha = date.fromisoformat(str(fecha)).isoformat()
+        fecha = date.fromisoformat(str(fecha)[:10]).isoformat()
     except ValueError:
-        return jsonify({"error": "Fecha inválida (use AAAA-MM-DD)"}), 400
+        # Formato en que Flask serializa las fechas de Postgres: "Fri, 17 Oct 2026 00:00:00 GMT"
+        try:
+            fecha = parsedate_to_datetime(str(fecha)).date().isoformat()
+        except (TypeError, ValueError):
+            return jsonify({"error": "Fecha inválida (use AAAA-MM-DD)"}), 400
     if fecha > hoy_bogota():   # ISO: el orden de texto es el de las fechas
         return jsonify({"error": "No se puede corregir un día que aún no ha ocurrido"}), 400
 
