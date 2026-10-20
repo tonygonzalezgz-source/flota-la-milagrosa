@@ -99,10 +99,24 @@
     }
     .nav-icon-btn:hover { background: #222; color: #fff; }
 
-    .notif-dot {
-      position: absolute; top: 6px; right: 6px;
-      width: 7px; height: 7px; background: #f87171;
-      border-radius: 50%; border: 1.5px solid #111;
+    /* Campana: número de alertas pendientes; se balancea si hay vencidas/urgentes */
+    .bell-count {
+      position: absolute; top: -3px; right: -5px;
+      min-width: 18px; height: 18px; padding: 0 5px;
+      background: #ef4444; color: #fff; border: 2px solid #111;
+      border-radius: 9px; font-size: 10px; font-weight: 800; line-height: 14px;
+      text-align: center;
+    }
+    .bell-count[hidden] { display: none; }
+    .nav-icon-btn.critica svg { animation: bellRing 3.2s ease-in-out infinite; transform-origin: 50% 2px; }
+    .nav-icon-btn.critica { color: #fca5a5; }
+    @keyframes bellRing {
+      0%, 76%, 100% { transform: rotate(0); }
+      80% { transform: rotate(14deg); }  84% { transform: rotate(-12deg); }
+      88% { transform: rotate(8deg); }   92% { transform: rotate(-5deg); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .nav-icon-btn.critica svg { animation: none; }
     }
 
     .user-profile {
@@ -237,32 +251,58 @@
     .dc-stat-val.amber { color: #fbbf24; }
     .dc-stat-val.up    { color: #4ade80; }
     .dc-stat-val.down  { color: #f87171; }
-    .dc-chart-wrap { height: 280px; position: relative; margin: 8px -6px 0; }
+    .dc-stat-val small { font-size: 11px; font-weight: 600; color: #6b7280; margin-left: 5px; }
+    .dc-chart-wrap { height: 310px; position: relative; margin: 10px -6px 0; }
+    .dc-toolbar {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; flex-wrap: wrap; margin-top: 10px;
+    }
+    .dc-toggle {
+      display: inline-flex; gap: 2px; padding: 3px; border-radius: 10px;
+      background: rgba(255,255,255,.07);
+    }
+    .dc-toggle button {
+      border: none; background: transparent; color: #9ca3af; cursor: pointer;
+      font-family: inherit; font-size: 11.5px; font-weight: 700;
+      padding: 5px 11px; border-radius: 8px; transition: background .15s, color .15s;
+    }
+    .dc-toggle button:hover { color: #e5e7eb; }
+    .dc-toggle button.active { background: #a78bfa; color: #0d0d10; }
+    .dc-foot {
+      display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+      font-size: 11px; color: #6b7280; margin-top: 4px; padding-top: 10px;
+      border-top: 1px solid rgba(255,255,255,.06);
+    }
+    .dc-foot-warn { display: inline-flex; align-items: flex-start; gap: 6px; }
+    .dc-foot .warn-dot {
+      width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; margin-top: 2px;
+      background: repeating-linear-gradient(-45deg, #c4b5fd 0 2px, rgba(196,181,253,.25) 2px 4px);
+      box-shadow: inset 0 0 0 1px #fbbf24;
+    }
     .dark-card .empty-state p     { color: #9ca3af; }
     .dark-card .empty-state small { color: #4b5563; }
     .dark-card .empty-state svg   { color: #374151; }
 
     /* ─── RUTAS CARD ─── */
-    .rutas-list { display: flex; flex-direction: column; gap: 12px; }
+    .rutas-list { display: flex; flex-direction: column; gap: 14px; margin-bottom: 16px; }
 
-    .ruta-item {
-      display: flex; align-items: center; gap: 12px;
-    }
+    .ruta-item { display: flex; flex-direction: column; gap: 6px; }
+    .ruta-top  { display: flex; align-items: center; gap: 9px; min-width: 0; }
 
     .ruta-dot {
       width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
     }
 
-    .ruta-info { flex: 1; min-width: 0; }
-    .ruta-nombre { font-size: 13px; font-weight: 500; color: #111; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .ruta-pax    { font-size: 11px; color: #888; margin-top: 1px; }
+    .ruta-nombre { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; color: #111; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ruta-pax    { font-size: 11px; color: #888; }
+    .ruta-pax b  { color: #444; font-weight: 700; }
 
     .ruta-bar-wrap {
-      width: 60px; height: 5px; background: #f0f0f0; border-radius: 3px; flex-shrink: 0;
+      width: 100%; height: 9px; background: #f1f1f4; border-radius: 5px; overflow: hidden;
     }
-    .ruta-bar { height: 100%; border-radius: 3px; }
+    .ruta-bar { height: 100%; border-radius: 5px; min-width: 4px; transition: width .5s ease; }
 
-    .ruta-val { font-size: 13px; font-weight: 700; color: #111; min-width: 46px; text-align: right; }
+    .ruta-val { font-size: 14px; font-weight: 800; color: #111; text-align: right; }
 
     .ruta-empty {
       text-align: center; padding: 40px 0; color: #bbb; font-size: 13px;
@@ -347,7 +387,7 @@
     }
 
     .trend-chart-wrap {
-      height: 110px; position: relative; margin: 16px -4px 12px;
+      height: 190px; position: relative; margin: 14px -4px 12px;
     }
 
     .trend-stats {
@@ -422,96 +462,141 @@
       text-align: center; padding: 40px; color: #aaa; font-size: 13px;
     }
 
-    /* ─── ALERTAS CRÍTICAS ─── */
-    .alertas-panel {
-      background: #fff;
-      border-radius: 14px;
-      padding: 10px 14px;
-      box-shadow: 0 1px 3px rgba(0,0,0,.06);
-      border-left: 4px solid #dc2626;
+    /* ─── ALERTAS: acceso en el encabezado + panel lateral ─── */
+    .alert-pill {
+      display: inline-flex; align-items: center; gap: 10px;
+      background: #fff; border: 1px solid #fde2e2; border-radius: 14px;
+      padding: 7px 12px 7px 8px; cursor: pointer; font-family: inherit;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06); text-align: left;
+      transition: box-shadow .15s, transform .12s;
     }
-    .alertas-panel.empty { border-left-color: #16a34a; }
+    .alert-pill:hover  { box-shadow: 0 4px 14px rgba(220,38,38,.14); }
+    .alert-pill:active { transform: scale(.98); }
+    .alert-pill[hidden] { display: none; }
+    .alert-pill .ap-ico {
+      width: 32px; height: 32px; border-radius: 10px; flex-shrink: 0;
+      background: #fee2e2; color: #dc2626;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .alert-pill .ap-txt { font-size: 13px; font-weight: 700; color: #111; line-height: 1.2; }
+    .alert-pill .ap-sub { font-size: 11px; font-weight: 600; color: #dc2626; line-height: 1.2; margin-top: 1px; }
+    .alert-pill .ap-arrow { color: #bbb; flex-shrink: 0; }
+    .alert-pill.ok { border-color: #dcfce7; }
+    .alert-pill.ok .ap-ico { background: #dcfce7; color: #16a34a; }
+    .alert-pill.ok .ap-sub { color: #16a34a; }
+    .alert-pill.leve .ap-ico { background: #fef3c7; color: #d97706; }
+    .alert-pill.leve .ap-sub { color: #b45309; }
+    .alert-pill.leve { border-color: #fde68a; }
 
-    .alertas-head {
-      display: flex; align-items: center; justify-content: space-between;
-      gap: 12px; margin-bottom: 6px;
+    .al-overlay {
+      position: fixed; inset: 0; z-index: 3000; background: rgba(15,15,20,.38);
+      opacity: 0; pointer-events: none; transition: opacity .22s;
     }
-    .alertas-head-left {
-      display: flex; align-items: center; gap: 10px;
+    .al-overlay.open { opacity: 1; pointer-events: auto; }
+
+    .al-drawer {
+      position: fixed; top: 0; right: 0; bottom: 0; z-index: 3001;
+      width: min(440px, 100%); background: #f7f7f9;
+      box-shadow: -12px 0 40px rgba(0,0,0,.18);
+      display: flex; flex-direction: column;
+      transform: translateX(105%); transition: transform .26s cubic-bezier(.2,.8,.2,1);
+      visibility: hidden;
     }
-    .alertas-title {
-      font-size: 14px; font-weight: 700; color: #111;
+    .al-drawer.open { transform: none; visibility: visible; }
+
+    .al-head {
+      display: flex; align-items: center; gap: 12px;
+      padding: 16px 18px; background: #fff; border-bottom: 1px solid #ececf1;
+    }
+    .al-head-ico {
+      width: 38px; height: 38px; border-radius: 11px; flex-shrink: 0;
+      background: #fee2e2; color: #dc2626;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .al-head-txt { flex: 1; min-width: 0; }
+    .al-title { font-size: 16px; font-weight: 800; color: #111; }
+    .al-sub   { font-size: 11px; color: #888; margin-top: 2px; }
+    .al-close {
+      border: none; background: #f3f4f6; color: #6b7280; width: 34px; height: 34px;
+      border-radius: 10px; font-size: 16px; cursor: pointer; flex-shrink: 0;
+    }
+    .al-close:hover { background: #e5e7eb; color: #111; }
+
+    .al-resumen {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 8px;
+      padding: 14px 18px 4px;
+    }
+    .al-res {
+      background: #fff; border-radius: 12px; padding: 10px 10px 9px;
+      box-shadow: 0 1px 2px rgba(0,0,0,.05); border-top: 3px solid #e5e7eb;
+    }
+    .al-res b    { display: block; font-size: 22px; font-weight: 800; color: #111; line-height: 1; }
+    .al-res span { display: block; font-size: 10.5px; font-weight: 600; color: #888; margin-top: 4px; }
+    .al-res.vencidas { border-top-color: #b91c1c; }
+    .al-res.vencidas b { color: #b91c1c; }
+    .al-res.urgentes { border-top-color: #ef4444; }
+    .al-res.urgentes b { color: #dc2626; }
+    .al-res.proximas { border-top-color: #f59e0b; }
+    .al-res.proximas b { color: #b45309; }
+    .al-res.sinfecha { border-top-color: #9ca3af; }
+    .al-res.sinfecha b { color: #4b5563; }
+
+    .al-filtros {
+      display: flex; gap: 6px; padding: 12px 18px 10px;
+      overflow-x: auto; scrollbar-width: none; flex-shrink: 0;
+    }
+    .al-filtros::-webkit-scrollbar { display: none; }
+    .al-chip {
+      border: 1px solid #e5e7eb; background: #fff; color: #444;
+      border-radius: 999px; padding: 6px 11px; font-family: inherit;
+      font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap;
+    }
+    .al-chip b { font-weight: 800; color: #999; margin-left: 3px; }
+    .al-chip.active { background: #111; border-color: #111; color: #fff; }
+    .al-chip.active b { color: #bbb; }
+
+    .al-body {
+      flex: 1; overflow-y: auto; padding: 2px 18px 24px;
+      -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+    }
+    .al-grupo-tit {
       display: flex; align-items: center; gap: 8px;
+      font-size: 11px; font-weight: 800; color: #6b7280;
+      text-transform: uppercase; letter-spacing: .6px; margin: 14px 0 8px;
     }
-    .alertas-sub { font-size: 10px; color: #888; margin-top: 1px; }
+    .al-grupo-tit .gdot { width: 8px; height: 8px; border-radius: 50%; }
+    .al-grupo-tit .gnum { color: #aaa; font-weight: 700; }
 
-    .badge-conteo {
-      background: #dc2626; color: #fff;
-      min-width: 20px; height: 20px; padding: 0 7px;
-      border-radius: 10px;
-      display: inline-flex; align-items: center; justify-content: center;
-      font-size: 11px; font-weight: 700;
-    }
-    .badge-conteo.zero { background: #16a34a; }
-
-    .alertas-list {
-      list-style: none; display: flex; flex-direction: column; gap: 4px;
-      max-height: 190px; overflow-y: auto; padding-right: 4px;
-    }
-    .alertas-list::-webkit-scrollbar { width: 6px; }
-    .alertas-list::-webkit-scrollbar-thumb { background: #ddd; border-radius: 3px; }
+    .alertas-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
 
     .alerta-card {
-      display: flex; align-items: center; justify-content: space-between;
-      gap: 10px; padding: 6px 10px; border-radius: 9px;
+      background: #fff; border-radius: 12px; padding: 11px 12px;
+      border-left: 4px solid #e5e7eb; box-shadow: 0 1px 2px rgba(0,0,0,.05);
+      display: flex; flex-direction: column; gap: 6px;
       transition: opacity .2s, filter .2s;
     }
-
-    /* Ventana 2 días — pulso rojo */
-    .alerta-card[data-ventana="2_DIAS"] {
-      background: linear-gradient(90deg, #fff5f5 0%, #ffeaea 100%);
-      border-left: 4px solid #dc2626;
-      animation: pulseRed 2.6s ease-in-out infinite;
-    }
-    @keyframes pulseRed {
-      0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,0.0); }
-      50%      { box-shadow: 0 0 0 6px rgba(220,38,38,0.18); }
-    }
-
-    /* Ventana 7 días — ámbar estático */
-    .alerta-card[data-ventana="7_DIAS"] {
-      background: #fffaf0;
-      border-left: 4px solid #f59e0b;
-    }
-
-    /* FALLA HIGH — rojo intenso */
-    .alerta-card[data-tipo="FALLA"] {
-      background: linear-gradient(90deg, #fff5f5 0%, #ffe4e4 100%);
-      border-left: 4px solid #b91c1c;
-      animation: pulseRed 2.6s ease-in-out infinite;
-    }
-
+    .alerta-card[data-grupo="vencidas"] { border-left-color: #b91c1c; background: linear-gradient(90deg,#fff5f5,#fff 60%); }
+    .alerta-card[data-grupo="urgentes"] { border-left-color: #ef4444; }
+    .alerta-card[data-grupo="proximas"] { border-left-color: #f59e0b; }
+    .alerta-card[data-grupo="sinfecha"] { border-left-color: #9ca3af; }
     .alerta-card.confirmada {
-      opacity: 0.45;
-      filter: grayscale(0.75);
-      animation: none;
-      background: #f8f8f8;
-      border-left-color: #16a34a;
+      opacity: .5; filter: grayscale(.8); background: #fafafa; border-left-color: #16a34a;
     }
 
-    .alerta-info {
-      flex: 1; min-width: 0; display: flex; align-items: baseline;
-      gap: 8px; overflow: hidden;
-    }
+    .alerta-row1 { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    /* Si falta espacio se recorta la placa, nunca el número interno */
     .alerta-bus  {
-      font-size: 13px; font-weight: 800; color: #111;
-      white-space: nowrap; flex-shrink: 0;
-      display: flex; align-items: baseline; gap: 6px;
+      display: flex; align-items: baseline; gap: 5px; flex: 1; min-width: 0;
+      font-size: 14px; font-weight: 800; color: #111;
     }
-    .alerta-bus .alerta-placa { font-size: 11px; font-weight: 400; color: #999; }
+    .alerta-bus .ab-num { white-space: nowrap; flex-shrink: 0; }
+    .alerta-bus .alerta-placa {
+      font-size: 11px; font-weight: 500; color: #999; min-width: 0;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .alerta-row2 { display: flex; align-items: center; gap: 10px; }
     .alerta-meta {
-      font-size: 10px; color: #888; flex: 1; min-width: 0;
-      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      font-size: 11.5px; color: #777; flex: 1; min-width: 0; line-height: 1.35;
     }
     .alerta-tag {
       display: inline-block; font-size: 10px; font-weight: 700;
@@ -525,19 +610,19 @@
     .alerta-tag.FALLA         { background: #fee2e2; color: #991b1b; }
 
     .alerta-dias {
-      display: inline-block;
-      font-size: 11px; font-weight: 700;
-      padding: 2px 8px; border-radius: 10px;
+      display: inline-block; flex-shrink: 0;
+      font-size: 11px; font-weight: 700; white-space: nowrap;
+      padding: 3px 9px; border-radius: 10px;
       background: #fee2e2; color: #991b1b;
     }
-    .alerta-card[data-ventana="7_DIAS"] .alerta-dias {
-      background: #fef3c7; color: #92400e;
-    }
+    .alerta-card[data-grupo="vencidas"] .alerta-dias { background: #b91c1c; color: #fff; }
+    .alerta-card[data-grupo="proximas"] .alerta-dias { background: #fef3c7; color: #92400e; }
+    .alerta-card[data-grupo="sinfecha"] .alerta-dias { background: #f3f4f6; color: #4b5563; }
 
     .btn-confirmar {
       background: #16a34a; color: #fff; border: none;
-      padding: 6px 12px; border-radius: 9px;
-      font-size: 11px; font-weight: 600; cursor: pointer;
+      padding: 6px 12px; border-radius: 9px; flex-shrink: 0;
+      font-family: inherit; font-size: 11px; font-weight: 700; cursor: pointer;
       min-height: 30px; white-space: nowrap;
       transition: transform .12s, background .15s;
     }
@@ -548,8 +633,8 @@
     }
 
     .alertas-empty {
-      text-align: center; padding: 28px 16px; color: #16a34a;
-      font-size: 13px; font-weight: 500;
+      text-align: center; padding: 48px 16px; color: #16a34a;
+      font-size: 13px; font-weight: 600;
     }
     .alertas-empty svg { opacity: 0.8; margin-bottom: 8px; }
 
@@ -587,16 +672,26 @@
       .dark-card { padding: 18px 16px 12px; border-radius: 16px; }
       .dc-header { flex-direction: column; gap: 10px; }
       .dc-big { font-size: 28px; letter-spacing: -1px; }
-      .dc-stats { flex-direction: row; align-items: baseline; gap: 14px; }
-      .dc-chart-wrap { height: 190px; }
+      .dc-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: 100%; }
+      .dc-stat {
+        flex-direction: column; align-items: flex-start; gap: 3px;
+        background: rgba(255,255,255,.05); border-radius: 10px; padding: 8px 10px;
+      }
+      .dc-stat-val small { display: block; margin: 1px 0 0; }
+      .dc-chart-wrap { height: 250px; }
+      .trend-chart-wrap { height: 170px; }
     }
 
-    @media (max-width: 768px) {
-      .alerta-card {
-        flex-wrap: wrap;
-        padding: 12px;
-      }
-      .btn-confirmar { width: 100%; margin-top: 8px; }
+    @media (max-width: 640px) {
+      /* Panel de alertas a pantalla completa; el título se corre para no
+         quedar bajo el botón de menú flotante de la shell */
+      .al-drawer { width: 100%; }
+      .al-head { padding: 14px 14px 14px 62px; }
+      .al-resumen, .al-filtros { padding-left: 14px; padding-right: 14px; }
+      .al-body { padding: 2px 14px calc(env(safe-area-inset-bottom, 0px) + 24px); }
+      .al-res b { font-size: 19px; }
+      .header-row .alert-pill { align-self: stretch; }
+      .alert-pill .ap-arrow { margin-left: auto; }
     }
 
     @media (max-width: 480px) {
@@ -606,7 +701,6 @@
       .trend-stats { font-size: 12px; }
       .greeting-big { font-size: 20px; }
       .trend-big { font-size: 24px; }
-      .alertas-title { font-size: 14px; }
     }
 
     /* ── Localiza tu bus (GPS en vivo vía Traccar) ── */
@@ -742,12 +836,14 @@
           <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
         </svg>
       </button>
-      <button class="nav-icon-btn" title="Notificaciones">
-        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+      <button class="nav-icon-btn" id="bellBtn" title="Alertas y vencimientos"
+              aria-label="Alertas y vencimientos" aria-controls="alertasDrawer" aria-expanded="false"
+              onclick="abrirAlertas()">
+        <svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
           <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
         </svg>
-        <span class="notif-dot" id="notifDot" style="display:none"></span>
+        <span class="bell-count" id="bellCount" hidden>0</span>
       </button>
       <div class="user-profile">
         <div class="user-avatar" id="navAvatar">AD</div>
@@ -771,30 +867,21 @@
         <div class="greeting-small" id="greetingSmall">Hola,</div>
         <div class="greeting-big">Resumen de Movilidad</div>
       </div>
+      <!-- Acceso compacto a alertas (abre el panel lateral) -->
+      <button class="alert-pill" id="alertPill" onclick="abrirAlertas()" hidden>
+        <span class="ap-ico">
+          <svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+        </span>
+        <span>
+          <span class="ap-txt" id="alertPillTxt" style="display:block">—</span>
+          <span class="ap-sub" id="alertPillSub" style="display:block">—</span>
+        </span>
+        <svg class="ap-arrow" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+      </button>
     </div>
-
-    <!-- ALERTAS CRÍTICAS -->
-    <section class="alertas-panel" id="alertasPanel">
-      <div class="alertas-head">
-        <div class="alertas-head-left">
-          <div>
-            <div class="alertas-title">
-              <svg width="18" height="18" fill="none" stroke="#dc2626" stroke-width="2.2" viewBox="0 0 24 24">
-                <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                <line x1="12" y1="9" x2="12" y2="13"/>
-                <line x1="12" y1="17" x2="12.01" y2="17"/>
-              </svg>
-              Alertas Críticas
-            </div>
-            <div class="alertas-sub" id="alertasSub">Vencimientos, mantenimientos y fallas activas</div>
-          </div>
-        </div>
-        <span class="badge-conteo zero" id="alertasCount">0</span>
-      </div>
-      <ul class="alertas-list" id="alertasList">
-        <div class="alertas-empty">Cargando alertas…</div>
-      </ul>
-    </section>
 
     <!-- LOCALIZA TU BUS (GPS en vivo vía Traccar) -->
     <section class="loc-card" id="locCard" style="display:none;">
@@ -896,7 +983,7 @@
         <div class="dark-card">
           <div class="dc-header">
             <div class="dc-left">
-              <div class="dc-label">Pasajeros movilizados · Esta semana vs. anterior</div>
+              <div class="dc-label">Pasajeros movilizados · Últimos 7 días</div>
               <div class="dc-big-row">
                 <span class="dc-big" id="dcTotal">—</span>
                 <span class="dc-badge flat" id="dcBadge">—</span>
@@ -904,17 +991,28 @@
               <div class="dc-period" id="dcPeriod">—</div>
             </div>
             <div class="dc-stats">
-              <div class="dc-stat"><span class="dc-stat-lbl">Máx</span><span class="dc-stat-val blue" id="dcMax">—</span></div>
-              <div class="dc-stat"><span class="dc-stat-lbl">Mín</span><span class="dc-stat-val amber" id="dcMin">—</span></div>
-              <div class="dc-stat"><span class="dc-stat-lbl">Cambio</span><span class="dc-stat-val" id="dcCambio">—</span></div>
+              <div class="dc-stat"><span class="dc-stat-lbl">Mejor día</span><span class="dc-stat-val blue" id="dcMax">—</span></div>
+              <div class="dc-stat"><span class="dc-stat-lbl">Promedio diario</span><span class="dc-stat-val" id="dcProm">—</span></div>
+              <div class="dc-stat"><span class="dc-stat-lbl">Por bus al día</span><span class="dc-stat-val amber" id="dcPorBus">—</span></div>
             </div>
           </div>
-          <div class="dc-legend">
-            <span class="lg-item"><span class="lg-dot" style="background:#a78bfa"></span>Esta semana</span>
-            <span class="lg-item"><span class="lg-dot" style="background:#4b5563"></span>Semana pasada</span>
+          <div class="dc-toolbar">
+            <div class="dc-legend">
+              <span class="lg-item"><span class="lg-dot" style="background:#a78bfa"></span>Esta semana</span>
+              <span class="lg-item"><span class="lg-dot" style="background:#3f4652"></span>Semana pasada</span>
+            </div>
+            <div class="dc-toggle" role="group" aria-label="Cómo ver los pasajeros">
+              <button type="button" class="active" data-modo="total">Total del día</button>
+              <button type="button" data-modo="bus">Promedio por bus</button>
+            </div>
           </div>
           <div class="dc-chart-wrap" id="dcChartWrap">
             <canvas id="barPax"></canvas>
+          </div>
+          <div class="dc-foot" id="dcFoot">
+            <span>Bajo cada día: cuántos buses reportaron.</span>
+            <span class="dc-foot-warn"><span class="warn-dot"></span>
+              <span>Rayadas y en amarillo: días con reporte incompleto (la barra sale baja porque faltan buses por registrar).</span></span>
           </div>
         </div>
 
@@ -991,7 +1089,7 @@
         </div>
         <div class="bar-legend">
           <span class="lg-item"><span class="lg-dot" style="background:#10b981"></span>Esta semana</span>
-          <span class="lg-item"><span class="lg-dot" style="background:#d1d5db"></span>Semana pasada</span>
+          <span class="lg-item"><span class="lg-dot" style="background:#e5e7eb"></span>Semana pasada</span>
         </div>
         <div class="trend-chart-wrap">
           <canvas id="barViajes"></canvas>
@@ -1015,7 +1113,7 @@
         </div>
         <div class="bar-legend">
           <span class="lg-item"><span class="lg-dot" style="background:#f97316"></span>Esta semana</span>
-          <span class="lg-item"><span class="lg-dot" style="background:#d1d5db"></span>Semana pasada</span>
+          <span class="lg-item"><span class="lg-dot" style="background:#e5e7eb"></span>Semana pasada</span>
         </div>
         <div class="trend-chart-wrap">
           <canvas id="barBuses"></canvas>
@@ -1030,6 +1128,30 @@
     </div>
 
   </div><!-- /main -->
+
+  <!-- PANEL LATERAL: alertas y vencimientos (se abre desde la campana) -->
+  <div class="al-overlay" id="alOverlay" onclick="cerrarAlertas()"></div>
+  <aside class="al-drawer" id="alertasDrawer" role="dialog" aria-modal="true"
+         aria-labelledby="alTitle" aria-hidden="true">
+    <div class="al-head">
+      <div class="al-head-ico">
+        <svg width="19" height="19" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+          <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+        </svg>
+      </div>
+      <div class="al-head-txt">
+        <div class="al-title" id="alTitle">Alertas y vencimientos</div>
+        <div class="al-sub" id="alertasSub">Documentos, mantenimientos y fallas activas</div>
+      </div>
+      <button class="al-close" onclick="cerrarAlertas()" aria-label="Cerrar">✕</button>
+    </div>
+    <div class="al-resumen" id="alResumen"></div>
+    <div class="al-filtros" id="alFiltros"></div>
+    <div class="al-body" id="alertasList">
+      <div class="alertas-empty">Cargando alertas…</div>
+    </div>
+  </aside>
 
   <script>
     const API = (window.location.port === '3030')
@@ -1123,7 +1245,13 @@
       }
     });
 
-    /* ─────── ALERTAS CRÍTICAS ─────── */
+    /* ─────── ALERTAS Y VENCIMIENTOS (panel lateral) ─────── */
+    let alertasActuales = [];
+    let alFiltro = 'TODAS';
+    // Confirmación visual local (el registro real se hace en mantenimiento);
+    // se guarda aquí para que no se pierda en el refresco de cada minuto
+    const alertasConfirmadas = new Set();
+
     async function cargarAlertas() {
       let alertas = [];
       try {
@@ -1139,7 +1267,6 @@
           tipo:            'PREVENTIVO',
           ventana:         a.nivel === 'ROJO' ? '2_DIAS' : '7_DIAS',
           fecha_objetivo:  a.proxima_fecha || new Date().toISOString().slice(0,10),
-          confirmada:      false,
           extra:           `${a.sistema} · ${a.nombre}`,
           tipo_intervalo:  a.tipo,          // KM | FECHA
           km_restante:     a.km_restante,
@@ -1147,7 +1274,7 @@
           dias_restantes:  a.dias_restantes,
         }));
         document.getElementById('alertasSub').textContent =
-          'Vencimientos, mantenimientos y fallas activas';
+          'Documentos, mantenimientos y fallas activas';
       } catch (_) {
         document.getElementById('alertasSub').textContent =
           'Sin items de mantenimiento configurados o error al cargar';
@@ -1164,12 +1291,9 @@
             placa:           a.bus_placa,
             numero:          a.bus_numero,
             tipo:            a.tipo,                      // SOAT | TECNOMECANICA | TARJETA_OP
+            estado:          a.estado,                    // vencido | por_vencer | sin_registrar
             ventana:         a.estado === 'por_vencer' && a.dias_restantes > 2 ? '7_DIAS' : '2_DIAS',
-            fecha_objetivo:  a.fecha_vencimiento || new Date().toISOString().slice(0,10),
-            confirmada:      false,
-            extra:           a.estado === 'vencido' ? '¡Vencido!'
-                             : a.estado === 'sin_registrar' ? 'Sin fecha registrada'
-                             : 'Próximo a vencer',
+            fecha_objetivo:  a.fecha_vencimiento,
             tipo_intervalo:  'FECHA',
             dias_restantes:  a.dias_restantes,
           }));
@@ -1177,7 +1301,12 @@
         }
       } catch (_) { /* silencioso */ }
 
-      renderAlertas(alertas);
+      alertas.forEach(a => {
+        a.grupo = grupoAlerta(a);
+        a.confirmada = alertasConfirmadas.has(a.id);
+      });
+      alertasActuales = alertas;
+      renderAlertas();
     }
 
     const TIPO_LABEL = {
@@ -1188,18 +1317,97 @@
       FALLA: 'Falla activa'
     };
 
-    function renderAlertas(alertas) {
-      const lista  = document.getElementById('alertasList');
-      const panel  = document.getElementById('alertasPanel');
-      const badge  = document.getElementById('alertasCount');
-      const notif  = document.getElementById('notifDot');
+    const GRUPOS_ALERTA = [
+      { id: 'vencidas', titulo: 'Vencidas',              corto: 'Vencidas',   color: '#b91c1c' },
+      { id: 'urgentes', titulo: 'Urgentes · 0 a 2 días', corto: '0 a 2 días', color: '#ef4444' },
+      { id: 'proximas', titulo: 'Próximas a vencer',     corto: 'Próximas',   color: '#f59e0b' },
+      { id: 'sinfecha', titulo: 'Sin fecha registrada',  corto: 'Sin fecha',  color: '#9ca3af' },
+    ];
 
+    function grupoAlerta(a) {
+      if (a.estado === 'sin_registrar') return 'sinfecha';
+      if (a.tipo === 'FALLA') return 'urgentes';
+      if (a.tipo_intervalo === 'KM') {
+        if (a.km_restante != null && a.km_restante <= 0) return 'vencidas';
+      } else if (a.dias_restantes != null && a.dias_restantes < 0) {
+        return 'vencidas';
+      }
+      return a.ventana === '2_DIAS' ? 'urgentes' : 'proximas';
+    }
+
+    function urgenciaAlerta(a) {
+      if (a.tipo === 'FALLA') return 'Activa hoy';
+      if (a.grupo === 'sinfecha') return 'Sin fecha';
+      if (a.tipo_intervalo === 'KM') {
+        const km = a.km_restante;
+        if (km == null) return '?';
+        return km <= 0 ? `Pasado ${Math.abs(km).toLocaleString('es-CO')} km`
+                       : `Faltan ${km.toLocaleString('es-CO')} km`;
+      }
+      const d = a.dias_restantes ?? 0;
+      if (d < 0) return d === -1 ? 'Venció ayer' : `Venció hace ${-d} días`;
+      return d === 0 ? 'Vence hoy' : d === 1 ? 'Vence mañana' : `En ${d} días`;
+    }
+
+    function metaAlerta(a) {
+      if (a.grupo === 'sinfecha') return 'Registra la fecha de vencimiento en Catálogo';
+      if (a.tipo_intervalo === 'KM') {
+        return `Próximo a los ${(a.proximo_km ?? 0).toLocaleString('es-CO')} km` +
+               (a.extra ? ` · ${escH(a.extra)}` : '');
+      }
+      const verbo = a.grupo === 'vencidas' ? 'Venció el' : 'Vence el';
+      return `${verbo} ${fmtFecha(a.fecha_objetivo)}` + (a.extra ? ` · ${escH(a.extra)}` : '');
+    }
+
+    function renderAlertas() {
+      const alertas    = alertasActuales;
       const pendientes = alertas.filter(a => !a.confirmada);
-      badge.textContent = pendientes.length;
-      badge.classList.toggle('zero', pendientes.length === 0);
-      panel.classList.toggle('empty', pendientes.length === 0);
-      if (notif) notif.style.display = pendientes.length > 0 ? '' : 'none';
+      const cuenta = {};
+      GRUPOS_ALERTA.forEach(g => { cuenta[g.id] = pendientes.filter(a => a.grupo === g.id).length; });
+      const criticas = cuenta.vencidas + cuenta.urgentes;
 
+      /* Campana del navbar */
+      const bell  = document.getElementById('bellBtn');
+      const count = document.getElementById('bellCount');
+      count.hidden = pendientes.length === 0;
+      count.textContent = pendientes.length > 99 ? '99+' : pendientes.length;
+      bell.classList.toggle('critica', criticas > 0);
+
+      /* Acceso compacto en el encabezado */
+      const pill = document.getElementById('alertPill');
+      pill.hidden = false;
+      pill.className = 'alert-pill' + (pendientes.length === 0 ? ' ok' : criticas === 0 ? ' leve' : '');
+      document.getElementById('alertPillTxt').textContent = pendientes.length === 0
+        ? 'Sin alertas pendientes'
+        : `${pendientes.length} alerta${pendientes.length !== 1 ? 's' : ''} de vencimiento`;
+      const partes = [];
+      if (cuenta.vencidas) partes.push(`${cuenta.vencidas} vencida${cuenta.vencidas !== 1 ? 's' : ''}`);
+      if (cuenta.urgentes) partes.push(`${cuenta.urgentes} urgente${cuenta.urgentes !== 1 ? 's' : ''}`);
+      if (!partes.length && cuenta.proximas) partes.push(`${cuenta.proximas} próxima${cuenta.proximas !== 1 ? 's' : ''} a vencer`);
+      if (!partes.length && cuenta.sinfecha) partes.push(`${cuenta.sinfecha} sin fecha`);
+      document.getElementById('alertPillSub').textContent = partes.length ? partes.join(' · ') : 'Todo en orden';
+
+      /* Resumen por urgencia (la tarjeta "sin fecha" solo si hay) */
+      document.getElementById('alResumen').innerHTML = GRUPOS_ALERTA
+        .filter(g => g.id !== 'sinfecha' || cuenta.sinfecha)
+        .map(g => `<div class="al-res ${g.id}"><b>${cuenta[g.id]}</b><span>${g.corto}</span></div>`)
+        .join('');
+
+      /* Filtros por tipo de documento */
+      const tipos = [...new Set(alertas.map(a => a.tipo))];
+      if (alFiltro !== 'TODAS' && !tipos.includes(alFiltro)) alFiltro = 'TODAS';
+      const chip = (id, label, n) =>
+        `<button class="al-chip ${alFiltro === id ? 'active' : ''}" data-f="${id}">${label}<b>${n}</b></button>`;
+      const filtros = document.getElementById('alFiltros');
+      filtros.innerHTML = alertas.length < 2 ? '' :
+        chip('TODAS', 'Todas', pendientes.length) +
+        Object.keys(TIPO_LABEL).filter(t => tipos.includes(t))
+          .map(t => chip(t, TIPO_LABEL[t], pendientes.filter(a => a.tipo === t).length)).join('');
+      filtros.querySelectorAll('.al-chip').forEach(b => {
+        b.addEventListener('click', () => { alFiltro = b.dataset.f; renderAlertas(); });
+      });
+
+      const lista = document.getElementById('alertasList');
       if (!alertas.length) {
         lista.innerHTML = `
           <div class="alertas-empty">
@@ -1211,79 +1419,70 @@
         return;
       }
 
-      /* Orden: ventana ROJO (2_DIAS) primero, luego AMARILLO (7_DIAS) por urgencia */
-      const sorted = [...alertas].sort((a,b) => {
-        if (a.confirmada !== b.confirmada) return a.confirmada ? 1 : -1;
-        if (a.ventana !== b.ventana) return a.ventana === '2_DIAS' ? -1 : 1;
-        // Dentro del mismo nivel: más urgente primero
-        const ua = a.tipo_intervalo === 'KM' ? (a.km_restante ?? 999999) : (a.dias_restantes ?? 999);
-        const ub = b.tipo_intervalo === 'KM' ? (b.km_restante ?? 999999) : (b.dias_restantes ?? 999);
-        return ua - ub;
-      });
+      const visibles = alertas.filter(a => alFiltro === 'TODAS' || a.tipo === alFiltro);
+      const urgencia = a => a.tipo_intervalo === 'KM' ? (a.km_restante ?? 999999) : (a.dias_restantes ?? 999);
 
-      lista.innerHTML = sorted.map(a => {
-        // Texto de urgencia según tipo de intervalo
-        let urgenciaTxt;
-        if (a.tipo === 'FALLA') {
-          urgenciaTxt = 'Activa hoy';
-        } else if (a.tipo_intervalo === 'KM') {
-          const km = a.km_restante;
-          urgenciaTxt = km == null ? '?' : km <= 0 ? '¡KM vencido!' : `${km.toLocaleString('es-CO')} km`;
-        } else {
-          const d = a.dias_restantes ?? 0;
-          urgenciaTxt = d <= 0 ? 'Vence hoy' : d === 1 ? 'Vence mañana' : `${d} días`;
-        }
-
-        // Línea de meta según tipo de intervalo
-        const extra = a.extra ? ` · ${escH(a.extra)}` : '';
-        let metaTxt;
-        if (a.tipo_intervalo === 'KM') {
-          metaTxt = `Próximo: ${(a.proximo_km ?? 0).toLocaleString('es-CO')} km${extra}`;
-        } else {
-          metaTxt = `Objetivo: ${fmtFecha(a.fecha_objetivo)}${extra}`;
-        }
-
-        const interno = a.numero ? `Interno ${a.numero}` : '';
-        const placa   = a.placa  || '';
-        const busPrincipal   = interno || placa || `Bus ${a.bus_id}`;
-        const busSecundario  = interno ? placa : '';
-
+      lista.innerHTML = GRUPOS_ALERTA.map(g => {
+        const items = visibles.filter(a => a.grupo === g.id).sort((a, b) =>
+          (a.confirmada !== b.confirmada) ? (a.confirmada ? 1 : -1) : urgencia(a) - urgencia(b));
+        if (!items.length) return '';
         return `
-          <li class="alerta-card ${a.confirmada ? 'confirmada' : ''}"
-              data-ventana="${a.ventana}" data-tipo="${a.tipo}">
-            <div class="alerta-info">
-              <span class="alerta-tag ${a.tipo}">${TIPO_LABEL[a.tipo] || a.tipo}</span>
-              <span class="alerta-bus">
-                ${escH(busPrincipal)}${busSecundario ? ` <span class="alerta-placa">· ${escH(busSecundario)}</span>` : ''}
-              </span>
-              <span class="alerta-meta">${metaTxt}</span>
-            </div>
-            <span class="alerta-dias">${urgenciaTxt}</span>
-            <button class="btn-confirmar" data-id="${a.id}" ${a.confirmada ? 'disabled' : ''}>
-              ${a.confirmada ? '✓ Confirmada' : 'Confirmar'}
-            </button>
-          </li>`;
+          <div class="al-grupo-tit"><span class="gdot" style="background:${g.color}"></span>${g.titulo}
+            <span class="gnum">${items.length}</span></div>
+          <ul class="alertas-list">${items.map(alertaHtml).join('')}</ul>`;
       }).join('');
 
       lista.querySelectorAll('.btn-confirmar').forEach(b => {
-        b.addEventListener('click', () => confirmarAlerta(b.dataset.id, b));
+        b.addEventListener('click', () => confirmarAlerta(b.dataset.id));
       });
     }
 
-    async function confirmarAlerta(id, btn) {
-      btn.disabled = true;
-      btn.textContent = '…';
-      // Confirmación visual local (el registro real se hace en módulo de mantenimiento)
-      const card = btn.closest('.alerta-card');
-      card.classList.add('confirmada');
-      btn.textContent = '✓ Confirmada';
-
-      const restantes = document.querySelectorAll('.alerta-card:not(.confirmada)').length;
-      const badge = document.getElementById('alertasCount');
-      badge.textContent = restantes;
-      badge.classList.toggle('zero', restantes === 0);
-      document.getElementById('alertasPanel').classList.toggle('empty', restantes === 0);
+    function alertaHtml(a) {
+      const interno = a.numero ? `Interno ${a.numero}` : '';
+      const placa   = a.placa  || '';
+      const busPrincipal  = interno || placa || `Bus ${a.bus_id}`;
+      const busSecundario = interno ? placa : '';
+      return `
+        <li class="alerta-card ${a.confirmada ? 'confirmada' : ''}" data-grupo="${a.grupo}" data-tipo="${a.tipo}">
+          <div class="alerta-row1">
+            <span class="alerta-tag ${a.tipo}">${TIPO_LABEL[a.tipo] || a.tipo}</span>
+            <span class="alerta-bus"><span class="ab-num">${escH(busPrincipal)}</span>${busSecundario ? `<span class="alerta-placa">· ${escH(busSecundario)}</span>` : ''}</span>
+            <span class="alerta-dias">${urgenciaAlerta(a)}</span>
+          </div>
+          <div class="alerta-row2">
+            <span class="alerta-meta">${metaAlerta(a)}</span>
+            <button class="btn-confirmar" data-id="${a.id}" ${a.confirmada ? 'disabled' : ''}>
+              ${a.confirmada ? '✓ Confirmada' : 'Confirmar'}
+            </button>
+          </div>
+        </li>`;
     }
+
+    function confirmarAlerta(id) {
+      alertasConfirmadas.add(id);
+      const a = alertasActuales.find(x => x.id === id);
+      if (a) a.confirmada = true;
+      renderAlertas();
+    }
+
+    function abrirAlertas() {
+      document.getElementById('alertasDrawer').classList.add('open');
+      document.getElementById('alertasDrawer').setAttribute('aria-hidden', 'false');
+      document.getElementById('alOverlay').classList.add('open');
+      document.getElementById('bellBtn').setAttribute('aria-expanded', 'true');
+      document.querySelector('#alertasDrawer .al-close').focus();
+    }
+
+    function cerrarAlertas() {
+      document.getElementById('alertasDrawer').classList.remove('open');
+      document.getElementById('alertasDrawer').setAttribute('aria-hidden', 'true');
+      document.getElementById('alOverlay').classList.remove('open');
+      document.getElementById('bellBtn').setAttribute('aria-expanded', 'false');
+    }
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && document.getElementById('alertasDrawer').classList.contains('open')) cerrarAlertas();
+    });
 
     async function cargarDashboard() {
       try {
@@ -1362,44 +1561,134 @@
       }
     }
 
-    /* Barras agrupadas: "Esta semana" (color) vs "Semana pasada" (gris) */
-    function buildBarComparativo({ canvasId, labels, actual, anterior, color, unidad, dark }) {
+    /* Número corto para las etiquetas sobre las barras: 62792 → 62.8k */
+    function fmtCorto(v) {
+      if (v >= 1000) {
+        const k = v / 1000;
+        return (k >= 100 ? Math.round(k) : k.toFixed(1).replace(/\.0$/, '')) + 'k';
+      }
+      return String(Math.round(v));
+    }
+
+    const FUENTE_CHART = "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+
+    /* Relleno rayado para barras de días con reporte incompleto */
+    function patronRayado(ctx, color) {
+      const c = document.createElement('canvas');
+      c.width = c.height = 8;
+      const p = c.getContext('2d');
+      p.fillStyle = color; p.globalAlpha = .28; p.fillRect(0, 0, 8, 8);
+      p.globalAlpha = .95; p.strokeStyle = color; p.lineWidth = 2.2;
+      p.beginPath(); p.moveTo(-2, 10); p.lineTo(10, -2); p.moveTo(-2, 2); p.lineTo(2, -2);
+      p.moveTo(6, 10); p.lineTo(10, 6); p.stroke();
+      return ctx.createPattern(c, 'repeat');
+    }
+
+    /* Plugin: escribe el valor encima de cada barra de "esta semana" (así se lee
+       aunque la barra sea bajita) y marca "sin datos" en los días vacíos */
+    function pluginEtiquetas({ color, colorVacio }) {
+      return {
+        id: 'etiquetasValor',
+        afterDatasetsDraw(chart) {
+          const meta = chart.getDatasetMeta(0);
+          if (!meta || meta.hidden) return;
+          const data = chart.data.datasets[0].data;
+          const { ctx, chartArea } = chart;
+          const anchoDia = chartArea.width / Math.max(1, data.length);
+          ctx.save();
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'bottom';
+          meta.data.forEach((bar, i) => {
+            const v = data[i];
+            if (v > 0) {
+              ctx.font = `700 ${anchoDia < 56 ? 10 : 11.5}px ${FUENTE_CHART}`;
+              ctx.fillStyle = color;
+              ctx.fillText(fmtCorto(v), bar.x, bar.y - 5);
+            } else {
+              ctx.font = `600 10px ${FUENTE_CHART}`;
+              ctx.fillStyle = colorVacio;
+              ctx.fillText(anchoDia < 70 ? '—' : 'sin datos', bar.x, chartArea.bottom - 4);
+            }
+          });
+          ctx.restore();
+        }
+      };
+    }
+
+    /* Barras agrupadas: "Esta semana" (color con degradado) vs "Semana pasada" (gris).
+       Opcional: sublabels (2.ª línea bajo cada día, con versión corta para pantallas
+       angostas), titulos (tooltip), extraActual/extraAnterior (texto extra por día en
+       el tooltip) e incompleto (días con reporte parcial: barra rayada y etiqueta ámbar). */
+    function buildBarComparativo({ canvasId, labels, actual, anterior, color, colorClaro, unidad, dark,
+                                   sublabels, sublabelsCortos, titulos, extraActual, extraAnterior, incompleto }) {
       const canvas = document.getElementById(canvasId);
       if (!canvas) return null;
       const ctx = canvas.getContext('2d');
       const gridColor = dark ? 'rgba(255,255,255,.06)' : '#f0f0f0';
-      const tickColor = dark ? '#6b7280' : '#9ca3af';
+      const tickColor = dark ? '#9ca3af' : '#6b7280';
+      const avisoColor = dark ? '#fbbf24' : '#d97706';
+
+      const rellenoActual = c => {
+        const { chartArea } = c.chart;
+        const tenue = incompleto && incompleto[c.dataIndex];
+        if (!chartArea) return color;
+        const g = c.chart.ctx.createLinearGradient(0, chartArea.bottom, 0, chartArea.top);
+        g.addColorStop(0, color);
+        g.addColorStop(1, colorClaro || color);
+        return tenue ? patronRayado(c.chart.ctx, colorClaro || color) : g;
+      };
+
       return new Chart(ctx, {
         type: 'bar',
         data: {
           labels,
           datasets: [
-            { label: 'Esta semana', data: actual, backgroundColor: color,
-              borderRadius: 6, borderSkipped: false, maxBarThickness: 22 },
-            { label: 'Semana pasada', data: anterior, backgroundColor: dark ? '#4b5563' : '#d1d5db',
-              borderRadius: 6, borderSkipped: false, maxBarThickness: 22 },
+            { label: 'Esta semana', data: actual, backgroundColor: rellenoActual,
+              borderRadius: 7, borderSkipped: false, maxBarThickness: 46, minBarLength: 4,
+              categoryPercentage: 0.74, barPercentage: 0.88 },
+            { label: 'Semana pasada', data: anterior, backgroundColor: dark ? '#3f4652' : '#e5e7eb',
+              borderRadius: 7, borderSkipped: false, maxBarThickness: 46, minBarLength: 3,
+              categoryPercentage: 0.74, barPercentage: 0.88 },
           ]
         },
+        plugins: [pluginEtiquetas({ color: dark ? '#f3f4f6' : '#111', colorVacio: dark ? '#4b5563' : '#c4c4cc' })],
         options: {
           responsive: true,
           maintainAspectRatio: false,
           animation: { duration: 600 },
+          layout: { padding: { top: 22 } },
           interaction: { mode: 'index', intersect: false },
           plugins: {
             legend: { display: false },
             tooltip: {
-              backgroundColor: dark ? '#1a1a20' : '#111',
-              titleColor: '#fff', bodyColor: dark ? '#c4b5fd' : '#ddd',
-              padding: 10, cornerRadius: 10, displayColors: true, boxWidth: 8, boxHeight: 8,
-              callbacks: { label: it => ` ${it.dataset.label}: ${it.raw.toLocaleString()} ${unidad}` }
+              backgroundColor: dark ? '#1f1f27' : '#111',
+              titleColor: '#fff', bodyColor: '#e5e7eb', footerColor: avisoColor,
+              padding: 11, cornerRadius: 10, displayColors: true, boxWidth: 8, boxHeight: 8,
+              titleFont: { size: 12, weight: '700' }, bodyFont: { size: 12 },
+              callbacks: {
+                title: items => titulos ? titulos[items[0].dataIndex] : items[0].label,
+                label: it => {
+                  const extra = (it.datasetIndex === 0 ? extraActual : extraAnterior)?.[it.dataIndex];
+                  return ` ${it.dataset.label}: ${it.raw.toLocaleString()} ${unidad}${extra ? ' · ' + extra : ''}`;
+                },
+                footer: items => (incompleto && incompleto[items[0].dataIndex])
+                  ? 'Reporte incompleto: faltan buses por registrar' : '',
+              }
             }
           },
           scales: {
             x: { grid: { display: false }, border: { display: false },
-                 ticks: { color: tickColor, font: { size: 10 }, maxRotation: 0 } },
+                 ticks: { autoSkip: false, maxRotation: 0, font: { size: 11, weight: '600' },
+                          color: c => (incompleto && incompleto[c.index]) ? avisoColor : tickColor,
+                          callback(v, i) {
+                            const l = this.getLabelForValue(v);
+                            if (!sublabels) return l;
+                            const angosto = this.chart.width / labels.length < 66;
+                            return [l, (angosto && sublabelsCortos ? sublabelsCortos : sublabels)[i]];
+                          } } },
             y: { beginAtZero: true, grid: { color: gridColor, drawTicks: false },
                  border: { display: false },
-                 ticks: { color: tickColor, font: { size: 10 }, maxTicksLimit: 5,
+                 ticks: { color: dark ? '#6b7280' : '#9ca3af', font: { size: 10 }, maxTicksLimit: 5, padding: 6,
                           callback: v => v >= 1000 ? (v / 1000) + 'k' : v } }
           }
         }
@@ -1462,11 +1751,16 @@
       });
     }
 
+    let paxModo = 'total';     // 'total' | 'bus' (promedio por bus)
+    let paxSeries = null;
+
     function renderPaxDiarios(series) {
-      const { fechas, paxSerie } = series;
+      paxSeries = series;
+      const { fechas, paxSerie, busesSerie } = series;
       const wrap = document.getElementById('dcChartWrap');
 
       if (paxSerie.every(v => v === 0)) {
+        if (barPaxChart) { barPaxChart.destroy(); barPaxChart = null; }
         wrap.innerHTML = `
           <div class="empty-state">
             <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
@@ -1478,14 +1772,16 @@
         return;
       }
 
-      /* ── Stats del encabezado ── */
-      const total = paxSerie.reduce((s,v) => s + v, 0);
-      document.getElementById('dcTotal').textContent  = total.toLocaleString();
-      document.getElementById('dcPeriod').textContent = `${fmtFecha(fechas[0])} — ${fmtFecha(fechas[13])}`;
+      /* ── Stats del encabezado: todo referido a esta semana (últimos 7 días) ── */
+      const semPax   = splitSemanas(paxSerie, fechas);
+      const semBuses = splitSemanas(busesSerie, fechas);
+      const totalAct = semPax.actual.reduce((s,v) => s + v, 0);
+      const totalAnt = semPax.anterior.reduce((s,v) => s + v, 0);
+      document.getElementById('dcTotal').textContent  = totalAct.toLocaleString();
+      document.getElementById('dcPeriod').textContent =
+        `${fmtFecha(fechas[7])} — ${fmtFecha(fechas[13])} · Semana pasada: ${totalAnt.toLocaleString()}`;
 
-      const sem1 = paxSerie.slice(0,7).reduce((s,v)=>s+v,0);
-      const sem2 = paxSerie.slice(7).reduce((s,v)=>s+v,0);
-      const pctSem = pctChange(sem1, sem2);
+      const pctSem = pctChange(totalAnt, totalAct);
       const badge = document.getElementById('dcBadge');
       if (pctSem === null) {
         badge.className = 'dc-badge flat';
@@ -1495,40 +1791,72 @@
         badge.textContent = `${pctSem >= 0 ? '↑' : '↓'} ${Math.abs(pctSem)}% vs sem. ant.`;
       }
 
-      const conDatos = paxSerie.filter(v => v > 0);
-      const minVal = Math.min(...conDatos);
-      const maxVal = Math.max(...conDatos);
-      document.getElementById('dcMax').textContent = maxVal.toLocaleString();
-      document.getElementById('dcMin').textContent = minVal.toLocaleString();
+      const diasConDatos = semPax.actual.filter(v => v > 0).length;
+      const iMax = semPax.actual.indexOf(Math.max(...semPax.actual));
+      const busDias = semBuses.actual.reduce((s,v) => s + v, 0);
+      document.getElementById('dcMax').innerHTML = totalAct > 0
+        ? `${semPax.actual[iMax].toLocaleString()}<small>${semPax.labels[iMax]}</small>` : '—';
+      document.getElementById('dcProm').textContent = diasConDatos
+        ? Math.round(totalAct / diasConDatos).toLocaleString() : '—';
+      document.getElementById('dcPorBus').textContent = busDias
+        ? Math.round(totalAct / busDias).toLocaleString() : '—';
 
-      /* Cambio diario: último día con datos vs el anterior con datos */
-      const idxDatos = paxSerie.map((v,i) => v > 0 ? i : -1).filter(i => i >= 0);
-      const cambioEl = document.getElementById('dcCambio');
-      if (idxDatos.length >= 2) {
-        const ult = paxSerie[idxDatos[idxDatos.length-1]];
-        const ant = paxSerie[idxDatos[idxDatos.length-2]];
-        const pctDia = pctChange(ant, ult);
-        cambioEl.textContent = pctDia === null ? '—' : `${pctDia >= 0 ? '+' : ''}${pctDia}%`;
-        cambioEl.className = `dc-stat-val ${pctDia >= 0 ? 'up' : 'down'}`;
-      } else {
-        cambioEl.textContent = '—';
-        cambioEl.className = 'dc-stat-val';
-      }
+      if (!wrap.querySelector('#barPax')) wrap.innerHTML = '<canvas id="barPax"></canvas>';
+      dibujarPaxChart();
+    }
 
-      /* ── Chart: barras "esta semana" vs "semana pasada" ── */
+    /* Dibuja (o redibuja al cambiar Total / Por bus) la gráfica de pasajeros */
+    function dibujarPaxChart() {
+      if (!paxSeries) return;
+      const { fechas, paxSerie, busesSerie } = paxSeries;
+      const porBus = paxModo === 'bus';
+      const serie = porBus
+        ? paxSerie.map((v, i) => busesSerie[i] ? Math.round(v / busesSerie[i]) : 0)
+        : paxSerie;
+      const sem      = splitSemanas(serie, fechas);
+      const semBuses = splitSemanas(busesSerie, fechas);
+
+      /* Día con reporte incompleto: reportó menos de la mitad de los buses de un
+         día normal (mediana de los 14 días). Solo aplica al total: el promedio
+         por bus no se distorsiona cuando faltan reportes. */
+      const conReporte = busesSerie.filter(n => n > 0).sort((a, b) => a - b);
+      const mitad      = conReporte.length >> 1;
+      const mediana    = conReporte.length % 2 ? conReporte[mitad]
+                       : (conReporte[mitad - 1] + conReporte[mitad]) / 2;
+      const incompleto = porBus ? null
+        : semBuses.actual.map(n => n > 0 && n < mediana * 0.5);
+      const txtBuses = n => `${n} bus${n !== 1 ? 'es' : ''}`;
+      const sublabels       = semBuses.actual.map(n => n ? txtBuses(n) : 'sin reporte');
+      const sublabelsCortos = semBuses.actual.map(n => n ? String(n) : '—');
+      const dias     = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+      const diaMes   = f => fmtFecha(f).replace(/ \d{4}$/, '');
+      const titulos  = fechas.slice(7).map((f, i) =>
+        `${dias[new Date(f + 'T00:00:00').getDay()]} ${diaMes(f)} · vs. ${diaMes(fechas[i])}`);
+
       if (barPaxChart) { barPaxChart.destroy(); barPaxChart = null; }
-      wrap.innerHTML = '<canvas id="barPax"></canvas>';
-      const semPax = splitSemanas(paxSerie, fechas);
       barPaxChart = buildBarComparativo({
         canvasId: 'barPax',
-        labels: semPax.labels,
-        actual: semPax.actual,
-        anterior: semPax.anterior,
-        color: '#a78bfa',
-        unidad: 'pasajeros',
+        labels: sem.labels, sublabels, sublabelsCortos, titulos, incompleto,
+        actual: sem.actual,
+        anterior: sem.anterior,
+        extraActual:   semBuses.actual.map(n => n ? txtBuses(n) : ''),
+        extraAnterior: semBuses.anterior.map(n => n ? txtBuses(n) : ''),
+        color: '#7c3aed', colorClaro: '#c4b5fd',
+        unidad: porBus ? 'pax por bus' : 'pasajeros',
         dark: true,
       });
+      document.getElementById('dcFoot').style.visibility = porBus ? 'hidden' : '';
     }
+
+    document.querySelectorAll('.dc-toggle button').forEach(b => {
+      b.addEventListener('click', () => {
+        if (paxModo === b.dataset.modo) return;
+        paxModo = b.dataset.modo;
+        document.querySelectorAll('.dc-toggle button')
+          .forEach(x => x.classList.toggle('active', x === b));
+        dibujarPaxChart();
+      });
+    });
 
     function renderRutas() {
       const listEl = document.getElementById('rutasList');
@@ -1561,15 +1889,15 @@
           const pct   = totalPax > 0 ? (data.pax / totalPax * 100) : 0;
           return `
             <div class="ruta-item">
-              <div class="ruta-dot" style="background:${info.color}"></div>
-              <div class="ruta-info">
-                <div class="ruta-nombre">${escH(info.nombre)}</div>
-                <div class="ruta-pax">${data.buses} bus${data.buses!==1?'es':''}</div>
+              <div class="ruta-top">
+                <span class="ruta-dot" style="background:${info.color}"></span>
+                <span class="ruta-nombre">${escH(info.nombre)}</span>
+                <span class="ruta-val">${data.pax.toLocaleString()}</span>
               </div>
               <div class="ruta-bar-wrap">
-                <div class="ruta-bar" style="width:${pct.toFixed(0)}%;background:${info.color}"></div>
+                <div class="ruta-bar" style="width:${pct.toFixed(1)}%;background:${info.color}"></div>
               </div>
-              <div class="ruta-val">${data.pax.toLocaleString()}</div>
+              <div class="ruta-pax"><b>${Math.round(pct)}%</b> del total · ${data.buses} bus${data.buses!==1?'es':''}</div>
             </div>`;
         }).join('');
 
@@ -1668,7 +1996,7 @@
       barViajesChart = buildBarComparativo({
         canvasId: 'barViajes',
         labels: semViajes.labels, actual: semViajes.actual, anterior: semViajes.anterior,
-        color: '#10b981', unidad: 'viajes', dark: false,
+        color: '#059669', colorClaro: '#34d399', unidad: 'viajes', dark: false,
       });
 
       /* ── Vehículos que trabajaron ── */
@@ -1676,7 +2004,7 @@
       const sBuses   = statVal(busesSerie);
       const busesAnt = semBuses.anterior.reduce((s,v)=>s+v,0);
       const busesAct = semBuses.actual.reduce((s,v)=>s+v,0);
-      document.getElementById('trendBusesTotal').textContent = `${sBuses.prom}`;
+      document.getElementById('trendBusesTotal').textContent = `${statVal(semBuses.actual).prom}`;
       document.getElementById('trendBusesBadge').outerHTML   = badgeHtml(pctChange(busesAnt, busesAct), 'trendBusesBadge');
       document.getElementById('tsBusesMin').textContent  = sBuses.min.toLocaleString();
       document.getElementById('tsBusesProm').textContent = sBuses.prom.toLocaleString();
@@ -1686,7 +2014,7 @@
       barBusesChart = buildBarComparativo({
         canvasId: 'barBuses',
         labels: semBuses.labels, actual: semBuses.actual, anterior: semBuses.anterior,
-        color: '#f97316', unidad: 'buses', dark: false,
+        color: '#ea580c', colorClaro: '#fdba74', unidad: 'buses', dark: false,
       });
     }
 
