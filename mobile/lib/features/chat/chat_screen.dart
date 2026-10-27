@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/session.dart';
 import '../../core/theme.dart';
 import '../../widgets/aurora.dart';
+import '../../widgets/comunes.dart';
 import 'chat_controller.dart';
 import 'texto_markdown.dart';
 
@@ -87,7 +89,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         'movilidad, comparativos, documentos por vencer o cómo está un bus por su número.',
       )),
       if (chat.mensajes.isEmpty) _sugerenciasView(),
-      for (final m in chat.mensajes) _burbuja(m),
+      for (var i = 0; i < chat.mensajes.length; i++)
+        _burbuja(
+          chat.mensajes[i],
+          // Se puede reportar una respuesta ya terminada (no la que se está escribiendo).
+          reportable: !(chat.respondiendo && i == chat.mensajes.length - 1),
+          pregunta: _preguntaAnterior(chat.mensajes, i),
+        ),
       if (esperando) _indicador(chat.consultando),
     ].reversed.toList();
 
@@ -107,6 +115,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         _entrada(chat.respondiendo),
       ]),
     );
+  }
+
+  Future<void> _reportar(String respuesta, String? pregunta) async {
+    final enviado = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => _HojaReporte(respuesta: respuesta, pregunta: pregunta),
+    );
+    if (enviado == true && mounted) {
+      mostrarMensaje(context, 'Gracias. Revisaremos esta respuesta.');
+    }
   }
 
   Widget _cabecera(EstadoChat chat) => CabeceraAurora(
@@ -144,7 +164,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         ]),
       );
 
-  Widget _burbuja(MensajeChat m) {
+  /// La pregunta del usuario que originó la respuesta en la posición [i].
+  static String? _preguntaAnterior(List<MensajeChat> mensajes, int i) {
+    for (var j = i - 1; j >= 0; j--) {
+      if (mensajes[j].autor == Autor.usuario) return mensajes[j].texto;
+    }
+    return null;
+  }
+
+  Widget _burbuja(MensajeChat m, {bool reportable = false, String? pregunta}) {
     const radio = Radius.circular(20);
     const pico = Radius.circular(6);
     switch (m.autor) {
@@ -164,7 +192,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           ),
         );
       case Autor.asistente:
-        return Align(
+        final burbuja = Align(
           alignment: Alignment.centerLeft,
           child: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * .86),
@@ -182,6 +210,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             ),
           ),
         );
+        if (!reportable) return burbuja;
+        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          burbuja,
+          TextButton.icon(
+            onPressed: () => _reportar(m.texto, pregunta),
+            icon: const Icon(Icons.flag_outlined, size: 16),
+            label: const Text('Reportar'),
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.muted,
+              textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              minimumSize: const Size(0, 32),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+          ),
+        ]);
       case Autor.error:
         return Align(
           alignment: Alignment.centerLeft,
@@ -284,5 +328,81 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             ]),
           ),
         ),
+      );
+}
+
+
+/// Reporte de una respuesta del asistente (requisito de Google Play para las
+/// apps con IA generativa): motivo y, si quiere, un comentario.
+class _HojaReporte extends ConsumerStatefulWidget {
+  final String respuesta;
+  final String? pregunta;
+  const _HojaReporte({required this.respuesta, this.pregunta});
+
+  @override
+  ConsumerState<_HojaReporte> createState() => _HojaReporteState();
+}
+
+class _HojaReporteState extends ConsumerState<_HojaReporte> {
+  static const _motivos = ['Ofensiva o inapropiada', 'Información incorrecta', 'Otro'];
+  String? _motivo;
+  final _detalle = TextEditingController();
+  bool _enviando = false;
+
+  @override
+  void dispose() {
+    _detalle.dispose();
+    super.dispose();
+  }
+
+  Future<void> _enviar() async {
+    setState(() => _enviando = true);
+    try {
+      await ref.read(apiClientProvider).post('/chat/reportar', body: {
+        'motivo': _motivo,
+        'detalle': _detalle.text.trim(),
+        'respuesta': widget.respuesta,
+        'pregunta': widget.pregunta,
+      });
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _enviando = false);
+        mostrarMensaje(context, e.toString(), error: true);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: EdgeInsets.fromLTRB(20, 0, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          const Text('Reportar respuesta',
+              style: TextStyle(fontFamily: Fuentes.titulo, fontSize: 19, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 4),
+          const Text('¿Qué tiene de malo esta respuesta?', style: TextStyle(color: AppColors.muted)),
+          const SizedBox(height: 8),
+          RadioGroup<String>(
+            groupValue: _motivo,
+            onChanged: (v) => setState(() => _motivo = v),
+            child: Column(children: [
+              for (final m in _motivos)
+                RadioListTile<String>(value: m, title: Text(m), contentPadding: EdgeInsets.zero, dense: true),
+            ]),
+          ),
+          TextField(
+            controller: _detalle,
+            maxLength: 500,
+            maxLines: 3,
+            minLines: 1,
+            style: const TextStyle(fontSize: 16),
+            decoration: const InputDecoration(labelText: 'Comentario (opcional)', border: OutlineInputBorder()),
+          ),
+          const SizedBox(height: 8),
+          FilledButton(
+            onPressed: _motivo == null || _enviando ? null : _enviar,
+            child: Text(_enviando ? 'Enviando…' : 'Enviar reporte'),
+          ),
+        ]),
       );
 }
