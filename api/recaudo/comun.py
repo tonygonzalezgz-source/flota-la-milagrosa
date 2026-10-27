@@ -31,8 +31,10 @@ TIPOS_GASTO_INICIALES = (
 
 # Conceptos contables de la caja (tabla que pasó el usuario el 2026-10-09).
 # tercero: PROPIETARIO (del vehículo, según la tarjeta de propiedad), PAGADOR (quien
-# paga, p. ej. el arrendador del local), NINGUNO o FIJO (nit_fijo). signo: 1 débito,
-# 2 crédito. `uso` = los que arma el sistema en el archivo plano del cierre.
+# paga, p. ej. el arrendador del local; se elige de recaudo_terceros), NINGUNO o FIJO
+# (nit_fijo). signo: 1 débito = la plata SALE de la caja, 2 crédito = ENTRA (así lo
+# toman los pagos diarios y el cierre). `uso` = los que arma el sistema en el archivo
+# plano del cierre; los demás son los que se registran en "Pagos diarios".
 CONCEPTOS_INICIALES = (
     {"nombre": "CIERRE DE CAJA", "cuenta": "138005", "tercero": "FIJO", "nit_fijo": "1001577609",
      "signo": 1, "centro_costo": "1", "uso": "CIERRE_CAJA"},
