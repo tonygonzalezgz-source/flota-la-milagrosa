@@ -54,12 +54,14 @@ _allowed = os.environ.get("ALLOWED_ORIGINS", "*")
 CORS(app, origins=_allowed, expose_headers=["X-Token-Renovado"])
 
 
-def _emitir_token(user_id, rol):
+def _emitir_token(user_id, rol, demo=False):
     payload = {
         "user_id": user_id,
         "rol":     rol,
         "exp":     datetime.utcnow() + timedelta(hours=JWT_EXPIRY_HOURS),
     }
+    if demo:
+        payload["demo"] = True   # cuenta demo: todo va a la base de demostración
     return _jwt.encode(payload, SECRET_KEY, algorithm="HS256")
 
 
@@ -84,7 +86,7 @@ def _renovar_token_si_conviene(payload):
             db.close()
         if not u:
             return  # usuario desactivado: su sesión vence normalmente
-        nuevo = _emitir_token(payload.get("user_id"), u["rol"])
+        nuevo = _emitir_token(payload.get("user_id"), u["rol"], demo=payload.get("demo"))
     except Exception as e:
         print(f"[auth] no se pudo renovar el token: {e}")
         return
@@ -107,6 +109,7 @@ def require_auth(f):
             payload = _jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
             request.jwt_user_id  = payload.get("user_id")
             request.jwt_user_rol = payload.get("rol")
+            request.jwt_demo     = bool(payload.get("demo"))
         except _jwt.ExpiredSignatureError:
             return jsonify({"error": "Sesión expirada. Inicia sesión nuevamente."}), 401
         except _jwt.InvalidTokenError:
@@ -159,7 +162,7 @@ PG_SCHEMA    = os.path.join(os.path.dirname(__file__), "supabase_schema.sql")
 # Versión del esquema. IMPORTANTE: incrementar en 1 cada vez que se agregue
 # una migración (ALTER/CREATE) a migrate_db(); si no se incrementa, la
 # migración nueva NO corre en las BD ya versionadas.
-SCHEMA_VERSION = 18
+SCHEMA_VERSION = 19
 
 ROLE_VIEWS = {
     "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho", "historial-despacho", "gastos", "tecnologia", "chequeo", "eds", "lavada", "mapa", "relojes", "mb-mapa", "mb-reportes", "mb-rutas", "mb-equipos", "recaudo-diario", "recaudo-caja", "auditoria"],
@@ -212,6 +215,88 @@ def _sync_pax_movilidad(db, fecha, pax_por_bus):
                 WHERE bus_id = ? AND fecha = ? AND pasajeros <> ?""",
             (pax, bus_id, fecha, pax),
         )
+
+
+# ══════════════════════════════════════════
+#  Cuenta demo (revisores de Google Play)
+#  Quien entra con DEMO_USUARIO / DEMO_CLAVE (variables de Vercel) trabaja
+#  sobre una base SQLite aparte, armada con datos inventados
+#  (api/demo_semilla.py). Su token lleva "demo": true y get_db() le entrega
+#  esa base: nada de lo que consulte o guarde toca producción. Sin las dos
+#  variables, la cuenta demo no existe.
+# ══════════════════════════════════════════
+import sqlite3 as _sqlite3
+import tempfile
+import threading
+
+DEMO_USUARIO = (os.environ.get("DEMO_USUARIO") or "").strip().lower()
+DEMO_CLAVE   = os.environ.get("DEMO_CLAVE") or ""
+DEMO_DB_PATH = os.path.join(tempfile.gettempdir(), "buscontrol_demo.db")
+_demo_lock = threading.RLock()
+_demo_estado = {"dia": None, "construyendo": False}
+
+
+def _demo_habilitada():
+    return bool(DEMO_USUARIO and DEMO_CLAVE)
+
+
+def _en_demo():
+    """True en las peticiones de la cuenta demo."""
+    try:
+        return bool(getattr(request, "jwt_demo", False))
+    except RuntimeError:
+        return False   # fuera de una petición (init_db, scripts)
+
+
+def _es_pg():
+    """Dialecto de la base en uso: la demo es SQLite aunque producción sea Postgres."""
+    return bool(DATABASE_URL) and not _en_demo()
+
+
+def _demo_conexion():
+    conn = _sqlite3.connect(DEMO_DB_PATH, timeout=15)
+    conn.row_factory = _sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
+
+
+def _demo_db():
+    """Base de la cuenta demo; se arma la primera vez de cada día en cada
+    instancia del servidor (las fechas de ejemplo son relativas a hoy)."""
+    if not _demo_habilitada():
+        raise RuntimeError("Cuenta demo deshabilitada")
+    with _demo_lock:
+        hoy = hoy_bogota()
+        if not _demo_estado["construyendo"] and _demo_estado["dia"] != hoy:
+            _demo_estado["construyendo"] = True
+            try:
+                _construir_demo(hoy)
+                _demo_estado["dia"] = hoy
+            finally:
+                _demo_estado["construyendo"] = False
+    return _demo_conexion()
+
+
+def _construir_demo(hoy):
+    import demo_semilla
+    for sufijo in ("", "-journal", "-wal", "-shm"):
+        try:
+            os.remove(DEMO_DB_PATH + sufijo)
+        except FileNotFoundError:
+            pass
+    conn = _demo_conexion()
+    with open(SCHEMA_PATH, "r", encoding="utf-8") as f:
+        conn.executescript(f.read())
+    conn.commit()
+    conn.close()
+    migrate_db()   # en contexto demo: corre las migraciones de SQLite sobre la base demo
+    conn = _demo_conexion()
+    try:
+        demo_semilla.sembrar(conn, hoy, generate_password_hash(DEMO_CLAVE, method="pbkdf2:sha256"),
+                             DEMO_USUARIO)
+    finally:
+        conn.close()
+    print(f"[demo] base de demostración lista ({hoy})")
 
 
 # ══════════════════════════════════════════
@@ -285,6 +370,8 @@ if DATABASE_URL:
             self._conn.close()
 
     def get_db():
+        if _en_demo():
+            return _demo_db()
         conn = psycopg2.connect(DATABASE_URL, sslmode="require", connect_timeout=10)
         wrapper = _PGConn(conn)
         # Registrar la conexión en el contexto del request: si el handler lanza
@@ -310,6 +397,8 @@ else:
     import sqlite3
 
     def get_db():
+        if _en_demo():
+            return _demo_db()
         conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
@@ -378,7 +467,7 @@ def migrate_db():
     """Migraciones idempotentes — funciona en SQLite y PostgreSQL."""
     db = get_db()
 
-    if DATABASE_URL:
+    if _es_pg():
         # PostgreSQL soporta ADD COLUMN IF NOT EXISTS
         for col_sql in [
             "ALTER TABLE buses ADD COLUMN IF NOT EXISTS propietario_id INTEGER REFERENCES propietarios(id)",
@@ -1142,6 +1231,9 @@ def migrate_db():
     # Relevos del despacho (conductores 2 y 3 del bus en el día) — SCHEMA_VERSION 17
     _migrar_relevos(db)
 
+    # Respuestas del asistente reportadas por los usuarios — SCHEMA_VERSION 19
+    _migrar_chat_reportes(db)
+
     # Pasajeros de movilidad desde la registradora del despacho — SCHEMA_VERSION 15
     # Backfill de los días desde PAX_REGISTRADORA_DESDE que ya tenían movilidad
     # guardada antes del cambio. Idempotente: solo toca filas cuyo despacho
@@ -1202,6 +1294,10 @@ def login():
     if not username or not password:
         return jsonify({"error": "Por favor completa ambos campos."}), 400
 
+    # Cuenta demo (revisores de Google Play): se valida contra la base de
+    # demostración, que nunca toca los datos de producción.
+    request.jwt_demo = _demo_habilitada() and username == DEMO_USUARIO
+
     db = get_db()
     user = db.execute(
         "SELECT * FROM usuarios WHERE username = ? AND activo = 1",
@@ -1247,7 +1343,7 @@ def login():
 
     db.close()
 
-    token = _emitir_token(user["id"], rol)
+    token = _emitir_token(user["id"], rol, demo=_en_demo())
 
     # Estado del aviso de tratamiento de datos (Ley 1581/2012):
     # el frontend usa este bool para decidir si mostrar el modal de aceptación.
@@ -1377,6 +1473,100 @@ def _mensaje_error_ia(e):
         return ("El asistente no está configurado correctamente. "
                 "Avisa al administrador.")
     return "El asistente tuvo un problema al responder. Intenta de nuevo."
+
+
+# ──────────────────────────────────────────
+#  Versión mínima de la app móvil — /api/app/version
+# ──────────────────────────────────────────
+@app.route("/api/app/version", methods=["GET"])
+def app_version():
+    """Público (la app lo consulta antes del login). `minima` es el número de
+    compilación más antiguo que puede seguir usándose: si el celular tiene uno
+    menor, la app pide actualizar desde la Play Store. Se fija con la variable
+    APP_VERSION_MINIMA en Vercel; sin ella (0) no se obliga a nadie."""
+    try:
+        minima = int(os.environ.get("APP_VERSION_MINIMA", "0") or 0)
+    except ValueError:
+        minima = 0
+    return jsonify({"minima": minima})
+
+
+# ──────────────────────────────────────────
+#  Reportes de respuestas del asistente — /api/chat/reportar
+# ──────────────────────────────────────────
+# Google Play exige que las apps con IA generativa permitan reportar respuestas
+# ofensivas o incorrectas sin salir de la app; quedan aquí para revisarlas.
+_CHAT_REPORTES_DDL = """CREATE TABLE IF NOT EXISTS chat_reportes (
+    id          {pk},
+    usuario_id  INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+    rol         TEXT,
+    motivo      TEXT NOT NULL,
+    pregunta    TEXT,
+    respuesta   TEXT NOT NULL,
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)"""
+
+CHAT_MOTIVOS_REPORTE = ("Ofensiva o inapropiada", "Información incorrecta", "Otro")
+
+
+def _migrar_chat_reportes(db):
+    if _es_pg():
+        sentencias = [_CHAT_REPORTES_DDL.format(pk="SERIAL PRIMARY KEY"),
+                      # Tabla nueva: RLS sin políticas y sin privilegios para los roles públicos
+                      "ALTER TABLE chat_reportes ENABLE ROW LEVEL SECURITY",
+                      "REVOKE ALL ON chat_reportes FROM anon, authenticated"]
+    else:
+        sentencias = [_CHAT_REPORTES_DDL.format(pk="INTEGER PRIMARY KEY AUTOINCREMENT")]
+    for sql in sentencias:
+        try:
+            db.execute(sql)
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            print(f"[migrate_db] chat_reportes: {e}")
+
+
+@app.route("/api/chat/reportar", methods=["POST"])
+@require_auth
+def chat_reportar():
+    """Guarda una respuesta del asistente que el usuario reporta. El autor sale
+    de la sesión; los textos se recortan para no guardar conversaciones enteras."""
+    data = request.get_json(force=True, silent=True) or {}
+    motivo = str(data.get("motivo") or "").strip()
+    respuesta = str(data.get("respuesta") or "").strip()
+    pregunta = str(data.get("pregunta") or "").strip()
+    detalle = str(data.get("detalle") or "").strip()
+    if motivo not in CHAT_MOTIVOS_REPORTE:
+        return jsonify({"error": "Motivo no válido"}), 400
+    if not respuesta:
+        return jsonify({"error": "Falta la respuesta reportada"}), 400
+    if detalle:
+        motivo = f"{motivo}: {detalle[:500]}"
+    db = get_db()
+    db.execute(
+        "INSERT INTO chat_reportes (usuario_id, rol, motivo, pregunta, respuesta) VALUES (?, ?, ?, ?, ?)",
+        (request.jwt_user_id, getattr(request, "jwt_user_rol", None), motivo,
+         pregunta[:CHAT_MAX_CARACTERES] or None, respuesta[:4000]),
+    )
+    db.commit()
+    db.close()
+    return jsonify({"ok": True}), 201
+
+
+@app.route("/api/chat/reportes", methods=["GET"])
+@require_role("Administrador")
+def chat_reportes():
+    """Últimos 200 reportes del asistente, para revisarlos."""
+    db = get_db()
+    filas = db.execute(
+        """SELECT r.id, r.created_at, r.rol, r.motivo, r.pregunta, r.respuesta,
+                  u.nombre AS usuario_nombre
+             FROM chat_reportes r
+        LEFT JOIN usuarios u ON u.id = r.usuario_id
+         ORDER BY r.id DESC LIMIT 200"""
+    ).fetchall()
+    db.close()
+    return jsonify([dict(f) for f in filas])
 
 
 # ──────────────────────────────────────────
@@ -2490,7 +2680,7 @@ _RELEVOS_DDL = """CREATE TABLE IF NOT EXISTS despacho_relevos (
 
 
 def _migrar_relevos(db):
-    if DATABASE_URL:
+    if _es_pg():
         sentencias = [_RELEVOS_DDL.format(pk="SERIAL PRIMARY KEY"),
                       # Tabla nueva: RLS sin políticas y sin privilegios para los roles públicos
                       "ALTER TABLE despacho_relevos ENABLE ROW LEVEL SECURITY",
@@ -4816,7 +5006,7 @@ def get_bus_mant_config(bus_id):
             WHERE c.activo = 1
          ORDER BY c.sistema, c.orden, c.nombre""",
         (bus_id, bus_id),
-    ).fetchall() if DATABASE_URL else None
+    ).fetchall() if _es_pg() else None
 
     if rows is None:
         # SQLite no soporta LATERAL — usar consulta separada
@@ -5640,7 +5830,8 @@ def gps_asignar_relojes(bus_id):
 
 import monitoreo  # noqa: E402
 
-monitoreo.configurar(get_db=get_db, require_role=require_role, database_url=DATABASE_URL)
+monitoreo.configurar(get_db=get_db, require_role=require_role, database_url=DATABASE_URL,
+                    en_demo=_en_demo)
 app.register_blueprint(monitoreo.bp)
 
 
@@ -5648,7 +5839,8 @@ app.register_blueprint(monitoreo.bp)
 #  Historial de modificaciones (api/auditoria/)
 # ──────────────────────────────────────────
 
-auditoria.configurar(get_db=get_db, require_role=require_role, database_url=DATABASE_URL)
+auditoria.configurar(get_db=get_db, require_role=require_role, database_url=DATABASE_URL,
+                   en_demo=_en_demo)
 app.register_blueprint(auditoria.bp)
 
 
@@ -5660,7 +5852,7 @@ import recaudo  # noqa: E402
 
 recaudo.configurar(get_db=get_db, require_role=require_role, database_url=DATABASE_URL,
                    hoy_bogota=hoy_bogota, sync_pax_movilidad=_sync_pax_movilidad,
-                   relevos_por_bus=_relevos_por_bus)
+                   relevos_por_bus=_relevos_por_bus, en_demo=_en_demo)
 app.register_blueprint(recaudo.bp)
 
 # Mientras el recaudo no esté habilitado para el Recaudador, no tiene vistas
