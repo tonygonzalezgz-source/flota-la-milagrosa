@@ -1,4 +1,4 @@
-"""Tablas del módulo Recaudo — SCHEMA_VERSION 16.
+"""Tablas del módulo Recaudo — SCHEMA_VERSION 20.
 
 - `recaudo_tarifas`: valor del pasaje por grupo de vehículo (A buses, B micros).
 - `recaudo_tipos_gasto`: gastos que el conductor puede reportar (ACPM, Taller…).
@@ -26,6 +26,16 @@
 - `recaudo_config`: datos contables fijos (NIT de la compañía, tipo de comprobante, moneda).
 - En `buses`: propietario según la tarjeta de propiedad (nombre y documento), que es
   el tercero (NIT) de las líneas de recaudo del archivo plano.
+- `recaudo_terceros` (v20): quienes pagan en la caja por fuera de los buses (locales,
+  servicios, parqueos…): tipo y número de documento, DV (solo NIT), nombre, teléfono.
+  Es el NIT de los conceptos con tercero PAGADOR. No se borran, se desactivan.
+- `recaudo_pagos` (v20): "pagos diarios", la plata que entra (concepto en crédito) o
+  sale (en débito) de la caja por fuera de las liquidaciones. Como las liquidaciones:
+  no se editan, el Administrador las anula, y entran al cierre de caja (`cierre_id`).
+  Copia el concepto (nombre, signo…), el bus y el tercero para que el recibo y los
+  cierres viejos no cambien si después se edita el catálogo.
+- En `recaudo_cierres` (v20): `pagos`, `ingresos`, `egresos` y `pago_ids`. Lo que debe
+  haber en caja = recaudado + ingresos − egresos.
 
 El dinero se guarda en pesos enteros (INTEGER): en Postgres un NUMERIC llega
 como Decimal y Flask lo serializa como texto. La tarifa se copia en cada
@@ -37,7 +47,8 @@ from .comun import (CONCEPTOS_INICIALES, CONFIG_CONTABLE_INICIAL, EMPRESA_POR_DE
                     TARIFAS_INICIALES, TIPOS_GASTO_INICIALES, es_pg)
 
 TABLAS_PROTEGIDAS = ("recaudo_tarifas", "recaudo_tipos_gasto", "recaudo_cierres", "recaudos",
-                     "recaudo_conductores", "recaudo_gastos", "recaudo_conceptos", "recaudo_config")
+                     "recaudo_conductores", "recaudo_gastos", "recaudo_conceptos", "recaudo_config",
+                     "recaudo_terceros", "recaudo_pagos")
 
 
 def _sql_txt(v):
@@ -150,7 +161,11 @@ def _tablas(serial, ts, ts_default, ref_empresa):
             liquidacion_ids         TEXT NOT NULL,
             reabierto_at            {ts},
             reabierto_por           INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
-            motivo_reapertura       TEXT
+            motivo_reapertura       TEXT,
+            pagos                   INTEGER NOT NULL DEFAULT 0,
+            ingresos                INTEGER NOT NULL DEFAULT 0,
+            egresos                 INTEGER NOT NULL DEFAULT 0,
+            pago_ids                TEXT NOT NULL DEFAULT '[]'
         )""",
         "CREATE INDEX IF NOT EXISTS idx_recaudo_cierres_usuario ON recaudo_cierres(usuario_id, cerrado_at)",
 
@@ -226,18 +241,67 @@ def _tablas(serial, ts, ts_default, ref_empresa):
             PRIMARY KEY (empresa_id, clave)
         )""",
         _SEMILLA_CONFIG,
+
+        f"""CREATE TABLE IF NOT EXISTS recaudo_terceros (
+            id              {serial},
+            empresa_id      INTEGER NOT NULL DEFAULT {EMPRESA_POR_DEFECTO}{ref_empresa},
+            tipo_documento  TEXT    NOT NULL CHECK (tipo_documento IN ('NIT', 'CC', 'CE', 'TI', 'PA', 'PPT')),
+            documento       TEXT    NOT NULL,
+            dv              TEXT,
+            nombre          TEXT    NOT NULL,
+            telefono        TEXT,
+            activo          INTEGER NOT NULL DEFAULT 1,
+            created_at      {ts} {ts_default},
+            UNIQUE (empresa_id, documento)
+        )""",
+
+        f"""CREATE TABLE IF NOT EXISTS recaudo_pagos (
+            id                      {serial},
+            empresa_id              INTEGER NOT NULL DEFAULT {EMPRESA_POR_DEFECTO}{ref_empresa},
+            fecha                   DATE    NOT NULL,
+            concepto_id             INTEGER NOT NULL REFERENCES recaudo_conceptos(id),
+            concepto_nombre         TEXT    NOT NULL,
+            cuenta                  TEXT    NOT NULL,
+            signo                   INTEGER NOT NULL CHECK (signo IN (1, 2)),
+            centro_costo            TEXT,
+            concepto_tercero        TEXT    NOT NULL CHECK (concepto_tercero IN ('PROPIETARIO', 'PAGADOR', 'NINGUNO', 'FIJO')),
+            referencia              TEXT    NOT NULL DEFAULT '',
+            valor                   INTEGER NOT NULL CHECK (valor > 0),
+            bus_id                  INTEGER REFERENCES buses(id) ON DELETE SET NULL,
+            bus_numero              INTEGER,
+            bus_placa               TEXT,
+            tercero_id              INTEGER REFERENCES recaudo_terceros(id),
+            tercero_nombre          TEXT,
+            tercero_tipo_documento  TEXT,
+            tercero_documento       TEXT,
+            tercero_dv              TEXT,
+            observacion             TEXT,
+            usuario_id              INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+            created_at              {ts} {ts_default},
+            anulado_at              {ts},
+            anulado_por             INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+            motivo_anulacion        TEXT,
+            cierre_id               INTEGER REFERENCES recaudo_cierres(id)
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_recaudo_pagos_fecha ON recaudo_pagos(fecha)",
+        "CREATE INDEX IF NOT EXISTS idx_recaudo_pagos_caja ON recaudo_pagos(usuario_id, cierre_id)",
     ]
 
 
 # Columnas agregadas después: cierre de caja en `recaudos` y propietario según la
 # tarjeta de propiedad en `buses` (tercero de las líneas de recaudo del archivo plano).
 # Tipos de gasto fijos (siempre a la vista) y que piden descripción — SCHEMA_VERSION 18.
+# Pagos diarios en el cierre de caja — SCHEMA_VERSION 20.
 _COLUMNAS_PG = [
     "ALTER TABLE recaudos ADD COLUMN IF NOT EXISTS cierre_id INTEGER REFERENCES recaudo_cierres(id)",
     "ALTER TABLE buses ADD COLUMN IF NOT EXISTS tp_propietario_nombre TEXT",
     "ALTER TABLE buses ADD COLUMN IF NOT EXISTS tp_propietario_documento TEXT",
     "ALTER TABLE recaudo_tipos_gasto ADD COLUMN IF NOT EXISTS fijo INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE recaudo_tipos_gasto ADD COLUMN IF NOT EXISTS requiere_detalle INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE recaudo_cierres ADD COLUMN IF NOT EXISTS pagos INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE recaudo_cierres ADD COLUMN IF NOT EXISTS ingresos INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE recaudo_cierres ADD COLUMN IF NOT EXISTS egresos INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE recaudo_cierres ADD COLUMN IF NOT EXISTS pago_ids TEXT NOT NULL DEFAULT '[]'",
 ]
 _COLUMNAS_SQLITE = [
     "ALTER TABLE recaudos ADD COLUMN cierre_id INTEGER REFERENCES recaudo_cierres(id)",
@@ -245,6 +309,10 @@ _COLUMNAS_SQLITE = [
     "ALTER TABLE buses ADD COLUMN tp_propietario_documento TEXT",
     "ALTER TABLE recaudo_tipos_gasto ADD COLUMN fijo INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE recaudo_tipos_gasto ADD COLUMN requiere_detalle INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE recaudo_cierres ADD COLUMN pagos INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE recaudo_cierres ADD COLUMN ingresos INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE recaudo_cierres ADD COLUMN egresos INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE recaudo_cierres ADD COLUMN pago_ids TEXT NOT NULL DEFAULT '[]'",
 ]
 _INDICES = ["CREATE INDEX IF NOT EXISTS idx_recaudos_caja ON recaudos(usuario_id, cierre_id)"]
 

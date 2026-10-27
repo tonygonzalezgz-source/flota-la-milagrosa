@@ -137,7 +137,8 @@
     bus: 'Bus', ruta: 'Ruta', conductor: 'Conductor', tarifa: 'Tarifa', puesto: 'Puesto',
     usuario: 'Cuenta', usuario_buses: 'Buses de una cuenta', usuario_rutas: 'Rutas de una cuenta',
     liquidacion: 'Liquidación', tipo_gasto: 'Tipo de gasto', cierre: 'Cierre de caja',
-    despacho: 'Despacho del día',
+    despacho: 'Despacho del día', concepto: 'Concepto de recaudo', config_contable: 'Datos contables',
+    tercero: 'Tercero', pago: 'Pago diario',
   };
   const CAMPOS = {
     numero: 'Número', placa: 'Placa', modelo: 'Modelo', grupo: 'Grupo', estado: 'Estado',
@@ -155,6 +156,9 @@
     agregados: 'Agregados', quitados: 'Quitados',
     fijo: 'Siempre a la vista', requiere_detalle: 'Pide descripción',
     registradora_inicio: 'Registradora inicial', registradora_fin: 'Registradora final',
+    tipo_documento: 'Tipo de documento', documento: 'Documento', dv: 'DV', concepto: 'Concepto',
+    cuenta: 'Cuenta', signo: 'Signo', tercero: 'Tercero', pagos: 'Pagos diarios',
+    ingresos: 'Entradas (pagos diarios)', egresos: 'Salidas (pagos diarios)', esperado: 'Debe haber en caja',
   };
   const etiqueta = k => CAMPOS[k] || k;
   const ACCIONES = { crear: 'Creó', editar: 'Editó', eliminar: 'Eliminó', desactivar: 'Desactivó',
@@ -261,7 +265,8 @@
     render();
   }
 
-  const DINERO = new Set(['tarifa', 'liquidacion', 'producido', 'total_gastos', 'neto', 'recaudado', 'diferencia', 'efectivo', 'diferencia_caja']);
+  const DINERO = new Set(['tarifa', 'liquidacion', 'producido', 'total_gastos', 'neto', 'recaudado', 'diferencia', 'efectivo', 'diferencia_caja',
+                          'valor', 'ingresos', 'egresos', 'esperado']);
   const pesos = n => (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString('es-CO');
   function valor(v, campo) {
     if (v === null || v === undefined || v === '') return '—';
