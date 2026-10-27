@@ -273,6 +273,88 @@
       color: var(--txt); font-size: 13px;
     }
 
+    /* ── CORRECCIÓN DE REGISTRADORA (solo Administrador) ── */
+    .btn-corregir {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 5px 10px; border-radius: 8px; white-space: nowrap;
+      border: 1px solid var(--border2); background: #fff; color: var(--txt2);
+      font-family: inherit; font-size: 11px; font-weight: 700; cursor: pointer;
+      transition: all .13s;
+    }
+    .btn-corregir:hover { border-color: var(--accent); color: var(--accent); }
+    .pax-invalida {
+      display: inline-block; padding: 2px 7px; border-radius: 6px;
+      background: rgba(239,68,68,.12); color: #b91c1c; font-size: 10px; font-weight: 800;
+    }
+    tr.recien-corregido td { animation: flashOk 1.8s ease-out; }
+    @keyframes flashOk { 0% { background: rgba(34,197,94,.22); } 100% { background: transparent; } }
+
+    .modal-bg {
+      position: fixed; inset: 0; z-index: 1000; background: rgba(15,15,20,.5);
+      display: flex; align-items: center; justify-content: center; padding: 16px;
+    }
+    .modal-bg[hidden] { display: none; }
+    .modal {
+      background: var(--surface); border-radius: 16px; width: 100%; max-width: 440px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.3); overflow: hidden;
+      max-height: calc(100vh - 32px); display: flex; flex-direction: column;
+    }
+    .modal-head { padding: 18px 20px 6px; }
+    .modal-title { font-size: 16px; font-weight: 800; }
+    .modal-sub   { font-size: 12px; color: var(--txt3); margin-top: 3px; }
+    .modal-body  { padding: 12px 20px 4px; overflow-y: auto; }
+    .reg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .campo label {
+      display: block; font-size: 11px; font-weight: 700; color: var(--txt2);
+      text-transform: uppercase; letter-spacing: .4px; margin-bottom: 5px;
+    }
+    .campo input, .campo textarea {
+      width: 100%; border: 1.5px solid var(--border2); border-radius: 10px;
+      padding: 9px 11px; font-family: inherit; font-size: 16px; color: var(--txt);
+      outline: none; background: #fff;
+    }
+    .campo input { font-weight: 700; font-variant-numeric: tabular-nums; }
+    .campo textarea { resize: vertical; min-height: 54px; font-size: 16px; }
+    .campo input:focus, .campo textarea:focus { border-color: var(--accent); }
+    .campo .antes { font-size: 11px; color: var(--txt3); margin-top: 4px; }
+    .campo .pista { font-size: 11px; color: var(--txt2); margin-top: 3px; }
+    .campo .pista button {
+      border: none; background: none; color: var(--accent); font: inherit;
+      font-weight: 700; cursor: pointer; padding: 0; text-decoration: underline;
+    }
+    .pax-preview {
+      margin-top: 14px; padding: 11px 13px; border-radius: 10px; background: var(--card);
+      border: 1px solid var(--border); display: flex; justify-content: space-between;
+      align-items: baseline; gap: 10px; font-size: 12px; color: var(--txt2);
+    }
+    .pax-preview strong { font-size: 18px; color: var(--txt); font-variant-numeric: tabular-nums; }
+    .pax-preview.mal { background: rgba(239,68,68,.07); border-color: rgba(239,68,68,.3); }
+    .pax-preview.mal strong { color: #b91c1c; font-size: 13px; }
+    .modal-nota { font-size: 11.5px; color: var(--txt3); margin-top: 12px; line-height: 1.4; }
+    .modal-err {
+      margin-top: 12px; padding: 9px 12px; border-radius: 9px; font-size: 12.5px;
+      background: rgba(239,68,68,.1); color: #b91c1c; font-weight: 600;
+    }
+    .modal-err[hidden] { display: none; }
+    .modal-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 20px 18px; }
+    .btn-sec {
+      padding: 9px 16px; border-radius: 10px; border: 1px solid var(--border2);
+      background: #fff; color: var(--txt2); font-family: inherit; font-size: 13px;
+      font-weight: 700; cursor: pointer;
+    }
+    .btn-pri {
+      padding: 9px 18px; border-radius: 10px; border: none; background: var(--accent);
+      color: #fff; font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+    }
+    .btn-pri:disabled { opacity: .55; cursor: default; }
+
+    .toast {
+      position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
+      background: #111; color: #fff; padding: 10px 16px; border-radius: 10px;
+      font-size: 13px; font-weight: 600; z-index: 1100; box-shadow: 0 8px 24px rgba(0,0,0,.25);
+    }
+    .toast[hidden] { display: none; }
+
     /* ── EMPTY STATE ── */
     .empty-state {
       text-align: center;
@@ -342,6 +424,13 @@
       }
       .table-wrap { background: transparent; border: none; border-radius: 0; overflow: visible; }
       table { min-width: unset; }
+      tbody td.col-corregir { width: 100%; }
+      tbody td.col-corregir::before { display: none; }
+      .btn-corregir { width: 100%; justify-content: center; padding: 8px; font-size: 12px; }
+      .modal-bg { align-items: flex-end; padding: 0; }
+      .modal { max-width: none; border-radius: 16px 16px 0 0; max-height: 92vh; }
+      .modal-foot { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 18px); }
+      .modal-foot button { flex: 1; }
     }
   </style>
 </head>
@@ -397,21 +486,71 @@
 
 </div>
 
+<!-- Corregir registradora (solo Administrador) -->
+<div class="modal-bg" id="regModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="regTitulo">
+    <div class="modal-head">
+      <div class="modal-title" id="regTitulo">Corregir registradora</div>
+      <div class="modal-sub" id="regSub">—</div>
+    </div>
+    <div class="modal-body">
+      <div class="reg-grid">
+        <div class="campo">
+          <label for="regIni">Inicial</label>
+          <input id="regIni" type="text" inputmode="numeric" autocomplete="off" />
+          <div class="antes" id="regIniAntes"></div>
+          <div class="pista" id="regIniPista"></div>
+        </div>
+        <div class="campo">
+          <label for="regFin">Final</label>
+          <input id="regFin" type="text" inputmode="numeric" autocomplete="off" />
+          <div class="antes" id="regFinAntes"></div>
+          <div class="pista" id="regFinPista"></div>
+        </div>
+      </div>
+      <div class="pax-preview" id="regPax"><span>Pasajeros</span><strong>—</strong></div>
+      <div class="campo" style="margin-top:14px">
+        <label for="regMotivo">Motivo (opcional)</label>
+        <textarea id="regMotivo" maxlength="300" placeholder="Ej: el despachador digitó mal la final"></textarea>
+      </div>
+      <div class="modal-nota">
+        Se actualizan los pasajeros de Movilidad de ese día y el cambio queda en Auditoría.
+      </div>
+      <div class="modal-err" id="regErr" hidden></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-sec" type="button" onclick="cerrarCorreccion()">Cancelar</button>
+      <button class="btn-pri" type="button" id="regGuardar" onclick="guardarCorreccion()">Guardar corrección</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
 <script>
-  const API = (window.location === window.parent.location)
-    ? 'https://wed-flota-la-milagrosa.vercel.app'
-    : '';
+  const API = (window.location.port === '3030') ? 'http://localhost:8001' : '';
 
   function token() { return localStorage.getItem('authToken') || ''; }
 
-  async function apiFetch(path) {
+  async function apiFetch(path, opts = {}) {
     const r = await fetch(API + path, {
-      headers: { Authorization: 'Bearer ' + token() }
+      ...opts,
+      headers: { Authorization: 'Bearer ' + token(), 'Content-Type': 'application/json' }
     });
     if (r.status === 401) { window.location.href = '/index.html'; return null; }
-    if (!r.ok) throw new Error(await r.text());
+    if (!r.ok) {
+      let msg = '';
+      try { msg = (await r.json()).error; } catch (_) { /* respuesta sin JSON */ }
+      throw new Error(msg || 'No se pudo completar la operación');
+    }
     return r.json();
   }
+
+  // Solo el Administrador corrige la registradora (el servidor también lo exige)
+  const esAdmin = (() => {
+    try { return JSON.parse(localStorage.getItem('currentUser') || '{}').rol === 'Administrador'; }
+    catch (_) { return false; }
+  })();
+  let filasCargadas = [];
 
   // ── Fechas por defecto: mes en curso hasta hoy ──
   // Se usa el primer día del mes (no "hace 30 días") para que el date-picker
@@ -444,6 +583,14 @@
     inputDesde.value = hoy();
     inputHasta.value = hoy();
     cargar();
+  }
+
+  // En producción (Postgres) la API entrega las fechas como "Fri, 17 Oct 2026 00:00:00 GMT";
+  // en SQLite llegan como "2026-10-17". Todo el historial trabaja con AAAA-MM-DD.
+  function aISO(f) {
+    if (/^\d{4}-\d{2}-\d{2}/.test(f)) return f.slice(0, 10);
+    const d = new Date(f);
+    return isNaN(d) ? f : d.toISOString().slice(0, 10);
   }
 
   // ── Formatear fecha para encabezado ──
@@ -528,6 +675,7 @@
                   <th style="text-align:right">Pax</th>
                   <th>Estado</th>
                   <th style="text-align:right">Viajes</th>
+                  ${esAdmin ? '<th></th>' : ''}
                 </tr>
               </thead>
               <tbody>`;
@@ -538,12 +686,17 @@
         const viajes   = (b.viajes_realizados == null) ? '—' : b.viajes_realizados;
         const regIni   = (b.registradora_inicio == null) ? '—' : b.registradora_inicio.toLocaleString('es-CO');
         const regFin   = (b.registradora_fin    == null) ? '—' : b.registradora_fin.toLocaleString('es-CO');
-        const pax      = (b.registradora_inicio != null && b.registradora_fin != null
-                          && b.registradora_fin >= b.registradora_inicio)
-          ? (b.registradora_fin - b.registradora_inicio).toLocaleString('es-CO')
-          : '—';
+        const ambas    = b.registradora_inicio != null && b.registradora_fin != null;
+        const pax      = !ambas ? '—'
+          : b.registradora_fin >= b.registradora_inicio
+            ? (b.registradora_fin - b.registradora_inicio).toLocaleString('es-CO')
+            : '<span class="pax-invalida" title="La registradora final es menor que la inicial">Inválida</span>';
+        const corregir = esAdmin && b.estado === 'trabajando'
+          ? `<button class="btn-corregir" onclick="abrirCorreccion('${fecha}', ${b.bus_id})">
+               <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+               Corregir REG</button>` : '';
         html += `
-                <tr>
+                <tr id="fila-${fecha}-${b.bus_id}">
                   <td data-label="Unidad">
                     <div class="bus-num">${b.numero}</div>
                     <div class="bus-placa">${b.placa || '—'}</div>
@@ -566,6 +719,7 @@
                   <td data-label="Pax"     class="viajes-cell">${pax}</td>
                   <td data-label="Estado">${estadoBadge(b.estado)}</td>
                   <td data-label="Viajes" class="viajes-cell">${viajes}</td>
+                  ${esAdmin ? `<td class="col-corregir">${corregir}</td>` : ''}
                 </tr>`;
       }
 
@@ -598,13 +752,149 @@
 
     try {
       const rows = await apiFetch(`/api/despacho/historial?desde=${desde}&hasta=${hasta}`);
-      if (rows !== null) render(rows);
+      if (rows !== null) {
+        filasCargadas = rows.map(r => ({ ...r, fecha: aISO(r.fecha) }));
+        render(filasCargadas);
+      }
     } catch (e) {
       area.innerHTML = `
         <div class="empty-state">
           <p>Error al cargar el historial. Intente nuevamente.</p>
         </div>`;
     }
+  }
+
+  // ── Corrección de registradora (solo Administrador) ──
+  let corrigiendo = null;
+  const fmtN   = n => (n == null) ? '—' : Number(n).toLocaleString('es-CO');
+  const leerN  = id => {
+    const v = document.getElementById(id).value.replace(/\D/g, '');
+    return v === '' ? null : parseInt(v, 10);
+  };
+
+  /* Lectura del mismo bus en el día cargado más cercano antes / después:
+     el torniquete lleva consecutivo, así que sirven de referencia */
+  function vecino(busId, fecha, dir) {
+    const cands = filasCargadas.filter(r => r.bus_id === busId &&
+      (dir < 0 ? r.fecha < fecha && r.registradora_fin != null
+               : r.fecha > fecha && r.registradora_inicio != null));
+    cands.sort((a, b) => dir < 0 ? b.fecha.localeCompare(a.fecha) : a.fecha.localeCompare(b.fecha));
+    return cands[0] || null;
+  }
+
+  function abrirCorreccion(fecha, busId) {
+    const b = filasCargadas.find(r => r.fecha === fecha && r.bus_id === busId);
+    if (!b) return;
+    corrigiendo = b;
+    document.getElementById('regSub').textContent =
+      `Bus ${b.numero} · ${b.placa || 's/placa'} · ${formatFecha(fecha)}`;
+    document.getElementById('regIni').value = b.registradora_inicio ?? '';
+    document.getElementById('regFin').value = b.registradora_fin ?? '';
+    document.getElementById('regIniAntes').textContent = `Antes: ${fmtN(b.registradora_inicio)}`;
+    document.getElementById('regFinAntes').textContent = `Antes: ${fmtN(b.registradora_fin)}`;
+
+    const ant = vecino(busId, fecha, -1), sig = vecino(busId, fecha, 1);
+    document.getElementById('regIniPista').innerHTML = ant
+      ? `El ${ant.fecha.slice(8)}/${ant.fecha.slice(5,7)} terminó en ${fmtN(ant.registradora_fin)} · <button type="button" onclick="usarValor('regIni', ${ant.registradora_fin})">Usar</button>` : '';
+    document.getElementById('regFinPista').innerHTML = sig
+      ? `El ${sig.fecha.slice(8)}/${sig.fecha.slice(5,7)} empezó en ${fmtN(sig.registradora_inicio)} · <button type="button" onclick="usarValor('regFin', ${sig.registradora_inicio})">Usar</button>` : '';
+
+    document.getElementById('regMotivo').value = '';
+    document.getElementById('regErr').hidden = true;
+    document.getElementById('regGuardar').disabled = false;
+    document.getElementById('regModal').hidden = false;
+    actualizarPreview();
+    document.getElementById('regIni').focus();
+  }
+
+  function usarValor(id, v) {
+    document.getElementById(id).value = v;
+    actualizarPreview();
+  }
+
+  function cerrarCorreccion() {
+    document.getElementById('regModal').hidden = true;
+    corrigiendo = null;
+  }
+
+  function actualizarPreview() {
+    if (!corrigiendo) return;
+    const ini = leerN('regIni'), fin = leerN('regFin');
+    const box = document.getElementById('regPax');
+    const ant = corrigiendo;
+    const paxAntes = (ant.registradora_inicio != null && ant.registradora_fin != null
+                      && ant.registradora_fin >= ant.registradora_inicio)
+      ? ant.registradora_fin - ant.registradora_inicio : null;
+    let txt, mal = false;
+    if (ini == null || fin == null) txt = '—';
+    else if (fin < ini) { txt = 'La final es menor que la inicial'; mal = true; }
+    else txt = fmtN(fin - ini);
+    box.classList.toggle('mal', mal);
+    box.innerHTML = `<span>Pasajeros${paxAntes != null ? ` · antes ${fmtN(paxAntes)}` : ''}</span><strong>${txt}</strong>`;
+    document.getElementById('regGuardar').disabled = mal;
+  }
+
+  ['regIni', 'regFin'].forEach(id => {
+    const el = document.getElementById(id);
+    el.addEventListener('input', () => {
+      const limpio = el.value.replace(/\D/g, '');
+      if (limpio !== el.value) el.value = limpio;
+      actualizarPreview();
+    });
+    el.addEventListener('keydown', e => { if (e.key === 'Enter') guardarCorreccion(); });
+  });
+  document.getElementById('regModal').addEventListener('click', e => {
+    if (e.target.id === 'regModal') cerrarCorreccion();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && !document.getElementById('regModal').hidden) cerrarCorreccion();
+  });
+
+  async function guardarCorreccion() {
+    const b = corrigiendo;
+    const btn = document.getElementById('regGuardar');
+    if (!b || btn.disabled) return;
+    const err = document.getElementById('regErr');
+    err.hidden = true;
+    btn.disabled = true;
+    btn.textContent = 'Guardando…';
+    try {
+      const res = await apiFetch('/api/despacho/registradora', {
+        method: 'PUT',
+        body: JSON.stringify({
+          fecha: b.fecha, bus_id: b.bus_id,
+          registradora_inicio: leerN('regIni'),
+          registradora_fin: leerN('regFin'),
+          motivo: document.getElementById('regMotivo').value.trim(),
+        }),
+      });
+      if (res === null) return;
+      b.registradora_inicio = res.registradora_inicio;
+      b.registradora_fin    = res.registradora_fin;
+      cerrarCorreccion();
+      const area = document.getElementById('tableArea');
+      const scroll = area.scrollTop;
+      render(filasCargadas);
+      area.scrollTop = scroll;
+      document.getElementById(`fila-${b.fecha}-${b.bus_id}`)?.classList.add('recien-corregido');
+      mostrarToast(`Registradora del bus ${b.numero} corregida` +
+        (res.pasajeros != null ? ` · ${fmtN(res.pasajeros)} pasajeros` : ''));
+    } catch (e) {
+      err.textContent = e.message;
+      err.hidden = false;
+      btn.disabled = false;
+    } finally {
+      btn.textContent = 'Guardar corrección';
+    }
+  }
+
+  let toastTimer = null;
+  function mostrarToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { t.hidden = true; }, 3500);
   }
 
   // Carga inicial

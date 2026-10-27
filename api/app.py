@@ -12,6 +12,7 @@ import urllib.request
 import urllib.parse
 import urllib.error
 from datetime import date, datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from functools import wraps
 from dotenv import load_dotenv
 
@@ -2636,6 +2637,102 @@ def guardar_relevos_despacho():
     return jsonify({"ok": True, "relevos": guardados, "viajes_realizados": total})
 
 
+@app.route("/api/despacho/registradora", methods=["PUT"])
+@require_role("Administrador")
+def corregir_registradora_despacho():
+    """Corrección de la registradora (inicial y/o final) de un despacho ya hecho,
+    desde Historial de Despacho, cuando el despachador digitó mal. Solo el
+    Administrador. Actualiza los pasajeros de movilidad y queda en la auditoría.
+    Si el bus ya fue liquidado, la registradora quedó en la liquidación: se
+    corrige anulándola y volviendo a liquidar (el recaudo corrige el despacho)."""
+    data = request.get_json(silent=True) or {}
+    fecha = data.get("fecha")
+    try:
+        fecha = date.fromisoformat(str(fecha)[:10]).isoformat()
+    except ValueError:
+        # Formato en que Flask serializa las fechas de Postgres: "Fri, 17 Oct 2026 00:00:00 GMT"
+        try:
+            fecha = parsedate_to_datetime(str(fecha)).date().isoformat()
+        except (TypeError, ValueError):
+            return jsonify({"error": "Fecha inválida (use AAAA-MM-DD)"}), 400
+    if fecha > hoy_bogota():   # ISO: el orden de texto es el de las fechas
+        return jsonify({"error": "No se puede corregir un día que aún no ha ocurrido"}), 400
+
+    def lectura(raw, etiqueta):
+        if raw in (None, "", "null"):
+            return None
+        try:
+            n = int(raw)
+        except (TypeError, ValueError):
+            raise ValueError(f"La registradora {etiqueta} debe ser un número entero")
+        if n < 0:
+            raise ValueError(f"La registradora {etiqueta} no puede ser negativa")
+        return n
+
+    motivo = (data.get("motivo") or "").strip()[:300]
+    db = get_db()
+    try:
+        try:
+            bus_id = int(data.get("bus_id"))
+        except (TypeError, ValueError):
+            raise ValueError("Falta el bus")
+        reg_inicio = lectura(data.get("registradora_inicio"), "inicial")
+        reg_fin = lectura(data.get("registradora_fin"), "final")
+        if reg_inicio is not None and reg_fin is not None and reg_fin < reg_inicio:
+            raise ValueError("La registradora final no puede ser menor que la inicial")
+
+        desp = db.execute(
+            """SELECT d.id, d.estado, d.registradora_inicio, d.registradora_fin,
+                      b.numero, b.placa
+                 FROM despacho_diario d JOIN buses b ON b.id = d.bus_id
+                WHERE d.bus_id = ? AND d.fecha = ?""",
+            (bus_id, fecha),
+        ).fetchone()
+        if not desp or desp["estado"] != "trabajando":
+            raise ValueError("Ese día el bus no estaba despachado como Trabajando")
+        desp = dict(desp)
+        if db.execute("SELECT 1 FROM recaudos WHERE bus_id = ? AND fecha = ? AND anulado_at IS NULL",
+                      (bus_id, fecha)).fetchone():
+            raise ValueError(f"El bus {desp['numero']} ya fue liquidado en Recaudo: para corregir la "
+                             "registradora anula la liquidación y vuelve a liquidar")
+        relevos = _relevos_por_bus(db, fecha, bus_id).get(bus_id, [])
+        err = _validar_lecturas_relevo(reg_inicio, reg_fin, [r["registradora"] for r in relevos])
+        if err:
+            raise ValueError("No cuadra con el relevo: " + err)
+    except ValueError as e:
+        db.close()
+        return jsonify({"error": str(e)}), 400
+
+    antes = (desp["registradora_inicio"], desp["registradora_fin"])
+    pax_antes = _pax_registradora(*antes)
+    pax = _pax_registradora(reg_inicio, reg_fin)
+    if antes != (reg_inicio, reg_fin):
+        db.execute(
+            """UPDATE despacho_diario
+                  SET registradora_inicio = ?, registradora_fin = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?""",
+            (reg_inicio, reg_fin, desp["id"]),
+        )
+        if pax is not None:
+            _sync_pax_movilidad(db, fecha, {bus_id: pax})
+        txt = lambda v: "—" if v is None else str(v)
+        auditoria.registrar(
+            db, "despacho", "despacho", desp["id"], "editar",
+            f"Corrigió la registradora del bus {desp['numero']} ({desp['placa'] or 's/placa'}) "
+            f"del {fecha}: {txt(antes[0])}–{txt(antes[1])} → {txt(reg_inicio)}–{txt(reg_fin)}"
+            + (f". Motivo: {motivo}" if motivo else ""),
+            {"fecha": fecha, "bus": desp["numero"],
+             **({"registradora_inicio": [antes[0], reg_inicio]} if antes[0] != reg_inicio else {}),
+             **({"registradora_fin": [antes[1], reg_fin]} if antes[1] != reg_fin else {}),
+             "pasajeros": [pax_antes, pax],
+             **({"motivo": motivo} if motivo else {})},
+        )
+        db.commit()
+    db.close()
+    return jsonify({"ok": True, "registradora_inicio": reg_inicio,
+                    "registradora_fin": reg_fin, "pasajeros": pax})
+
+
 @app.route("/api/cron/cierre-despacho", methods=["GET", "POST"])
 def cron_cierre_despacho():
     """Consolida (cierra) el despacho del día. Invocado por el cron de Vercel a las 23:59.
@@ -3590,19 +3687,72 @@ def _normalizar_telefono_co(raw):
     return digitos
 
 
-def _green_api_send_file(chat_id, caption, filename, file_bytes):
-    """Envía un archivo por WhatsApp usando Green API sendFileByUpload.
-    Devuelve (ok:bool, detalle:str|dict). Requiere GREEN_API_ID_INSTANCE y GREEN_API_TOKEN."""
+# Green API: el texto que acompaña un archivo (caption) admite máximo 1024
+# caracteres; si se pasa responde HTTP 500. Un mensaje de texto admite 20.000.
+_WA_CAPTION_MAX = 1024
+
+
+def _largo_wa(texto):
+    """Largo como lo cuenta WhatsApp (UTF-16: los emojis cuentan doble)."""
+    return len(texto.encode("utf-16-le")) // 2
+
+
+def _green_api_url(metodo):
+    """URL completa de un método de Green API, o None si faltan credenciales."""
     id_instance = os.environ.get("GREEN_API_ID_INSTANCE", "").strip()
     token       = os.environ.get("GREEN_API_TOKEN", "").strip()
     if not id_instance or not token:
-        return False, "El servidor no tiene configurado Green API (GREEN_API_ID_INSTANCE / GREEN_API_TOKEN)."
+        return None
+    # Cada instancia tiene su host (p.ej. 7107.api.greenapi.com) y se declara en
+    # GREEN_API_HOST. Con el host genérico la subida de archivos falla con HTTP 500.
+    host = os.environ.get("GREEN_API_HOST", "").strip().rstrip("/") or "api.green-api.com"
+    return f"https://{host}/waInstance{id_instance}/{metodo}/{token}"
 
-    # Green API a veces asigna un host personal (p.ej. 7103.api.greenapi.com);
-    # si el usuario lo tiene, lo declara en GREEN_API_HOST. Default: api.green-api.com.
-    host   = os.environ.get("GREEN_API_HOST", "api.green-api.com").strip().rstrip("/")
-    scheme = "https"
-    url    = f"{scheme}://{host}/waInstance{id_instance}/sendFileByUpload/{token}"
+
+def _green_api_post(url, body, content_type):
+    """POST a Green API. Devuelve (ok:bool, detalle:str|dict)."""
+    req = urllib.request.Request(
+        url,
+        data=body,
+        headers={"Content-Type": content_type},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            raw = resp.read().decode("utf-8", errors="replace")
+            try:
+                data = json.loads(raw)
+            except Exception:
+                data = {"raw": raw}
+            return True, data
+    except urllib.error.HTTPError as e:
+        try:
+            detalle = e.read().decode("utf-8", errors="replace")
+        except Exception:
+            detalle = str(e)
+        return False, f"HTTP {e.code}: {detalle[:500]}"
+    except Exception as e:
+        return False, f"No se pudo conectar con Green API: {e}"
+
+
+_GREEN_API_SIN_CONFIG = "El servidor no tiene configurado Green API (GREEN_API_ID_INSTANCE / GREEN_API_TOKEN)."
+
+
+def _green_api_send_text(chat_id, texto):
+    """Envía un mensaje de texto por WhatsApp usando Green API sendMessage."""
+    url = _green_api_url("sendMessage")
+    if not url:
+        return False, _GREEN_API_SIN_CONFIG
+    body = json.dumps({"chatId": f"{chat_id}@c.us", "message": texto}).encode("utf-8")
+    return _green_api_post(url, body, "application/json")
+
+
+def _green_api_send_file(chat_id, caption, filename, file_bytes):
+    """Envía un archivo por WhatsApp usando Green API sendFileByUpload.
+    Devuelve (ok:bool, detalle:str|dict). Requiere GREEN_API_ID_INSTANCE y GREEN_API_TOKEN."""
+    url = _green_api_url("sendFileByUpload")
+    if not url:
+        return False, _GREEN_API_SIN_CONFIG
 
     # Multipart/form-data armado a mano (sin dependencias extra)
     boundary = "----GreenAPIBoundary" + os.urandom(8).hex()
@@ -3625,28 +3775,7 @@ def _green_api_send_file(chat_id, caption, filename, file_bytes):
     parts.append(_b(f"--{boundary}--\r\n"))
     body = b"".join(parts)
 
-    req = urllib.request.Request(
-        url,
-        data=body,
-        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            raw = resp.read().decode("utf-8", errors="replace")
-            try:
-                data = json.loads(raw)
-            except Exception:
-                data = {"raw": raw}
-            return True, data
-    except urllib.error.HTTPError as e:
-        try:
-            detalle = e.read().decode("utf-8", errors="replace")
-        except Exception:
-            detalle = str(e)
-        return False, f"HTTP {e.code}: {detalle[:500]}"
-    except Exception as e:
-        return False, f"No se pudo conectar con Green API: {e}"
+    return _green_api_post(url, body, f"multipart/form-data; boundary={boundary}")
 
 
 @app.route("/api/movilidad/enviar-whatsapp", methods=["POST"])
@@ -3659,11 +3788,14 @@ def enviar_liquidacion_whatsapp():
       - bus_id:          id del bus → propietario derivado del bus (modo 1 bus)
       - propietario_id:  id del propietario → un solo mensaje consolidado
       - mensaje:         texto que va como caption del archivo
+      - caption_corto (opc): línea que acompaña al Excel cuando el mensaje
+                         no cabe como caption (propietarios con muchos buses)
       - filename (opc):  nombre del archivo mostrado en WhatsApp
     """
     bus_id_raw  = request.form.get("bus_id")
     prop_id_raw = request.form.get("propietario_id")
     mensaje     = (request.form.get("mensaje") or "").strip()
+    caption_corto = (request.form.get("caption_corto") or "").strip() or "📎 Excel con el detalle de la liquidación"
     filename    = (request.form.get("filename") or "liquidacion.xlsx").strip()
     up          = request.files.get("file")
 
@@ -3720,9 +3852,19 @@ def enviar_liquidacion_whatsapp():
     if not file_bytes:
         return jsonify({"error": "El archivo Excel está vacío"}), 400
 
-    ok, detalle = _green_api_send_file(tel, mensaje, filename, file_bytes)
-    if not ok:
-        return jsonify({"error": f"No se pudo enviar por WhatsApp. {detalle}"}), 502
+    if _largo_wa(mensaje) <= _WA_CAPTION_MAX:
+        ok, detalle = _green_api_send_file(tel, mensaje, filename, file_bytes)
+        if not ok:
+            return jsonify({"error": f"No se pudo enviar por WhatsApp. {detalle}"}), 502
+    else:
+        # No cabe pegado al archivo: primero el resumen como texto y luego el
+        # Excel con una línea corta, para que lleguen juntos y en ese orden.
+        ok, detalle = _green_api_send_text(tel, mensaje)
+        if not ok:
+            return jsonify({"error": f"No se pudo enviar por WhatsApp. {detalle}"}), 502
+        ok, detalle = _green_api_send_file(tel, caption_corto[:_WA_CAPTION_MAX], filename, file_bytes)
+        if not ok:
+            return jsonify({"error": f"Se envió el resumen pero no el Excel. {detalle}"}), 502
 
     id_mensaje = detalle.get("idMessage") if isinstance(detalle, dict) else None
     return jsonify({
