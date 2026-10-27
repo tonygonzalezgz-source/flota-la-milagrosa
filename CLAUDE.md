@@ -87,9 +87,20 @@ misma API; los permisos salen de `ROLE_VIEWS` → `allowedViews`.
 - Play Store: paquete `net.buscontrol.app` (no se puede cambiar al publicar).
   CI arma el AAB firmado (artefacto `buscontrol-aab`) con la clave de subida de
   los secretos `ANDROID_*`; la clave está en `~/Documents/BusControl-firma-android`
-  del Mac del usuario. Falta: política de privacidad pública, cuenta demo para
-  los revisores, botón "reportar respuesta" en el asistente, y restringir la
-  clave de Maps por paquete + SHA-1 de la firma de Play.
+  del Mac del usuario. Ya listos: política de privacidad pública
+  (`privacidad.html`, ruta `/privacidad`), botón "Reportar" en el asistente
+  (`/api/chat/reportar`, tabla `chat_reportes`, el admin los lee en
+  `/api/chat/reportes`), versión mínima (`/api/app/version` con la variable
+  `APP_VERSION_MINIMA` de Vercel; la app conoce su número por `APP_BUILD`) y
+  cuenta demo para los revisores. Falta: restringir la clave de Maps por paquete
+  + SHA-1 de la firma de Play.
+- **Cuenta demo** (revisores de Google): variables `DEMO_USUARIO` y `DEMO_CLAVE`
+  en Vercel. Su token lleva `demo: true` y `get_db()` le da una base SQLite
+  aparte en el directorio temporal, armada con `api/demo_semilla.py` (empresa,
+  propietario y 2 buses inventados, 60 días relativos a hoy): nunca toca
+  producción. Por eso el dialecto SQL se decide con `_es_pg()` (app.py) y
+  `es_pg()` de los módulos, no con `DATABASE_URL`. Al agregar tablas o pantallas
+  del propietario, revisar que la demo siga funcionando.
 - El aviso de tratamiento de datos (`tratamiento_screen.dart`) nombra a Flota La
   Milagrosa como responsable: con más clientes debe salir del servidor.
 - El chatbot de la web no guarda historial.
