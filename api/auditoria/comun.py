@@ -7,8 +7,10 @@ EMPRESA_POR_DEFECTO = 1
 _deps = {}
 
 
-def configurar(get_db, require_role, database_url):
+def configurar(get_db, require_role, database_url, en_demo=None):
     _deps.update(get_db=get_db, require_role=require_role, database_url=database_url or "")
+    # Cuenta demo: base SQLite aparte aunque producción sea Postgres.
+    _deps["en_demo"] = en_demo or (lambda: False)
 
 
 def db():
@@ -16,7 +18,7 @@ def db():
 
 
 def es_pg():
-    return bool(_deps.get("database_url"))
+    return bool(_deps.get("database_url")) and not _deps.get("en_demo", lambda: False)()
 
 
 def rol(*roles):

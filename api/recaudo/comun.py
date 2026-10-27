@@ -71,10 +71,12 @@ ROLES_HABILITADOS = ("Administrador", "Propietario")
 _deps = {}
 
 
-def configurar(get_db, require_role, database_url, hoy_bogota, sync_pax_movilidad, relevos_por_bus):
+def configurar(get_db, require_role, database_url, hoy_bogota, sync_pax_movilidad, relevos_por_bus, en_demo=None):
     _deps.update(get_db=get_db, require_role=require_role, database_url=database_url or "",
                  hoy_bogota=hoy_bogota, sync_pax_movilidad=sync_pax_movilidad,
                  relevos_por_bus=relevos_por_bus)
+    # Cuenta demo: base SQLite aparte aunque producción sea Postgres.
+    _deps["en_demo"] = en_demo or (lambda: False)
 
 
 def db():
@@ -82,7 +84,7 @@ def db():
 
 
 def es_pg():
-    return bool(_deps.get("database_url"))
+    return bool(_deps.get("database_url")) and not _deps.get("en_demo", lambda: False)()
 
 
 def hoy_bogota():
