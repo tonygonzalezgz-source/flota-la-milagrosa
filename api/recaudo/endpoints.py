@@ -4,7 +4,9 @@ tipos de gasto y la vista del propietario.
 Reglas:
 - El servidor recalcula todo; no confía en el cliente:
     producido  = pasajeros × tarifa
-    neto       = producido − gastos      (lo que el conductor debe entregar)
+    neto       = producido − gastos      (lo que el conductor debe entregar), aproximado a la
+                 mil más cercana: desde $500 sube, por debajo baja (326.900 → 327.000;
+                 326.400 → 326.000). Con relevo, cada conductor por aparte; el del bus es la suma.
     diferencia = recaudado − neto        (negativa = faltante, positiva = sobrante)
 - Pasajeros por conductor = su tramo de registradora (el conductor 1 va de la
   lectura inicial del bus a la del relevo, el último termina en la final).
@@ -70,6 +72,13 @@ def _entero(valor, etiqueta, requerido=True):
 
 def _texto(valor, largo=500):
     return (str(valor or "").strip()[:largo]) or None
+
+
+def aproximar_mil(valor):
+    """Lo que entrega el conductor, a la mil más cercana (pedido del usuario 2026-10-27):
+    desde $500 sube y por debajo baja. Mismo resultado que ROUND(valor; -3) de Excel."""
+    signo = -1 if valor < 0 else 1
+    return signo * ((abs(valor) + 500) // 1000 * 1000)
 
 
 def _ahora():
@@ -351,7 +360,7 @@ def _armar_tramos(conn, conductores_in, reg_inicio, reg_fin, tarifa, gastos):
             raise _Rechazo(f"No hay pasajeros{cual}: la registradora final debe ser mayor que la inicial")
         producido = pasajeros * tarifa
         total_gastos = sum(g["valor"] for g in gastos if g["orden_conductor"] == n)
-        neto = producido - total_gastos
+        neto = aproximar_mil(producido - total_gastos)
         tramos.append({
             "orden": n, "conductor_id": conductor_id, "conductor_nombre": conductor["nombre"],
             "conductor_cedula": conductor.get("cedula"), "ruta_id": ruta_id, "viajes": viajes,
@@ -428,7 +437,7 @@ def liquidar():
     pasajeros = reg_fin - reg_inicio
     producido = sum(t["producido"] for t in tramos)
     total_gastos = sum(g["valor"] for g in gastos)
-    neto = producido - total_gastos
+    neto = sum(t["neto"] for t in tramos)   # cada conductor ya viene aproximado
     recaudado = sum(t["recaudado"] for t in tramos)
     diferencia = recaudado - neto
     uid = getattr(request, "jwt_user_id", None)

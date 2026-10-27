@@ -7,8 +7,8 @@ un propietario con dos vehículos (un bus y un micro), conductores, rutas y
 para que la app siempre muestre la semana y el mes en curso.
 
 Los totales del recaudo siguen las mismas reglas del módulo Recaudo:
-producido = pasajeros × tarifa; neto = producido − gastos; diferencia =
-recaudado − neto.
+producido = pasajeros × tarifa; neto = producido − gastos, aproximado a la mil
+más cercana (desde $500 sube); diferencia = recaudado − neto.
 """
 import random
 from datetime import date, datetime, timedelta, timezone
@@ -134,7 +134,7 @@ def sembrar(conn, hoy_iso, clave_hash, usuario):
             filas, totales = [], dict(producido=0, total_gastos=0, neto=0, recaudado=0, diferencia=0)
             for orden, cond, ini, fi, vj, g in tramos:
                 producido = (fi - ini) * tarifa
-                neto = producido - g
+                neto = (producido - g + 500) // 1000 * 1000   # siempre positivo aquí
                 recaudado = neto - (2_000 if azar.random() < .12 else 0)
                 t = dict(producido=producido, total_gastos=g, neto=neto,
                          recaudado=recaudado, diferencia=recaudado - neto)

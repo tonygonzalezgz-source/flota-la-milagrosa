@@ -1012,6 +1012,10 @@
     renderForm();
   }
 
+  /* Lo que entrega el conductor, a la mil más cercana: desde $500 sube y por debajo baja
+     (326.900 → 327.000; 326.400 → 326.000). Igual que el servidor y que ROUND(x; -3) de Excel. */
+  function aproximarMil(n) { return Math.sign(n) * Math.floor((Math.abs(n) + 500) / 1000) * 1000; }
+
   /* Tramo de cada conductor: el 1 arranca en la lectura inicial del bus, cada relevo
      arranca donde terminó el anterior y el último termina en la lectura final.
      Si ya está guardada, los valores son los que calculó el servidor. */
@@ -1024,7 +1028,7 @@
       const pasajeros = inicio != null && fin != null ? fin - inicio : null;
       const producido = pasajeros != null && pasajeros >= 0 ? pasajeros * tarifa : null;
       const total_gastos = gastosDe(i).reduce((t, g) => t + g.valor, 0);
-      const neto = producido != null ? producido - total_gastos : null;
+      const neto = producido != null ? aproximarMil(producido - total_gastos) : null;
       const t = { registradora_inicio: inicio, registradora_fin: fin, pasajeros, producido, total_gastos, neto,
                   recaudado: c.recaudado, diferencia: neto != null && c.recaudado != null ? c.recaudado - neto : null };
       inicio = fin;
@@ -1660,7 +1664,9 @@
           regIni: f.registradora_inicio, regFin: f.registradora_fin, pax: f.pasajeros, tarifa: f.tarifa,
           prod: { formula: `${L('pax')}${r}*${L('tarifa')}${r}`, result: f.producido },
           gastos: tipos.length ? { formula: `SUM(${L('g0')}${r}:${L('g' + (tipos.length - 1))}${r})`, result: f.total_gastos } : 0,
-          neto: { formula: `${L('prod')}${r}-${L('gastos')}${r}`, result: f.neto },
+          // Aproximado a la mil; las liquidaciones de antes de la aproximación quedan con su valor exacto.
+          neto: f.neto === aproximarMil(f.producido - f.total_gastos)
+            ? { formula: `ROUND(${L('prod')}${r}-${L('gastos')}${r},-3)`, result: f.neto } : f.neto,
           recaudo: f.recaudado,
           dif: { formula: `${L('recaudo')}${r}-${L('neto')}${r}`, result: f.diferencia },
           det: f.gastos.filter(x => x.observacion).map(x => `${x.tipo}: ${x.observacion}`).join(' · '),
@@ -1690,7 +1696,8 @@
     ['Cómo se calcula:',
      '• Fecha de recaudo = día y hora en que se hizo la liquidación (cuando el conductor entregó la plata).',
      '• Fecha de la tarjeta = día que trabajó el bus (el que se elige en Recaudo diario al liquidar).',
-     '• Producido = pasajeros × tarifa.   • Por entregar = producido − total gastos.   • Diferencia = recaudo − por entregar (negativa = faltante).',
+     '• Producido = pasajeros × tarifa.   • Diferencia = recaudo − por entregar (negativa = faltante).',
+     '• Por entregar = producido − total gastos, aproximado a la mil más cercana: desde $500 sube y por debajo baja (con relevo, cada conductor por aparte).',
      '• Con relevo, cada conductor sale en su propio renglón (Cond. N° 1, 2, 3) con su tramo de registradora.',
      '• El total general suma todos los vehículos del informe. El total de cada vehículo está en la hoja "Resumen por vehículo".',
      '• Solo salen las columnas de los gastos que tuvieron valor en el periodo.',
