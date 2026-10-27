@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <link rel="icon" type="image/png" href="favicon.png" />
+  <link rel="apple-touch-icon" href="favicon.png" />
+  <script>
+    (function() {
+      if (window.location === window.parent.location) {
+        const token = localStorage.getItem('authToken');
+        if (!token) { window.location.href = '/index.html'; }
+      }
+    })();
+  </script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>La Milagrosa — Pagos diarios</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg:#f4f4f6; --white:#fff; --border:#e5e5eb; --border2:#d0d0d8;
+      --txt:#111; --txt2:#555; --txt3:#888; --primary:#6366f1; --green:#22c55e;
+      --red:#ef4444; --yellow:#f59e0b; --radius:12px; --radius-s:8px;
+      --shadow:0 1px 4px rgba(0,0,0,.07);
+    }
+    body {
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+      background:var(--bg); color:var(--txt); padding:24px; font-size:14px;
+    }
+    .page-header { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
+    .page-title { font-size:22px; font-weight:800; letter-spacing:-.4px; }
+    .page-sub   { font-size:13px; color:var(--txt2); margin-top:3px; max-width:700px; line-height:1.5; }
+    .chips { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:8px; }
+    .chip-papel { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; color:var(--txt3); }
+    .chip-papel select { padding:3px 6px; border:1px solid var(--border2); border-radius:8px; font-family:inherit;
+      font-size:12.5px; background:var(--white); color:var(--txt); }
+
+    .fecha-nav { display:flex; align-items:center; gap:6px; }
+    .fecha-nav input[type=date] { padding:8px 10px; border:1.5px solid var(--border2); border-radius:var(--radius-s);
+      font-family:inherit; font-size:14px; font-weight:700; background:var(--white); color:var(--txt); }
+    .nav-btn { width:36px; height:36px; display:inline-flex; align-items:center; justify-content:center;
+      border:1px solid var(--border2); background:var(--white); border-radius:var(--radius-s); cursor:pointer; color:var(--txt2); }
+    .nav-btn:hover { border-color:var(--primary); color:var(--primary); }
+    .nav-btn:disabled { opacity:.35; cursor:default; }
+
+    .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:10px; margin-bottom:16px; }
+    .kpi { background:var(--white); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); padding:12px 14px; min-width:0; }
+    .kpi-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:var(--txt3); }
+    .kpi-val { font-size:22px; font-weight:800; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .kpi-val.ok { color:#16a34a; } .kpi-val.bad { color:#dc2626; }
+    .kpi-sub { font-size:11px; color:var(--txt3); margin-top:2px; }
+
+    .layout { display:grid; grid-template-columns:minmax(300px,400px) minmax(0,1fr); gap:16px; align-items:start; }
+    .card { background:var(--white); border:1px solid var(--border); border-radius:var(--radius);
+      box-shadow:var(--shadow); padding:16px 18px; min-width:0; }
+    .card-title { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;
+      font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:.5px; color:var(--txt3); margin-bottom:12px; }
+
+    .campo { margin-bottom:12px; }
+    .campo label { display:block; font-size:11.5px; font-weight:700; color:var(--txt2); margin-bottom:5px; }
+    .campo input, .campo select, .campo textarea { width:100%; padding:9px 10px; border:1.5px solid var(--border2); border-radius:var(--radius-s);
+      font-family:inherit; font-size:15px; background:var(--white); color:var(--txt); }
+    .campo textarea { min-height:60px; resize:vertical; }
+    .campo input:focus, .campo select:focus, .campo textarea:focus { outline:none; border-color:var(--primary); }
+    .campo .err { border-color:var(--red) !important; background:#fff5f5 !important; }
+    .campo input.valor { font-size:20px; font-weight:800; text-align:right; }
+    .req { color:var(--red); margin-left:2px; }
+    .ayuda { font-size:12px; color:var(--txt2); margin-top:6px; line-height:1.5; }
+    .ayuda.aviso { color:#b45309; font-weight:600; }
+    .link { border:none; background:none; color:var(--primary); font:inherit; font-size:12.5px; font-weight:700; cursor:pointer; padding:0; }
+    .bloqueado { background:#f6f6fa; border:1px dashed var(--border2); border-radius:10px; padding:14px; font-size:13px; color:var(--txt2); line-height:1.6; }
+
+    .pill { display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:3px 9px;
+      font-size:11px; font-weight:700; white-space:nowrap; }
+    .pill.in   { background:rgba(34,197,94,.12); color:#16a34a; }
+    .pill.out  { background:rgba(239,68,68,.12); color:#dc2626; }
+    .pill.off  { background:rgba(136,136,136,.15); color:var(--txt3); }
+    .pill.pend { background:rgba(99,102,241,.12); color:#4f46e5; }
+
+    /* Buscador con lista (bus por número o placa; tercero por nombre o documento) */
+    .combo { position:relative; }
+    .combo-drop { display:none; position:absolute; left:0; right:0; top:calc(100% + 4px); z-index:50; background:var(--white);
+      border:1px solid var(--border2); border-radius:var(--radius-s); box-shadow:0 8px 24px rgba(0,0,0,.12);
+      max-height:240px; overflow:auto; }
+    .combo.open .combo-drop { display:block; }
+    .combo-opt { padding:8px 10px; font-size:13.5px; cursor:pointer; }
+    .combo-opt:hover, .combo-opt.act { background:#eef2ff; }
+    .combo-opt small { color:var(--txt3); margin-left:6px; }
+    .combo-vacio { padding:10px; font-size:12.5px; color:var(--txt3); }
+
+    .filtros { display:flex; gap:6px; flex-wrap:wrap; }
+    .filtro { border:1px solid var(--border2); background:var(--white); border-radius:999px; padding:4px 10px;
+      font-family:inherit; font-size:12px; font-weight:700; color:var(--txt2); cursor:pointer; text-transform:none; letter-spacing:0; }
+    .filtro.on { background:var(--txt); border-color:var(--txt); color:#fff; }
+    .tabla-wrap { overflow-x:auto; border:1px solid var(--border); border-radius:10px; }
+    table { width:100%; border-collapse:collapse; }
+    th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.4px; color:var(--txt3);
+      padding:8px 10px; border-bottom:1px solid var(--border); white-space:nowrap; background:#fafafc; }
+    td { padding:9px 10px; border-bottom:1px solid var(--border); font-size:13px; vertical-align:middle; }
+    tr:last-child td { border-bottom:none; }
+    td.num, th.num { text-align:right; white-space:nowrap; }
+    td.nw { white-space:nowrap; }
+    tr.total td { font-weight:800; background:#fafafc; }
+    tr.anulado td { color:var(--txt3); }
+    tr.anulado td.num { text-decoration:line-through; }
+    .sub { font-size:11.5px; color:var(--txt3); }
+    .c-in { color:#15803d; font-weight:700; } .c-out { color:#b91c1c; font-weight:700; }
+    .btns { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+    .vacio { text-align:center; color:var(--txt3); padding:30px 10px; font-size:13.5px; line-height:1.6; }
+
+    .btn { border:1px solid var(--border2); background:var(--white); color:var(--txt); border-radius:var(--radius-s);
+      padding:8px 12px; font-family:inherit; font-size:12.5px; font-weight:700; cursor:pointer; white-space:nowrap; }
+    .btn:hover { border-color:var(--primary); color:var(--primary); }
+    .btn.sm { padding:5px 9px; font-size:12px; }
+    .btn.danger:hover { border-color:var(--red); color:var(--red); }
+    .btn-primary { border:none; background:var(--primary); color:#fff; border-radius:var(--radius-s); padding:10px 18px;
+      font-family:inherit; font-size:14px; font-weight:700; cursor:pointer; white-space:nowrap; }
+    .btn-primary.ancho { width:100%; padding:12px; font-size:15px; }
+    .btn-primary:disabled, .btn:disabled { opacity:.5; cursor:default; }
+    .btn-danger { border:none; background:#dc2626; color:#fff; border-radius:var(--radius-s); padding:10px 18px;
+      font-family:inherit; font-size:14px; font-weight:700; cursor:pointer; }
+    .btn-danger:disabled { opacity:.5; cursor:default; }
+
+    .modal-bg { position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center;
+      justify-content:center; z-index:1000; padding:16px; }
+    .modal-bg.hidden { display:none; }
+    .modal { background:var(--white); border-radius:14px; width:100%; max-width:440px; max-height:92vh; overflow:auto;
+      padding:22px; box-shadow:0 12px 40px rgba(0,0,0,.25); }
+    .modal h3 { font-size:17px; font-weight:800; margin-bottom:4px; }
+    .modal .modal-sub { font-size:12.5px; color:var(--txt2); margin-bottom:14px; line-height:1.5; }
+    .modal-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:16px; flex-wrap:wrap; }
+    .resumen { border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+    .resumen div { display:flex; justify-content:space-between; gap:12px; padding:8px 12px; font-size:13.5px; }
+    .resumen div:nth-child(even) { background:#f8f8fb; }
+    .resumen span:first-child { color:var(--txt2); white-space:nowrap; }
+    .resumen span:last-child { font-weight:800; text-align:right; }
+    textarea.motivo { width:100%; min-height:84px; padding:9px 10px; border:1.5px solid var(--border2); border-radius:var(--radius-s);
+      font-family:inherit; font-size:15px; resize:vertical; }
+    .dos { display:grid; grid-template-columns:minmax(0,2fr) minmax(0,1fr); gap:10px; }
+
+    .toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#111; color:#fff;
+      border-radius:var(--radius-s); padding:11px 20px; font-size:13px; font-weight:600; z-index:2000;
+      box-shadow:0 4px 16px rgba(0,0,0,.25); transition:opacity .25s; max-width:90vw; }
+    .toast.error { background:#b91c1c; }
+    .toast.hidden { opacity:0; pointer-events:none; }
+
+    /* Móvil: formulario arriba y la lista en tarjetas; sin tapar el menú de la shell */
+    @media (max-width:760px) {
+      body { padding:16px; padding-top:64px; }
+      input, select, textarea, .fecha-nav input[type=date] { font-size:16px !important; }   /* evita el auto-zoom de iOS */
+      .kpis { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .kpi-val { font-size:18px; }
+      .layout { grid-template-columns:minmax(0,1fr); }
+      .tabla-wrap { border:none; overflow:visible; }
+      table.resp thead { display:none; }
+      table.resp, table.resp tbody, table.resp tr, table.resp td { display:block; width:100%; }
+      table.resp tr { border:1px solid var(--border); border-radius:10px; margin-bottom:8px; padding:6px 10px; background:var(--white); }
+      table.resp td { border:none; padding:5px 0; display:flex; justify-content:space-between; gap:12px; text-align:right; }
+      table.resp td::before { content:attr(data-label); font-size:11px; font-weight:700; text-transform:uppercase; color:var(--txt3); text-align:left; }
+      table.resp td.num { white-space:normal; }
+      table.resp tr.total { background:#fafafc; }
+      .btns { justify-content:flex-start; }
+      .modal-bg { align-items:flex-start; padding-top:72px; overflow:auto; }
+    }
+
+    /* Recibo: fuera de la pantalla (así se puede medir) y solo él al imprimir.
+       Impresora de matriz de punto con rollo de 76 mm (imprime unos 63 mm del centro): columna
+       angosta y centrada en Arial, igual que la tirilla de la liquidación. */
+    #tirilla { position:absolute; left:-10000px; top:0; background:#fff; color:#000; }
+    #tirilla .copia { font-family:Arial, Helvetica, sans-serif; font-size:14px; line-height:1.25; padding:2mm 0 3mm; }
+    #tirilla.papel-76 .copia { width:56mm; margin:0 10mm; }
+    #tirilla.papel-58 .copia { width:44mm; margin:0 7mm; font-size:12px; }
+    .t-centro { text-align:center; }
+    .t-titulo { font-weight:700; }
+    .t-grande { font-weight:700; font-size:1.15em; }
+    .t-anulada { font-weight:700; font-size:1.15em; margin:2px 0; }
+    .t-linea { border-top:1px dashed #000; margin:3px 0; }
+    .t-sec { text-align:center; font-weight:700; margin:3px 0 1px; }
+    .t-fila { display:flex; justify-content:space-between; gap:6px; }
+    .t-fila span:first-child { white-space:nowrap; }
+    .t-fila span:last-child { text-align:right; overflow-wrap:anywhere; }
+    .t-fila.fuerte { font-weight:700; }
+    .t-fila.grande { font-weight:700; font-size:1.25em; }
+    .t-nota { font-size:.85em; }
+    .t-firma { margin-top:24px; border-top:1px solid #000; text-align:center; font-size:.85em; padding-top:1px; }
+    #tirilla .fuerte { font-weight:800; }
+    @media print {
+      body { padding:0 !important; background:#fff !important; }
+      body > *:not(#tirilla) { display:none !important; }
+      #tirilla { position:static; }
+    }
+  </style>
+  <style id="estiloPagina"></style>
+</head>
+<body>
+  <div class="page-header">
+    <div>
+      <div class="page-title">Pagos diarios</div>
+      <div class="page-sub">Otras entradas y salidas de la caja: pago de admon, locales, servicios, parqueos, abonos, anticipos, reembolsos…
+        Entran al cierre de caja con lo recaudado de los buses y al archivo plano, cada una con su cuenta y el NIT de a quién va la factura.</div>
+      <div class="chips">
+        <label class="chip-papel" title="Ancho del papel de la impresora de tirillas en este computador">Recibo
+          <select id="papel" onchange="cambiarPapel(this.value)"><option value="76">76 mm</option><option value="58">58 mm</option></select>
+        </label>
+      </div>
+    </div>
+    <div class="fecha-nav">
+      <button class="nav-btn" onclick="moverDia(-1)" title="Día anterior">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <input type="date" id="fecha" onchange="cambiarFecha(this.value)" />
+      <button class="nav-btn" id="btnSig" onclick="moverDia(1)" title="Día siguiente">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi"><div class="kpi-label">Entradas</div><div class="kpi-val ok" id="kIn">—</div><div class="kpi-sub" id="kInN"></div></div>
+    <div class="kpi"><div class="kpi-label">Salidas</div><div class="kpi-val bad" id="kOut">—</div><div class="kpi-sub" id="kOutN"></div></div>
+    <div class="kpi"><div class="kpi-label">Neto del día</div><div class="kpi-val" id="kNeto">—</div><div class="kpi-sub">entradas − salidas</div></div>
+  </div>
+
+  <div class="layout">
+    <div class="card" id="formCard"><div class="vacio">Cargando…</div></div>
+    <div class="card">
+      <div class="card-title"><span id="tituloLista">Pagos del día</span><div class="filtros" id="filtros"></div></div>
+      <div id="lista"><div class="vacio">Cargando…</div></div>
+    </div>
+  </div>
+
+  <!-- Modal: confirmar (un pago guardado no se modifica) -->
+  <div class="modal-bg hidden" id="modalConfirmar">
+    <div class="modal">
+      <h3 id="confTitulo">Confirmar pago</h3>
+      <div class="modal-sub">Revisa los valores. <b>Un pago guardado no se puede modificar</b>; solo el administrador puede anularlo. Al guardar se imprime el recibo.</div>
+      <div class="resumen" id="confResumen"></div>
+      <div class="modal-actions">
+        <button class="btn" onclick="cerrarModal('modalConfirmar')">Revisar</button>
+        <button class="btn-primary" id="btnConfirmar" onclick="confirmarPago()">Confirmar y guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: anular (solo Administrador) -->
+  <div class="modal-bg hidden" id="modalAnular">
+    <div class="modal">
+      <h3>Anular pago</h3>
+      <div class="modal-sub" id="anularSub"></div>
+      <div class="campo"><label for="anularMotivo">Motivo de la anulación</label>
+        <textarea class="motivo" id="anularMotivo" maxlength="500" placeholder="Ej: se digitó mal el valor, era $300.000"></textarea></div>
+      <div class="modal-actions">
+        <button class="btn" onclick="cerrarModal('modalAnular')">Cancelar</button>
+        <button class="btn-danger" id="btnAnular" onclick="confirmarAnular()">Anular pago</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: nuevo tercero sin salir del formulario -->
+  <div class="modal-bg hidden" id="modalTercero">
+    <div class="modal">
+      <h3>Nuevo tercero</h3>
+      <div class="modal-sub">Queda en Catálogo › Recaudo › Terceros. El dígito de verificación del NIT se calcula solo.</div>
+      <div class="campo"><label for="tNombre">Nombre o razón social<span class="req">*</span></label>
+        <input id="tNombre" maxlength="120" style="text-transform:uppercase" /></div>
+      <div class="dos">
+        <div class="campo"><label for="tTipo">Tipo de documento<span class="req">*</span></label><select id="tTipo" onchange="dvTercero()"></select></div>
+        <div class="campo" id="tCampoDv"><label for="tDv">DV</label><input id="tDv" readonly tabindex="-1" style="background:#f6f6fa;font-weight:700" /></div>
+      </div>
+      <div class="campo"><label for="tDoc">Número<span class="req">*</span></label><input id="tDoc" maxlength="20" placeholder="Sin puntos" oninput="dvTercero()" /></div>
+      <div class="campo"><label for="tTel">Teléfono</label><input id="tTel" inputmode="numeric" maxlength="15" placeholder="Opcional" /></div>
+      <div class="modal-actions">
+        <button class="btn" onclick="cerrarModal('modalTercero')">Cancelar</button>
+        <button class="btn-primary" id="btnTercero" onclick="guardarTercero()">Guardar tercero</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast hidden" id="toast"></div>
+
+  <!-- Recibo que se imprime al guardar (una copia, para quien paga) -->
+  <div id="tirilla" aria-hidden="true"></div>
+
+<script>
+  const API = (window.location.port === '3030') ? 'http://localhost:8001' : window.location.origin;
+  const CU = (() => { try { return JSON.parse(localStorage.getItem('currentUser') || '{}'); } catch (_) { return {}; } })();
+  const ES_ADMIN = CU.rol === 'Administrador';
+  const TIPO = { A: 'Bus', B: 'Micro' };
+  const $ = id => document.getElementById(id);
+
+  async function apiFetch(path, opts = {}) {
+    const token = localStorage.getItem('authToken');
+    const res = await fetch(API + path, {
+      ...opts,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        ...(opts.headers || {}),
+      },
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error || 'Error del servidor');
+    return json;
+  }
+
+  /* Fecha calendario en Colombia (no UTC: toISOString corre el día después de las 7pm) */
+  function hoyBogota() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date()); }
+  function shiftIso(iso, delta) {
+    const d = new Date(iso + 'T12:00:00Z');
+    d.setUTCDate(d.getUTCDate() + delta);
+    return d.toISOString().slice(0, 10);
+  }
+  function esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+  }
+  function fmtNum(n)   { return Number(n).toLocaleString('es-CO'); }
+  function fmtMoney(n) { return (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString('es-CO'); }
+  function leerEntero(v) {
+    const limpio = String(v ?? '').replace(/\D/g, '');
+    return limpio === '' ? null : parseInt(limpio, 10);
+  }
+  function formatearDinero(inp) {
+    const n = leerEntero(inp.value);
+    inp.value = n == null ? '' : fmtNum(n);
+  }
+  function fmtDia(iso) {
+    return new Date(iso + 'T12:00:00Z').toLocaleDateString('es-CO', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long' });
+  }
+  /* 'DD/MM/AAAA HH:MM' en hora Bogotá */
+  function fmtFechaHora(d) {
+    return new Date(d).toLocaleString('es-CO', { timeZone: 'America/Bogota', day: '2-digit', month: '2-digit',
+      year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).replace(',', '');
+  }
+  function fmtHoraCorta(d) {
+    return new Date(d).toLocaleTimeString('es-CO', { timeZone: 'America/Bogota', hour: 'numeric', minute: '2-digit' });
+  }
+  const numPago = id => 'N° ' + String(id).padStart(6, '0');
+  /* '900123456-7' para NIT; el número solo para los demás */
+  const docConDv = (doc, dv) => doc ? (dv ? `${doc}-${dv}` : doc) : '';
+  /* Dígito de verificación del NIT (DIAN, módulo 11). El servidor lo vuelve a calcular. */
+  function dvNit(nit) {
+    const pesos = [3, 7, 13, 17, 19, 23, 29, 37, 41, 43, 47, 53, 59, 67, 71];
+    const d = String(nit || '').replace(/\D/g, '');
+    if (!d) return '';
+    const r = [...d].reverse().reduce((t, x, i) => t + Number(x) * pesos[i], 0) % 11;
+    return String(r < 2 ? r : 11 - r);
+  }
+
+  /* ── Estado ── */
+  let D = null;            // respuesta de /api/recaudo/pagos
+  let fecha = hoyBogota();
+  let filtro = 'todos';
+  let dirty = false;
+  let pagoAAnular = null;
+
+  /* Ancho del papel del recibo: el mismo del computador para la tirilla de la liquidación */
+  const PAPEL_KEY = 'recaudo.papelTirilla76';
+  let papel = (() => { try { return localStorage.getItem(PAPEL_KEY) === '58' ? '58' : '76'; } catch (_) { return '76'; } })();
+  function cambiarPapel(v) {
+    papel = v === '58' ? '58' : '76';
+    try { localStorage.setItem(PAPEL_KEY, papel); } catch (_) {}
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const inp = $('fecha');
+    inp.value = fecha;
+    inp.max = hoyBogota();
+    $('papel').value = papel;
+    cargar();
+  });
+  window.addEventListener('message', e => { if (e.data?.type === 'VIEW_SHOWN' && !dirty) cargar(); });
+  window.addEventListener('beforeunload', e => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
+  ['input', 'change'].forEach(tipo => document.addEventListener(tipo, e => e.target.classList?.remove('err')));
+
+  async function cargar() {
+    try {
+      D = await apiFetch(`/api/recaudo/pagos?fecha=${fecha}`);
+    } catch (e) {
+      $('lista').innerHTML = `<div class="vacio">${esc(e.message)}</div>`;
+      $('formCard').innerHTML = `<div class="vacio">${esc(e.message)}</div>`;
+      return;
+    }
+    $('fecha').max = D.hoy;
+    $('btnSig').disabled = fecha >= D.hoy;
+    renderKpis();
+    renderLista();
+    if (!dirty) renderForm();
+  }
+  function cambiarFecha(v) {
+    if (!v || v === fecha) return;
+    if (dirty && !confirm('Hay un pago sin guardar. ¿Descartarlo?')) { $('fecha').value = fecha; return; }
+    if (v > hoyBogota()) v = hoyBogota();
+    fecha = v; dirty = false;
+    $('fecha').value = fecha;
+    cargar();
+  }
+  function moverDia(delta) { cambiarFecha(shiftIso(fecha, delta)); }
+
+  /* ── Helpers de datos ── */
+  const concepto = id => D.conceptos.find(c => c.id === Number(id));
+  const busPorId = id => D.buses.find(b => b.id === id);
+  const terceroPorId = id => D.terceros.find(t => t.id === id);
+  const etiquetaBus = b => `${TIPO[b.grupo] || 'Bus'} ${b.numero}${b.placa ? ' · ' + b.placa : ''}`;
+  const etiquetaTercero = t => `${t.nombre} · ${t.tipo_documento} ${docConDv(t.documento, t.dv)}`;
+  const entra = c => c && c.signo === 2;
+  const pideBus = c => c && (c.tercero === 'PROPIETARIO' || c.referencia === 'VEHICULO');
+  /* "vehículo 12 · NOMBRE" / "NOMBRE · NIT 900123456-7" de un pago guardado */
+  function quienPago(p) {
+    const partes = [];
+    if (p.bus_numero != null) partes.push(`Vehículo ${p.bus_numero}${p.bus_placa ? ' · ' + p.bus_placa : ''}`);
+    if (p.tercero_nombre) partes.push(p.tercero_nombre);
+    return partes.join(' — ');
+  }
+
+  /* ── KPIs y lista del día ── */
+  function renderKpis() {
+    const vig = D.pagos.filter(p => !p.anulado_at);
+    const nIn = vig.filter(p => p.signo === 2).length, nOut = vig.filter(p => p.signo === 1).length;
+    $('kIn').textContent = fmtMoney(D.totales.ingresos);
+    $('kInN').textContent = `${nIn} ${nIn === 1 ? 'pago' : 'pagos'}`;
+    $('kOut').textContent = fmtMoney(D.totales.egresos);
+    $('kOutN').textContent = `${nOut} ${nOut === 1 ? 'salida' : 'salidas'}`;
+    $('kNeto').textContent = fmtMoney(D.totales.neto);
+    $('kNeto').className = 'kpi-val ' + (D.totales.neto < 0 ? 'bad' : '');
+  }
+
+  function renderLista() {
+    $('tituloLista').textContent = fecha === D.hoy ? 'Pagos de hoy' : 'Pagos del ' + fmtDia(fecha);
+    const n = k => D.pagos.filter(p => k === 'todos' || (k === 'in') === (p.signo === 2)).length;
+    $('filtros').innerHTML = [['todos', 'Todos'], ['in', 'Entradas'], ['out', 'Salidas']].map(([k, l]) =>
+      `<button class="filtro ${filtro === k ? 'on' : ''}" onclick="filtro='${k}'; renderLista()">${l} <span style="opacity:.6">${n(k)}</span></button>`).join('');
+    const lista = D.pagos.filter(p => filtro === 'todos' || (filtro === 'in') === (p.signo === 2));
+    if (!lista.length) {
+      $('lista').innerHTML = `<div class="vacio">${D.pagos.length ? 'No hay pagos con este filtro.' : 'No hay pagos registrados este día.'}</div>`;
+      return;
+    }
+    const estado = p => p.anulado_at
+      ? `<span class="pill off" title="${esc(p.motivo_anulacion || '')}">Anulado</span>`
+      : p.cierre_id ? `<span class="pill off">Caja ${numPago(p.cierre_id)}</span>` : '<span class="pill pend">En caja</span>';
+    const vig = lista.filter(p => !p.anulado_at);
+    const suma = s => vig.filter(p => p.signo === s).reduce((t, p) => t + p.valor, 0);
+    $('lista').innerHTML = `<div class="tabla-wrap"><table class="resp">
+      <thead><tr><th>Hora</th><th>N°</th><th>Concepto</th><th>Vehículo / tercero</th><th class="num">Entrada</th><th class="num">Salida</th>
+        ${ES_ADMIN ? '<th>Registró</th>' : ''}<th>Estado</th><th></th></tr></thead>
+      <tbody>${lista.map(p => `<tr class="${p.anulado_at ? 'anulado' : ''}">
+        <td data-label="Hora" class="nw">${fmtHoraCorta(p.created_at)}</td>
+        <td data-label="N°" class="nw">${numPago(p.id)}</td>
+        <td data-label="Concepto"><b>${esc(p.concepto_nombre)}</b>${p.observacion ? `<div class="sub">${esc(p.observacion)}</div>` : ''}</td>
+        <td data-label="Vehículo / tercero">${esc(quienPago(p)) || '<span class="sub">—</span>'}</td>
+        <td data-label="Entrada" class="num ${p.signo === 2 ? 'c-in' : ''}">${p.signo === 2 ? fmtMoney(p.valor) : ''}</td>
+        <td data-label="Salida" class="num ${p.signo === 1 ? 'c-out' : ''}">${p.signo === 1 ? fmtMoney(p.valor) : ''}</td>
+        ${ES_ADMIN ? `<td data-label="Registró">${esc(p.usuario_nombre || '')}</td>` : ''}
+        <td data-label="Estado">${estado(p)}</td>
+        <td data-label=""><div class="btns">
+          <button class="btn sm" onclick="imprimirRecibo(${p.id}, true)">Reimprimir</button>
+          ${ES_ADMIN && !p.anulado_at && !p.cierre_id ? `<button class="btn sm danger" onclick="abrirAnular(${p.id})">Anular</button>` : ''}
+        </div></td>
+      </tr>`).join('')}
+      <tr class="total"><td data-label="">Total</td><td></td><td></td><td></td>
+        <td data-label="Entradas" class="num c-in">${fmtMoney(suma(2))}</td>
+        <td data-label="Salidas" class="num c-out">${fmtMoney(suma(1))}</td>
+        ${ES_ADMIN ? '<td></td>' : ''}<td></td><td></td></tr>
+      </tbody></table></div>`;
+  }
+
+  /* ── Formulario (solo el día de hoy: la fecha del pago la pone el servidor) ── */
+  function renderForm() {
+    if (fecha !== D.hoy) {
+      $('formCard').innerHTML = `<div class="card-title"><span>Registrar pago</span></div>
+        <div class="bloqueado">Los pagos se registran con la fecha de hoy. Este día solo se puede consultar.<br>
+          <button class="link" onclick="cambiarFecha('${D.hoy}')">Ir a hoy →</button></div>`;
+      return;
+    }
+    if (!D.conceptos.length) {
+      $('formCard').innerHTML = `<div class="card-title"><span>Registrar pago</span></div>
+        <div class="bloqueado">No hay conceptos activos para pagos. El administrador los crea en Catálogo › Recaudo › Conceptos de recaudo.</div>`;
+      return;
+    }
+    const opciones = s => D.conceptos.filter(c => c.signo === s)
+      .map(c => `<option value="${c.id}">${esc(c.nombre)}</option>`).join('');
+    $('formCard').innerHTML = `<div class="card-title"><span>Registrar pago</span></div>
+      <div class="campo"><label for="fConcepto">Concepto<span class="req">*</span></label>
+        <select id="fConcepto" onchange="cambiarConcepto()">
+          <option value="">— Elige el concepto —</option>
+          <optgroup label="Entradas a caja">${opciones(2)}</optgroup>
+          <optgroup label="Salidas de caja">${opciones(1)}</optgroup>
+        </select>
+        <div class="ayuda" id="conceptoInfo"></div></div>
+      <div id="campoQuien"></div>
+      <div class="campo"><label for="fValor">Valor<span class="req">*</span></label>
+        <input id="fValor" class="valor" inputmode="numeric" placeholder="$0" oninput="formatearDinero(this); dirty = true" /></div>
+      <div class="campo"><label for="fObs" id="lblObs">Observación <span class="sub">(opcional)</span></label>
+        <textarea id="fObs" maxlength="300" placeholder="Ej: arriendo local 3, octubre" oninput="dirty = true"></textarea></div>
+      <button class="btn-primary ancho" onclick="registrar()">Registrar pago</button>`;
+    COMBOS.bus.id = null; COMBOS.ter.id = null;
+  }
+
+  function cambiarConcepto() {
+    dirty = true;
+    const c = concepto($('fConcepto').value);
+    COMBOS.bus.id = null; COMBOS.ter.id = null;
+    $('conceptoInfo').innerHTML = c
+      ? `<span class="pill ${entra(c) ? 'in' : 'out'}">${entra(c) ? 'Entra a la caja' : 'Sale de la caja'}</span>
+         <span class="sub">Cuenta ${esc(c.cuenta)}${c.descripcion ? ' · ' + esc(c.descripcion) : ''}</span>`
+      : '';
+    let html = '';
+    if (pideBus(c)) {
+      html += `<div class="campo"><label for="busTxt">Vehículo<span class="req">*</span></label>
+        <div class="combo" id="busCombo">
+          <input id="busTxt" placeholder="Escribe el número o la placa" autocomplete="off"
+                 onfocus="comboAbrir('bus')" oninput="comboFiltrar('bus')" onkeydown="comboTecla(event, 'bus')" onblur="comboCerrar('bus')" />
+          <div class="combo-drop" id="busDrop"></div>
+        </div><div class="ayuda" id="busInfo"></div></div>`;
+    }
+    if (c && c.tercero === 'PAGADOR') {
+      html += `<div class="campo"><label for="terTxt">${entra(c) ? 'Quién paga' : 'A quién se le paga'}<span class="req">*</span></label>
+        <div class="combo" id="terCombo">
+          <input id="terTxt" placeholder="Escribe el nombre o el documento" autocomplete="off"
+                 onfocus="comboAbrir('ter')" oninput="comboFiltrar('ter')" onkeydown="comboTecla(event, 'ter')" onblur="comboCerrar('ter')" />
+          <div class="combo-drop" id="terDrop"></div>
+        </div>
+        <div class="ayuda"><button class="link" onclick="abrirTercero()">+ Nuevo tercero</button></div></div>`;
+    }
+    if (c && c.tercero === 'FIJO') {
+      html += `<div class="campo"><div class="ayuda">Va a nombre del NIT fijo del concepto: <b>${esc(c.nit_fijo || '')}</b></div></div>`;
+    }
+    $('campoQuien').innerHTML = html;
+    const ninguno = c && c.tercero === 'NINGUNO';
+    $('lblObs').innerHTML = ninguno ? 'Qué se pagó<span class="req">*</span>' : 'Observación <span class="sub">(opcional)</span>';
+  }
+
+  /* ── Buscadores: bus por número o placa, tercero por nombre o documento ──
+     Al salir del campo con un número de bus o un documento exacto, queda elegido. */
+  const COMBOS = {
+    bus: {
+      id: null, activo: -1,
+      lista(t) {
+        const todos = [...D.buses].sort((a, b) => String(a.numero).localeCompare(String(b.numero), 'es', { numeric: true }));
+        if (!t) return todos;
+        const rango = b => {
+          const n = String(b.numero).toLowerCase(), p = String(b.placa || '').toLowerCase();
+          return n === t || p === t ? 0 : n.startsWith(t) ? 1 : p.includes(t) ? 2 : -1;
+        };
+        return todos.filter(b => rango(b) >= 0).sort((a, b) => rango(a) - rango(b));
+      },
+      html: b => `${esc(etiquetaBus(b))}${b.tp_propietario_nombre ? `<small>${esc(b.tp_propietario_nombre)}</small>` : ''}`,
+      texto: b => etiquetaBus(b),
+      buscar: id => busPorId(id),
+      exacto: t => D.buses.find(b => String(b.numero).toLowerCase() === t || String(b.placa || '').toLowerCase() === t),
+      vacio: 'No hay un vehículo con ese número o placa',
+      alElegir() {
+        const b = busPorId(COMBOS.bus.id), info = $('busInfo');
+        if (!info) return;
+        if (!b) { info.innerHTML = ''; return; }
+        const c = concepto($('fConcepto').value);
+        if (c && c.tercero !== 'PROPIETARIO') { info.innerHTML = ''; return; }
+        info.className = 'ayuda' + (b.tp_propietario_documento ? '' : ' aviso');
+        info.innerHTML = b.tp_propietario_documento
+          ? `Propietario (tarjeta de propiedad): <b>${esc(b.tp_propietario_nombre || '')}</b> · Doc. ${esc(b.tp_propietario_documento)}`
+          : 'Este bus no tiene el documento del propietario. Se puede registrar, pero complétalo en Catálogo › Buses antes del archivo plano.';
+      },
+    },
+    ter: {
+      id: null, activo: -1,
+      lista(t) {
+        if (!t) return D.terceros;
+        const d = t.replace(/\D/g, '');
+        return D.terceros.filter(x => x.nombre.toLowerCase().includes(t) || (d && String(x.documento).includes(d))
+          || String(x.documento).toLowerCase().includes(t));
+      },
+      html: x => `${esc(x.nombre)}<small>${esc(x.tipo_documento)} ${esc(docConDv(x.documento, x.dv))}</small>`,
+      texto: x => etiquetaTercero(x),
+      buscar: id => terceroPorId(id),
+      exacto: t => D.terceros.find(x => String(x.documento).toLowerCase() === t.split('-')[0].replace(/[.\s]/g, '')
+        || x.nombre.toLowerCase() === t),
+      vacio: 'No hay un tercero con ese nombre o documento. Créalo con "+ Nuevo tercero".',
+    },
+  };
+  function comboPintar(k, texto) {
+    const c = COMBOS[k];
+    const lista = c.lista((texto || '').toLowerCase().trim()).slice(0, 60);
+    c.activo = lista.length ? 0 : -1;
+    $(`${k}Drop`).innerHTML = lista.length
+      ? lista.map((x, i) => `<div class="combo-opt ${i === 0 ? 'act' : ''}" data-id="${x.id}"
+            onmousedown="event.preventDefault(); comboElegir('${k}', ${x.id})">${c.html(x)}</div>`).join('')
+      : `<div class="combo-vacio">${c.vacio}</div>`;
+  }
+  function comboAbrir(k) {
+    $(`${k}Txt`).select();
+    comboPintar(k, '');
+    $(`${k}Combo`).classList.add('open');
+  }
+  function comboFiltrar(k) {
+    dirty = true;
+    comboPintar(k, $(`${k}Txt`).value);
+    $(`${k}Combo`).classList.add('open');
+  }
+  function comboTecla(e, k) {
+    const opts = [...document.querySelectorAll(`#${k}Drop .combo-opt`)];
+    if (e.key === 'Escape') { e.target.blur(); return; }
+    if (!opts.length) return;
+    const c = COMBOS[k];
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      c.activo = (c.activo + (e.key === 'ArrowDown' ? 1 : -1) + opts.length) % opts.length;
+      opts.forEach((o, i) => o.classList.toggle('act', i === c.activo));
+      opts[c.activo].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter' && c.activo >= 0) {
+      e.preventDefault();
+      comboElegir(k, Number(opts[c.activo].dataset.id));
+      e.target.blur();
+    }
+  }
+  function comboElegir(k, id) {
+    const c = COMBOS[k], x = c.buscar(id);
+    c.id = x ? id : null;
+    $(`${k}Txt`).value = x ? c.texto(x) : '';
+    $(`${k}Txt`).classList.remove('err');
+    $(`${k}Combo`).classList.remove('open');
+    c.alElegir?.();
+  }
+  /* Resuelve lo escrito: vacío = nada; exacto = lo elige; lo demás queda marcado en rojo */
+  function comboCerrar(k) {
+    const c = COMBOS[k], inp = $(`${k}Txt`);
+    if (!inp) return;
+    $(`${k}Combo`).classList.remove('open');
+    const t = inp.value.trim();
+    if (!t) { c.id = null; c.alElegir?.(); return; }
+    const actual = c.id ? c.buscar(c.id) : null;
+    if (actual && t === c.texto(actual)) return;
+    const x = c.exacto(t.toLowerCase());
+    if (x) { comboElegir(k, x.id); return; }
+    c.id = undefined;
+    inp.classList.add('err');
+    c.alElegir?.();
+  }
+
+  /* ── Registrar (con confirmación: un pago guardado no se modifica) ── */
+  let pendiente = null;   // cuerpo del POST mientras se confirma
+  function registrar() {
+    const c = concepto($('fConcepto').value);
+    ['bus', 'ter'].forEach(k => { if ($(`${k}Txt`)) comboCerrar(k); });
+    const valor = leerEntero($('fValor').value);
+    const obs = $('fObs').value.trim();
+    const faltan = [];   // [id del campo, qué falta]
+    if (!c) faltan.push(['fConcepto', 'el concepto']);
+    if (pideBus(c) && !COMBOS.bus.id) faltan.push(['busTxt', 'el vehículo']);
+    if (c && c.tercero === 'PAGADOR' && !COMBOS.ter.id) faltan.push(['terTxt', entra(c) ? 'quién paga' : 'a quién se le paga']);
+    if (!valor) faltan.push(['fValor', 'el valor']);
+    if (c && c.tercero === 'NINGUNO' && !obs) faltan.push(['fObs', 'qué se pagó']);
+    if (faltan.length) {
+      faltan.forEach(([id]) => $(id)?.classList.add('err'));
+      toast('Falta llenar: ' + faltan.map(f => f[1]).join(', '), true);
+      $(faltan[0][0])?.focus();
+      return;
+    }
+    const b = pideBus(c) ? busPorId(COMBOS.bus.id) : null;
+    const t = c.tercero === 'PAGADOR' ? terceroPorId(COMBOS.ter.id) : null;
+    pendiente = { concepto_id: c.id, valor, observacion: obs, ...(b ? { bus_id: b.id } : {}), ...(t ? { tercero_id: t.id } : {}) };
+    $('confTitulo').textContent = entra(c) ? 'Confirmar entrada a caja' : 'Confirmar salida de caja';
+    $('confResumen').innerHTML = `
+      <div><span>Concepto</span><span>${esc(c.nombre)}</span></div>
+      <div><span>Movimiento</span><span class="${entra(c) ? 'c-in' : 'c-out'}">${entra(c) ? 'Entra a la caja' : 'Sale de la caja'}</span></div>
+      ${b ? `<div><span>Vehículo</span><span>${esc(etiquetaBus(b))}</span></div>` : ''}
+      ${b && c.tercero === 'PROPIETARIO' ? `<div><span>Propietario</span><span>${esc(b.tp_propietario_nombre || 'Sin documento en la tarjeta')}</span></div>` : ''}
+      ${t ? `<div><span>${entra(c) ? 'Paga' : 'Se le paga a'}</span><span>${esc(t.nombre)}<br><small style="font-weight:600">${esc(t.tipo_documento)} ${esc(docConDv(t.documento, t.dv))}</small></span></div>` : ''}
+      <div><span>Valor</span><span style="font-size:17px">${fmtMoney(valor)}</span></div>
+      ${obs ? `<div><span>Observación</span><span>${esc(obs)}</span></div>` : ''}`;
+    $('btnConfirmar').disabled = false;
+    abrirModal('modalConfirmar');
+  }
+
+  async function confirmarPago() {
+    if (!pendiente) return;
+    const btn = $('btnConfirmar');
+    btn.disabled = true;
+    try {
+      const r = await apiFetch('/api/recaudo/pagos', { method: 'POST', body: JSON.stringify(pendiente) });
+      cerrarModal('modalConfirmar');
+      pendiente = null; dirty = false;
+      await cargar();
+      toast(r.aviso || `Pago ${numPago(r.pago.id)} registrado`, !!r.aviso);
+      imprimirRecibo(r.pago.id, false);
+    } catch (e) {
+      toast(e.message, true);
+      btn.disabled = false;
+    }
+  }
+
+  /* ── Nuevo tercero desde el formulario ── */
+  function abrirTercero() {
+    ['tNombre', 'tDoc', 'tTel'].forEach(id => { $(id).value = ''; $(id).classList.remove('err'); });
+    $('tTipo').innerHTML = Object.entries(D.tipos_documento).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('');
+    const escrito = $('terTxt')?.value.trim() || '';
+    if (/^[\d.\s-]+$/.test(escrito)) $('tDoc').value = escrito; else $('tNombre').value = escrito;
+    dvTercero();
+    $('btnTercero').disabled = false;
+    abrirModal('modalTercero');
+    $(escrito && !$('tNombre').value ? 'tNombre' : 'tDoc').focus();
+  }
+  function dvTercero() {
+    const nit = $('tTipo').value === 'NIT';
+    $('tCampoDv').style.visibility = nit ? 'visible' : 'hidden';
+    $('tDv').value = nit ? dvNit($('tDoc').value.split('-')[0]) : '';
+  }
+  async function guardarTercero() {
+    const body = { nombre: $('tNombre').value.trim(), tipo_documento: $('tTipo').value,
+                   documento: $('tDoc').value.trim(), telefono: $('tTel').value.replace(/\D/g, '') };
+    const faltan = [];
+    if (!body.nombre) { faltan.push('el nombre'); $('tNombre').classList.add('err'); }
+    if (!body.documento) { faltan.push('el número de documento'); $('tDoc').classList.add('err'); }
+    if (faltan.length) return toast('Falta llenar: ' + faltan.join(', '), true);
+    const btn = $('btnTercero');
+    btn.disabled = true;
+    try {
+      const r = await apiFetch('/api/recaudo/terceros', { method: 'POST', body: JSON.stringify(body) });
+      D.terceros.push(r.tercero);
+      D.terceros.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+      cerrarModal('modalTercero');
+      if ($('terTxt')) comboElegir('ter', r.tercero.id);
+      toast('Tercero creado');
+    } catch (e) {
+      toast(e.message, true);
+      btn.disabled = false;
+    }
+  }
+
+  /* ── Anular (solo Administrador) ── */
+  function abrirAnular(id) {
+    const p = D.pagos.find(x => x.id === id);
+    if (!p) return;
+    pagoAAnular = id;
+    $('anularSub').innerHTML = `${numPago(p.id)} · ${esc(p.concepto_nombre)} · <b>${fmtMoney(p.valor)}</b>${quienPago(p) ? ' · ' + esc(quienPago(p)) : ''}.
+      El pago queda en el historial como anulado y sale de la caja abierta.`;
+    $('anularMotivo').value = '';
+    $('btnAnular').disabled = false;
+    abrirModal('modalAnular');
+    $('anularMotivo').focus();
+  }
+  async function confirmarAnular() {
+    const motivo = $('anularMotivo').value.trim();
+    if (motivo.length < 5) return toast('Escribe el motivo de la anulación (mínimo 5 caracteres)', true);
+    const btn = $('btnAnular');
+    btn.disabled = true;
+    try {
+      await apiFetch(`/api/recaudo/pagos/${pagoAAnular}/anular`, { method: 'POST', body: JSON.stringify({ motivo }) });
+      cerrarModal('modalAnular');
+      toast(`Pago ${numPago(pagoAAnular)} anulado`);
+      await cargar();
+    } catch (e) {
+      toast(e.message, true);
+      btn.disabled = false;
+    }
+  }
+
+  /* ── Recibo (una copia, para quien paga) ── */
+  function htmlRecibo(p, reimpresion) {
+    const fila = (k, v, cls = '') => `<div class="t-fila ${cls}"><span>${k}</span><span>${v}</span></div>`;
+    const ingreso = p.signo === 2;
+    const doc = p.tercero_documento
+      ? `${p.tercero_tipo_documento ? esc(p.tercero_tipo_documento) + ' ' : 'Doc. '}${esc(docConDv(p.tercero_documento, p.tercero_dv))}` : '';
+    return `<div class="copia">
+      <div class="t-centro t-titulo">${ingreso ? 'RECIBO DE CAJA' : 'COMPROBANTE DE EGRESO'}</div>
+      <div class="t-centro">${numPago(p.id)}</div>
+      ${reimpresion ? '<div class="t-centro fuerte">REIMPRESIÓN</div>' : ''}
+      ${p.anulado_at ? '<div class="t-centro t-anulada">*** ANULADO ***</div>' : ''}
+      <div class="t-linea"></div>
+      ${fila('Fecha', fmtFechaHora(p.created_at), 'fuerte')}
+      <div class="t-sec">CONCEPTO</div>
+      <div class="t-centro t-grande">${esc(p.concepto_nombre)}</div>
+      ${p.bus_numero != null ? fila('Vehículo', `${p.bus_numero}${p.bus_placa ? ' · ' + esc(p.bus_placa) : ''}`) : ''}
+      ${p.tercero_nombre ? `<div class="t-sec">${p.concepto_tercero === 'PROPIETARIO' ? 'PROPIETARIO' : ingreso ? 'RECIBIDO DE' : 'PAGADO A'}</div>
+        <div class="fuerte">${esc(p.tercero_nombre.toUpperCase())}</div>${doc ? `<div>${doc}</div>` : ''}` : ''}
+      ${p.observacion ? `<div class="t-nota" style="margin-top:3px">Obs: ${esc(p.observacion)}</div>` : ''}
+      <div class="t-linea"></div>
+      ${fila('VALOR', fmtMoney(p.valor), 'grande')}
+      <div class="t-linea"></div>
+      ${p.anulado_at ? `<div class="t-nota">Anulado: ${esc(p.motivo_anulacion || '')}</div>` : ''}
+      <div>Impreso: ${fmtFechaHora(new Date())}</div>
+      <div>Atendió: ${esc((p.usuario_nombre || '').toUpperCase())}</div>
+      ${reimpresion ? `<div>Reimprimió: ${esc((CU.nombre || CU.name || '').toUpperCase())}</div>` : ''}
+      ${ingreso ? '' : '<div class="t-firma">Firma de quien recibe</div><div class="t-nota">C.C.</div>'}
+    </div>`;
+  }
+
+  /* Igual que la tirilla de la liquidación: el alto de la página es el del recibo para no
+     gastar papel en blanco. */
+  function imprimirRecibo(id, reimpresion) {
+    const p = D.pagos.find(x => x.id === id);
+    if (!p) return toast('No se encontró el pago para imprimir', true);
+    const cont = $('tirilla');
+    cont.className = 'papel-' + papel;
+    cont.innerHTML = htmlRecibo(p, reimpresion);
+    const altoMm = Math.ceil(cont.querySelector('.copia').offsetHeight * 25.4 / 96) + 2;
+    $('estiloPagina').textContent = `@page { size: ${papel}mm ${altoMm}mm; margin: 0; }`;
+    window.print();
+  }
+
+  function abrirModal(id)  { $(id).classList.remove('hidden'); }
+  function cerrarModal(id) { $(id).classList.add('hidden'); }
+  let toastTimer = null;
+  function toast(msg, error = false) {
+    const t = $('toast');
+    t.textContent = msg; t.className = 'toast' + (error ? ' error' : '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.add('hidden'), error ? 5000 : 3200);
+  }
+</script>
+</body>
+</html>
