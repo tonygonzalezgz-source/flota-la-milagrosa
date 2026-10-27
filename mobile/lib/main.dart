@@ -5,6 +5,8 @@ import 'package:intl/date_symbol_data_local.dart';
 
 import 'core/router.dart';
 import 'core/theme.dart';
+import 'core/version.dart';
+import 'features/auth/actualizar_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,6 +24,10 @@ class BusControlApp extends ConsumerWidget {
       debugShowCheckedModeBanner: false,
       theme: buildTheme(),
       routerConfig: ref.watch(routerProvider),
+      // Versión vieja que el servidor ya no acepta: tapa la app con el aviso.
+      builder: (context, child) => ref.watch(actualizacionObligatoriaProvider).value == true
+          ? const ActualizarScreen()
+          : child ?? const SizedBox.shrink(),
       locale: const Locale('es', 'CO'),
       supportedLocales: const [Locale('es', 'CO'), Locale('es')],
       localizationsDelegates: const [

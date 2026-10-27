@@ -48,12 +48,13 @@ jobs:
           fi
 
       # Número de compilación = número de ejecución del workflow: cada envío a
-      # Google Play necesita uno mayor que el anterior.
+      # Google Play necesita uno mayor que el anterior. La app lo conoce por
+      # APP_BUILD para el aviso de versión mínima (/api/app/version).
       # Mapa en vivo con Google Maps si existe GOOGLE_MAPS_API_KEY en
       # Settings → Secrets and variables → Actions (como secreto o como
       # variable); sin ella usa Esri.
       - name: APK de prueba (instalar directo en un celular)
-        run: flutter build apk --release --build-number=${{ github.run_number }} --dart-define=GOOGLE_MAPS_API_KEY="$GOOGLE_MAPS_API_KEY"
+        run: flutter build apk --release --build-number=${{ github.run_number }} --dart-define=APP_BUILD=${{ github.run_number }} --dart-define=GOOGLE_MAPS_API_KEY="$GOOGLE_MAPS_API_KEY"
         env:
           GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY || vars.GOOGLE_MAPS_API_KEY }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -62,7 +63,7 @@ jobs:
 
       - name: AAB firmado para Google Play
         if: env.ANDROID_KEYSTORE_PATH != ''
-        run: flutter build appbundle --release --build-number=${{ github.run_number }} --dart-define=GOOGLE_MAPS_API_KEY="$GOOGLE_MAPS_API_KEY"
+        run: flutter build appbundle --release --build-number=${{ github.run_number }} --dart-define=APP_BUILD=${{ github.run_number }} --dart-define=GOOGLE_MAPS_API_KEY="$GOOGLE_MAPS_API_KEY"
         env:
           GOOGLE_MAPS_API_KEY: ${{ secrets.GOOGLE_MAPS_API_KEY || vars.GOOGLE_MAPS_API_KEY }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
