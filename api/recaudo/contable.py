@@ -5,10 +5,12 @@ Archivo plano (un comprobante por día, con los cierres de todos los recaudadore
 - Una línea por liquidación con el concepto de uso RECAUDO_VEHICULO ("RECAUDOS CU",
   cuenta 28050504, crédito): NIT = documento del propietario según la tarjeta de
   propiedad del bus, valor = lo recaudado, referencia = número del bus.
-- Una línea final con el concepto de uso CIERRE_CAJA ("CIERRE DE CAJA", cuenta 138005,
-  débito) por el total, para que el comprobante cuadre.
-Los demás conceptos (pagos, abonos, anticipos…) se usarán cuando la caja registre
-esos movimientos (siguiente paso).
+- Una línea por pago diario (pagos.py) con la cuenta, el centro de costo y el signo de
+  su concepto; NIT según a quién va la factura: propietario del bus (tarjeta de
+  propiedad), tercero de Catálogo › Terceros (con su DV) o el NIT fijo del concepto.
+- Una línea final con el concepto de uso CIERRE_CAJA ("CIERRE DE CAJA", cuenta 138005)
+  que cuadra el comprobante: Σ créditos − Σ débitos. Normalmente va en débito (entra
+  plata a la caja); si las salidas superan lo recibido, va en crédito por la diferencia.
 """
 import json
 import re
@@ -21,10 +23,12 @@ import auditoria
 from . import bp
 from .comun import EMPRESA_POR_DEFECTO, ROLES_RECAUDO, db, es_pg, rol
 from .endpoints import _cargar, _entero, _Rechazo, _texto
+from .pagos import cargar_pagos
 
 ADMIN = ("Administrador",)
 _RE_FECHA = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _BOGOTA = timedelta(hours=5)
+_LARGO_DESCRIPCION = 50   # DESCRIPCION de las líneas de pagos (ajustable con la contadora)
 TERCEROS = {"PROPIETARIO": "Propietario del vehículo", "PAGADOR": "Pagador",
             "NINGUNO": "Ninguno", "FIJO": "NIT fijo"}
 MESES = ("ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO",
@@ -252,7 +256,8 @@ def archivo_plano():
         return jsonify({"error": "Fecha inválida (use AAAA-MM-DD)"}), 400
     conn = db()
     cierres = [dict(f) for f in conn.execute(
-        """SELECT id, usuario_nombre, liquidacion_ids, recaudado FROM recaudo_cierres
+        """SELECT id, usuario_nombre, liquidacion_ids, pago_ids, recaudado, ingresos, egresos
+             FROM recaudo_cierres
             WHERE cerrado_at >= ? AND cerrado_at < ? AND reabierto_at IS NULL ORDER BY id""",
         (_limite_utc(fecha), _limite_utc(fecha, 1)),
     ).fetchall()]
@@ -266,6 +271,8 @@ def archivo_plano():
 
     ids = [i for c in cierres for i in json.loads(c["liquidacion_ids"] or "[]")]
     liqs = _cargar(conn, f"r.id IN ({','.join('?' * len(ids))})", ids) if ids else []
+    pids = [i for c in cierres for i in json.loads(c.get("pago_ids") or "[]")]
+    pagos = cargar_pagos(conn, f"p.id IN ({','.join('?' * len(pids))})", pids) if pids else []
     bus_ids = sorted({l["bus_id"] for l in liqs})
     propietarios = {}
     if bus_ids:
@@ -284,15 +291,16 @@ def archivo_plano():
             "NUMERO": numero, "PERIODO": d.month, "FECHA": numero,
             "NIT CIA": config.get("nit_compania", "")}
 
-    def linea(seq, concepto, descripcion, nit, valor, referencia=""):
+    def linea(seq, concepto, descripcion, nit, valor, referencia="", dv=""):
         fila = {col: "" for col in COLUMNAS_PLANO}
         fila.update(base)
         fila.update({"SEQ": seq, "CUENTA": concepto["cuenta"], "CEN COSTO": concepto.get("centro_costo") or "",
-                     "DESCRIPCION": descripcion, "SIGNO": concepto["signo"], "NIT": nit, "VALOR": valor,
-                     "DCTO REFERENCIA": referencia})
+                     "DESCRIPCION": descripcion, "SIGNO": concepto["signo"], "NIT": nit, "DV": dv or "",
+                     "VALOR": valor, "DCTO REFERENCIA": referencia})
         return [fila[col] for col in COLUMNAS_PLANO]
 
-    filas, avisos, total = [], [], 0
+    filas, avisos = [], []
+    creditos = debitos = 0
     for l in sorted(liqs, key=lambda x: (x["bus_numero"], x["fecha"], x["id"])):
         prop = propietarios.get(l["bus_id"], {})
         nit = _nit(c_recaudo, prop.get("tp_propietario_documento"))
@@ -301,12 +309,62 @@ def archivo_plano():
         dia = date.fromisoformat(l["fecha"]).strftime("%d%m%Y")
         filas.append(linea(len(filas) + 1, c_recaudo, f"{c_recaudo['nombre']} {mes} VEH{l['bus_numero']} T{dia}",
                            nit, l["recaudado"], l["bus_numero"] if c_recaudo.get("referencia") == "VEHICULO" else ""))
-        total += l["recaudado"]
-    if filas:
-        filas.append(linea(len(filas) + 1, c_cierre, f"{c_recaudo['nombre']} {mes} {d.day}", _nit(c_cierre), total))
+        if c_recaudo["signo"] == 2:
+            creditos += l["recaudado"]
+        else:
+            debitos += l["recaudado"]
+    lineas_recaudo = len(filas)
+
+    # Pagos diarios: primero las entradas y luego las salidas, en el orden en que se hicieron.
+    # Cuenta, centro de costo y NIT salen del catálogo actual (si existe); el signo, del pago.
+    for p in sorted(pagos, key=lambda x: (-x["signo"], x["created_at"] or "", x["id"])):
+        en_catalogo = p.get("cuenta_actual") is not None
+        concepto = {"cuenta": p["cuenta_actual"] if en_catalogo else p["cuenta"],
+                    "centro_costo": p["centro_costo_actual"] if en_catalogo else p.get("centro_costo"),
+                    "signo": p["signo"]}
+        referencia = p.get("referencia_actual") if en_catalogo else p.get("referencia")
+        tipo, nit, dv = p["concepto_tercero"], "", ""
+        cual = f"El pago N° {str(p['id']).zfill(6)} ({p['concepto_nombre']}"
+        if tipo == "PROPIETARIO":
+            nit = _solo_digitos(p.get("propietario_documento_actual") or p.get("tercero_documento"))
+            if not nit:
+                avisos.append(f"{cual}, bus {p['bus_numero']}) no tiene el documento del propietario (tarjeta de propiedad)")
+        elif tipo == "PAGADOR":
+            if p.get("tercero_documento_actual"):
+                nit, dv = p["tercero_documento_actual"], p.get("tercero_dv_actual") or ""
+            else:
+                nit, dv = p.get("tercero_documento") or "", p.get("tercero_dv") or ""
+            if not nit:
+                avisos.append(f"{cual}) no tiene el documento del tercero")
+        elif tipo == "FIJO":
+            nit = (p.get("nit_fijo_actual") if en_catalogo else None) or p.get("tercero_documento") or ""
+        if tipo == "PROPIETARIO" and p.get("bus_numero") is not None:
+            detalle = f"VEH{p['bus_numero']}"
+        elif tipo == "PAGADOR":
+            detalle = p.get("tercero_nombre") or ""
+        else:
+            detalle = p.get("observacion") or ""
+        descripcion = " ".join(f"{p['concepto_nombre']} {mes} {detalle}".split()).upper()[:_LARGO_DESCRIPCION]
+        ref = p["bus_numero"] if referencia == "VEHICULO" and p.get("bus_numero") is not None else ""
+        filas.append(linea(len(filas) + 1, concepto, descripcion, nit, p["valor"], ref, dv))
+        if p["signo"] == 2:
+            creditos += p["valor"]
+        else:
+            debitos += p["valor"]
+    lineas_pagos = len(filas) - lineas_recaudo
+
+    # Línea de cierre: cuadra el comprobante (débitos = créditos).
+    saldo = creditos - debitos
+    if saldo:
+        filas.append(linea(len(filas) + 1, {**c_cierre, "signo": 1 if saldo > 0 else 2},
+                           f"{c_recaudo['nombre']} {mes} {d.day}", _nit(c_cierre), abs(saldo)))
 
     return jsonify({
-        "fecha": fecha, "numero": numero, "columnas": COLUMNAS_PLANO, "filas": filas, "total": total,
-        "cierres": [{"id": c["id"], "recaudador": c["usuario_nombre"], "recaudado": c["recaudado"]} for c in cierres],
+        "fecha": fecha, "numero": numero, "columnas": COLUMNAS_PLANO, "filas": filas, "total": abs(saldo),
+        "lineas_recaudo": lineas_recaudo, "lineas_pagos": lineas_pagos, "linea_cierre": bool(saldo),
+        "creditos": creditos, "debitos": debitos, "saldo": saldo,
+        "cierres": [{"id": c["id"], "recaudador": c["usuario_nombre"], "recaudado": c["recaudado"],
+                     "ingresos": int(c.get("ingresos") or 0), "egresos": int(c.get("egresos") or 0)}
+                    for c in cierres],
         "avisos": sorted(set(avisos)),
     })
