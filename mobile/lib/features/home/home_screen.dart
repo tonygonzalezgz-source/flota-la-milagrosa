@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/config.dart';
 import '../../core/modulos.dart';
 import '../../core/session.dart';
 import '../../core/theme.dart';
@@ -30,6 +31,11 @@ class HomeScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('BusControl'),
         actions: [
+          IconButton(
+            tooltip: 'Política de privacidad',
+            icon: const Icon(Icons.privacy_tip_outlined),
+            onPressed: () => abrirEnlace(context, AppConfig.urlPrivacidad),
+          ),
           IconButton(
             tooltip: 'Cerrar sesión',
             icon: const Icon(Icons.logout),

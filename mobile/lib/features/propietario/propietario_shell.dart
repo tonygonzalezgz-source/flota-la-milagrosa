@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/config.dart';
 import '../../core/modulos.dart';
 import '../../core/session.dart';
 import '../../core/theme.dart';
@@ -201,6 +202,9 @@ class _MasScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 10),
           ],
+          const SizedBox(height: 10),
+          _opcion(Icons.privacy_tip_outlined, AppColors.muted, 'Política de privacidad',
+              () => abrirEnlace(context, AppConfig.urlPrivacidad)),
           const SizedBox(height: 10),
           _opcion(Icons.logout, AppColors.red, 'Cerrar sesión', () async {
             if (await confirmar(context, 'Cerrar sesión', '¿Deseas salir de BusControl?', si: 'Salir')) {

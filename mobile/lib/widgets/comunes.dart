@@ -1,6 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../core/theme.dart';
+
+/// Abre un enlace en el navegador del celular (o la Play Store).
+Future<void> abrirEnlace(BuildContext context, String url) async {
+  final ok = await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+  if (!ok && context.mounted) mostrarMensaje(context, 'No se pudo abrir $url', error: true);
+}
 
 void mostrarMensaje(BuildContext context, String msg, {bool error = false}) {
   final m = ScaffoldMessenger.of(context);

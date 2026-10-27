@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/config.dart';
 import '../../core/session.dart';
 import '../../widgets/comunes.dart';
 
@@ -87,6 +88,15 @@ class _TratamientoScreenState extends ConsumerState<TratamientoScreen> {
                   'a Flota La Milagrosa para el tratamiento de sus datos personales conforme a lo aquí '
                   'descrito. Su autorización queda registrada con fecha y hora en el sistema.',
                   style: TextStyle(fontStyle: FontStyle.italic)),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () => abrirEnlace(context, AppConfig.urlPrivacidad),
+                  icon: const Icon(Icons.open_in_new, size: 18),
+                  label: const Text('Ver la política de privacidad completa'),
+                  style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                ),
+              ),
             ]),
           ),
           const Divider(height: 1),
