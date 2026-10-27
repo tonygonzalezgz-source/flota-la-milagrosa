@@ -1161,6 +1161,16 @@
     return new Date(iso).toLocaleString('es-CO', { timeZone: 'America/Bogota', day: 'numeric', month: 'short',
       hour: 'numeric', minute: '2-digit' });
   }
+  /* 'DD/MM/AAAA HH:MM' en hora Bogotá (tirilla e informe) */
+  function fmtFechaHora(d) {
+    return new Date(d).toLocaleString('es-CO', { timeZone: 'America/Bogota', day: '2-digit', month: '2-digit',
+      year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).replace(',', '');
+  }
+  /* 'AAAA-MM-DD' → 'DD/MM/AAAA' (en producción una fecha puede llegar como 'Mon, 26 Oct 2026 00:00:00 GMT') */
+  function fmtFechaCorta(f) {
+    const iso = /^\d{4}-\d{2}-\d{2}/.test(f) ? String(f).slice(0, 10) : new Date(f).toISOString().slice(0, 10);
+    return iso.split('-').reverse().join('/');
+  }
 
   /* ── Guardar (con confirmación: una vez guardada no se modifica) ── */
   function guardar() {
@@ -1228,7 +1238,7 @@
       <div><span>Diferencia</span><span class="${clsDif(t.diferencia)}">${fmtMoney(t.diferencia)} · ${textoDif(t.diferencia)}</span></div>`;
     document.getElementById('confTitulo').textContent = `Confirmar liquidación — ${TIPO[b.grupo] || 'Bus'} ${b.numero}`;
     document.getElementById('confResumen').innerHTML = `
-      <div><span>Fecha</span><span>${fmtDia(fecha)}</span></div>
+      <div><span>Fecha de la tarjeta</span><span>${fmtDia(fecha)}</span></div>
       ${n === 1 ? `<div><span>Conductor</span><span>${nombre(0)}</span></div>` : ''}
       <div><span>Registradora${n > 1 ? ' del bus' : ''}</span><span>${fmtNum(ini)} → ${fmtNum(fin)}</span></div>
       ${tramos.map(bloque).join('')}
@@ -1316,16 +1326,19 @@
     const total = r.conductores.length;
     const gastos = r.gastos.filter(g => g.orden_conductor === c.orden);
     const dif = c.diferencia;
-    const ahora = new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota', day: '2-digit', month: '2-digit',
-      year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).replace(',', '');
     const obs = [c.observacion, c.orden === 1 ? r.observacion : null].filter(Boolean).join(' · ');
+    // Dos fechas: la de la tarjeta (el día que trabajó el bus, el que se eligió al liquidar)
+    // y la del recaudo (cuando se liquidó, es decir, cuando el conductor entregó la plata).
     return `<div class="copia">
       <div class="t-centro t-titulo">TIQUETE DE LIQUIDACIÓN</div>
-      <div class="t-centro">N° ${String(r.id).padStart(6, '0')} · Del ${esc(r.fecha)}</div>
+      <div class="t-centro">N° ${String(r.id).padStart(6, '0')}</div>
       ${reimpresion ? '<div class="t-centro fuerte">REIMPRESIÓN</div>' : ''}
       ${total > 1 ? `<div class="t-centro fuerte">RELEVO · CONDUCTOR ${c.orden} DE ${total}</div>` : ''}
       ${r.anulado_at ? '<div class="t-centro t-anulada">*** ANULADA ***</div>' : ''}
       <div class="t-centro t-bus">Vehículo ${r.bus_numero}${r.bus_placa ? ' · ' + esc(r.bus_placa) : ''}</div>
+      <div class="t-linea"></div>
+      ${fila('Fecha tarjeta', fmtFechaCorta(r.fecha), 'grande')}
+      ${fila('Fecha recaudo', r.created_at ? fmtFechaHora(r.created_at) : '—', 'fuerte')}
       <div class="t-linea"></div>
       ${fila('Ruta', esc(c.ruta_nombre || '—'))}
       ${fila('Viajes', c.viajes ?? '—')}
@@ -1346,7 +1359,7 @@
       <div>${esc(c.conductor_cedula || '')}</div><div class="fuerte">${esc((c.conductor_nombre || '').toUpperCase())}</div>
       ${obs ? `<div class="t-nota">Obs: ${esc(obs)}</div>` : ''}
       <div class="t-linea"></div>
-      <div>Impreso: ${ahora}</div>
+      <div>Impreso: ${fmtFechaHora(new Date())}</div>
       <div>Atendió: ${esc((r.usuario_nombre || '').toUpperCase())}</div>
       ${reimpresion ? `<div>Reimprimió: ${esc((CU.nombre || CU.name || '').toUpperCase())}</div>` : ''}
       <div class="t-firma">Firma del conductor</div>
