@@ -316,6 +316,7 @@
       <div class="chips">
         <div class="tarifas-chip" id="tarifasChip">Tarifas: —</div>
         <button class="chip-btn" id="btnTiposGasto" onclick="abrirTiposGasto()" hidden>Tipos de gasto</button>
+        <button class="chip-btn" id="btnAbrirInforme" onclick="abrirInforme()" hidden>Informe (Excel)</button>
         <label class="chip-papel" title="Ancho del papel de la impresora de tirillas en este computador">Tirilla
           <select id="papel" onchange="cambiarPapel(this.value)"><option value="76">76 mm</option><option value="58">58 mm</option></select>
         </label>
@@ -411,6 +412,33 @@
         <button class="btn-primary" onclick="crearTipo()">Agregar</button>
       </div>
       <div class="modal-actions"><button class="btn" onclick="cerrarModal('modalTipos')">Cerrar</button></div>
+    </div>
+  </div>
+
+  <!-- Modal: informe de recaudo en Excel (solo Administrador) -->
+  <div class="modal-bg hidden" id="modalInforme">
+    <div class="modal">
+      <h3>Informe de recaudo</h3>
+      <div class="modal-sub">Excel por vehículo con la fecha de recaudo y la de la tarjeta, registradora, viajes, pasajeros, producido, los gastos (y de qué fueron), el recaudo y los faltantes. Al final va el total general de todos los vehículos, y en otra hoja el resumen de cada carro. Las liquidaciones anuladas no salen.</div>
+      <div class="campo"><label for="infPor">Buscar por</label>
+        <select id="infPor">
+          <option value="tarjeta">Fecha de la tarjeta (día que trabajó el bus)</option>
+          <option value="recaudo">Fecha de recaudo (día que se liquidó)</option>
+        </select></div>
+      <div class="campos" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr); margin:10px 0">
+        <div class="campo"><label for="infDesde">Desde</label><input type="date" id="infDesde" /></div>
+        <div class="campo"><label for="infHasta">Hasta</label><input type="date" id="infHasta" /></div>
+      </div>
+      <div class="campo"><label for="infBusTxt">Vehículo</label>
+        <div class="combo" id="infBusCombo">
+          <input id="infBusTxt" placeholder="Todos los vehículos · escribe el número o la placa" autocomplete="off"
+                 onfocus="busInfAbrir()" oninput="busInfFiltrar()" onkeydown="busInfTecla(event)" onblur="busInfCerrar()" />
+          <div class="combo-drop" id="infBusDrop"></div>
+        </div></div>
+      <div class="modal-actions">
+        <button class="btn" onclick="cerrarModal('modalInforme')">Cancelar</button>
+        <button class="btn-primary" id="btnInforme" onclick="descargarInforme()">Descargar Excel</button>
+      </div>
     </div>
   </div>
 
@@ -557,6 +585,7 @@
       `Tarifas: Bus ${fmtMoney(t.A || 0)} · Micro ${fmtMoney(t.B || 0)}` +
       (ES_ADMIN ? ` <button onclick="abrirTarifas()">editar</button>` : '');
     document.getElementById('btnTiposGasto').hidden = !ES_ADMIN;
+    document.getElementById('btnAbrirInforme').hidden = !ES_ADMIN;
   }
 
   function renderKpis() {
@@ -1382,6 +1411,363 @@
     const altoMm = Math.ceil(altoPx * 25.4 / 96) + 2;
     document.getElementById('estiloPagina').textContent = `@page { size: ${papel}mm ${altoMm}mm; margin: 0; }`;
     window.print();
+  }
+
+  /* ── Informe de recaudo (Administrador): Excel por vehículo ──
+     Hojas: Informe (una fila por conductor, total por carro y total general), Resumen por
+     vehículo y Detalle de gastos. Las cuentas van como fórmulas de Excel con su resultado
+     ya calculado, para que el archivo siga cuadrando si alguien lo edita. */
+  const LIB_EXCELJS = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
+  const _libs = {};
+  function cargarLibreria(src) {
+    if (!_libs[src]) {
+      _libs[src] = new Promise((ok, fail) => {
+        const s = document.createElement('script');
+        s.src = src; s.onload = ok;
+        s.onerror = () => { delete _libs[src]; fail(new Error('No se pudo descargar la librería. Revisa tu conexión.')); };
+        document.head.appendChild(s);
+      });
+    }
+    return _libs[src];
+  }
+
+  function abrirInforme() {
+    const desde = document.getElementById('infDesde'), hasta = document.getElementById('infHasta');
+    if (!desde.value) { desde.value = fecha.slice(0, 8) + '01'; hasta.value = fecha; }
+    desde.max = hasta.max = hoyBogota();
+    if (infBusId === undefined) infBusId = null;   // lo inválido de la vez anterior no se arrastra
+    busInfMostrar();
+    abrirModal('modalInforme');
+  }
+
+  /* Vehículo del informe: se escribe el número (o la placa) y se elige; vacío = todos.
+     Al salir del campo con un número exacto, queda elegido sin tener que abrir la lista. */
+  let infBusId = null;        // null = todos los vehículos
+  let infBusActivo = -1;
+  const etiquetaBus = b => `${TIPO[b.grupo] || 'Bus'} ${b.numero}${b.placa ? ' · ' + b.placa : ''}`;
+  function busesInforme(texto) {
+    const t = (texto || '').toLowerCase().trim();
+    const todos = [...(D?.buses || [])].sort((a, b) =>
+      String(a.numero).localeCompare(String(b.numero), 'es', { numeric: true }));
+    if (!t) return [{ id: null }, ...todos];
+    const rango = b => {
+      const n = String(b.numero).toLowerCase(), p = String(b.placa || '').toLowerCase();
+      return n === t || p === t ? 0 : n.startsWith(t) ? 1 : p.includes(t) ? 2 : -1;
+    };
+    return todos.filter(b => rango(b) >= 0).sort((a, b) => rango(a) - rango(b)).slice(0, 60);
+  }
+  function busInfPintar(texto) {
+    const lista = busesInforme(texto);
+    infBusActivo = lista.length ? 0 : -1;
+    document.getElementById('infBusDrop').innerHTML = lista.length
+      ? lista.map((b, k) => `<div class="combo-opt ${k === 0 ? 'act' : ''}" data-id="${b.id ?? ''}"
+            onmousedown="event.preventDefault(); busInfElegir(${b.id ?? 'null'})">${b.id == null ? 'Todos los vehículos' : esc(etiquetaBus(b))}</div>`).join('')
+      : `<div class="combo-vacio">No hay un vehículo con ese número o placa</div>`;
+  }
+  function busInfMostrar() {
+    const b = infBusId != null ? (D?.buses || []).find(x => x.id === infBusId) : null;
+    const inp = document.getElementById('infBusTxt');
+    inp.value = b ? etiquetaBus(b) : '';
+    inp.classList.remove('err');
+  }
+  function busInfAbrir() {
+    document.getElementById('infBusTxt').select();
+    busInfPintar('');
+    document.getElementById('infBusCombo').classList.add('open');
+  }
+  function busInfFiltrar() {
+    busInfPintar(document.getElementById('infBusTxt').value);
+    document.getElementById('infBusCombo').classList.add('open');
+  }
+  function busInfTecla(e) {
+    const opts = [...document.querySelectorAll('#infBusDrop .combo-opt')];
+    if (e.key === 'Escape') { e.stopPropagation(); e.target.blur(); return; }
+    if (!opts.length) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      infBusActivo = (infBusActivo + (e.key === 'ArrowDown' ? 1 : -1) + opts.length) % opts.length;
+      opts.forEach((o, k) => o.classList.toggle('act', k === infBusActivo));
+      opts[infBusActivo].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter' && infBusActivo >= 0) {
+      e.preventDefault();
+      const id = opts[infBusActivo].dataset.id;
+      busInfElegir(id === '' ? null : Number(id));
+      e.target.blur();
+    }
+  }
+  function busInfElegir(id) {
+    infBusId = id;
+    busInfMostrar();
+    document.getElementById('infBusCombo').classList.remove('open');
+  }
+  function busInfCerrar() {
+    document.getElementById('infBusCombo').classList.remove('open');
+    const inp = document.getElementById('infBusTxt');
+    const t = inp.value.trim();
+    if (!t) return busInfElegir(null);
+    const actual = infBusId != null ? (D?.buses || []).find(x => x.id === infBusId) : null;
+    if (actual && t === etiquetaBus(actual)) return;
+    const exacto = (D?.buses || []).find(b => String(b.numero).toLowerCase() === t.toLowerCase()
+      || String(b.placa || '').toLowerCase() === t.toLowerCase());
+    if (exacto) return busInfElegir(exacto.id);
+    // Lo escrito no es un vehículo: se marca y no se genera hasta corregirlo.
+    infBusId = undefined;
+    inp.classList.add('err');
+  }
+
+  async function descargarInforme() {
+    const por = document.getElementById('infPor').value;
+    const desde = document.getElementById('infDesde').value, hasta = document.getElementById('infHasta').value;
+    busInfCerrar();   // lo que esté escrito en Vehículo (p. ej. "64" sin Enter) se resuelve aquí
+    const busId = infBusId;
+    if (!desde || !hasta) return toast('Elige las fechas del informe', true);
+    if (desde > hasta) return toast('La fecha "desde" no puede ser después de "hasta"', true);
+    if (busId === undefined) return toast('No hay un vehículo con ese número o placa. Corrígelo o deja el campo vacío para todos.', true);
+    const btn = document.getElementById('btnInforme');
+    btn.disabled = true; btn.textContent = 'Generando…';
+    try {
+      const qs = new URLSearchParams({ por, desde, hasta });
+      if (busId) qs.set('bus_id', busId);
+      const inf = await apiFetch(`/api/recaudo/informe?${qs}`);
+      if (!inf.filas.length) return toast('No hay liquidaciones en esas fechas', true);
+      await cargarLibreria(LIB_EXCELJS);
+      const buf = await armarInforme(inf).xlsx.writeBuffer();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+      a.download = `informe_recaudo_${desde}_a_${hasta}${inf.bus ? '_bus' + inf.bus : ''}.xlsx`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      cerrarModal('modalInforme');
+      const n = new Set(inf.filas.map(f => f.recaudo_id)).size;
+      toast(`Informe generado: ${n} ${n === 1 ? 'liquidación' : 'liquidaciones'}`);
+    } catch (e) { toast(e.message || 'No se pudo generar el informe', true); }
+    finally { btn.disabled = false; btn.textContent = 'Descargar Excel'; }
+  }
+
+  function armarInforme(inf) {
+    const AZUL = 'FF1F3A5F', AMARILLO = 'FFFFF4D6', BLANCO = 'FFFFFFFF';
+    const linea = { style: 'thin', color: { argb: 'FFC9CED6' } };
+    const BORDES = { top: linea, left: linea, bottom: linea, right: linea };
+    const DINERO = '$#,##0;[Red]-$#,##0;"-"', NUM = '#,##0;-#,##0;"-"';
+    const DIF = '[Color10]"Sobrante "$#,##0;[Red]"Faltante "$#,##0;"Cuadrado"';
+    const FT = 5;   // fila de los títulos de columna
+    const relleno = argb => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
+    const arial = (extra = {}) => ({ name: 'Arial', size: 10, ...extra });
+    const letra = n => { let s = ''; for (; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + (n - 1) % 26) + s; return s; };
+    const valor = v => (v && typeof v === 'object' && 'result' in v) ? v.result : (Number(v) || 0);
+    // Excel no maneja zonas horarias: las fechas se escriben con la hora de Bogotá como si fuera UTC.
+    const diaExcel = iso => { const [y, m, d] = iso.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d)); };
+    const horaExcel = utc => new Date(Date.parse(utc) - 5 * 3600e3);
+    // El número del bus como número (Excel marca los números guardados como texto)
+    const vehiculo = n => /^\d+$/.test(n) ? Number(n) : n;
+    const tipos = inf.tipos_gasto;
+    const sub = `Periodo: fecha ${inf.por === 'recaudo' ? 'de recaudo' : 'de la tarjeta'} del ${fmtFechaCorta(inf.desde)} ` +
+      `al ${fmtFechaCorta(inf.hasta)} · ${inf.bus ? 'Vehículo ' + inf.bus : 'Todos los vehículos'}`;
+    const generado = `Generado el ${fmtFechaHora(new Date())} por ${(CU.nombre || CU.name || '').toUpperCase()} · ` +
+      'No incluye liquidaciones anuladas';
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'BusControl';
+    wb.calcProperties.fullCalcOnLoad = true;
+
+    // Hoja con título, periodo, títulos de columna y página horizontal ajustada al ancho.
+    function hoja(nombre, titulo, cols, congelar) {
+      const ws = wb.addWorksheet(nombre, { views: [{ state: 'frozen', xSplit: congelar, ySplit: FT, showGridLines: false }] });
+      ws.columns = cols.map(c => ({ width: c.w }));
+      [[titulo, { bold: true, size: 14, color: { argb: AZUL } }], [sub, { color: { argb: 'FF555555' } }],
+       [generado, { size: 9, color: { argb: 'FF777777' } }]].forEach(([texto, f], i) => {
+        ws.mergeCells(i + 1, 1, i + 1, cols.length);
+        Object.assign(ws.getCell(i + 1, 1), { value: texto, font: arial(f) });
+      });
+      const hr = ws.getRow(FT);
+      hr.values = cols.map(c => c.t);
+      hr.height = 32;
+      hr.eachCell(c => Object.assign(c, { font: arial({ bold: true, color: { argb: BLANCO } }), fill: relleno(AZUL),
+        border: BORDES, alignment: { horizontal: 'center', vertical: 'middle', wrapText: true } }));
+      ws.pageSetup = { paperSize: 1, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0,
+        printTitlesRow: `${FT}:${FT}`, margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.3, footer: 0.3 } };
+      return ws;
+    }
+    // c: centrado · f: formato · s: se suma en los totales · wrap: texto en varias líneas
+    function estilo(cell, col, fuente = arial(), fondo = col.fill) {
+      cell.font = fuente;
+      cell.border = BORDES;
+      if (fondo) cell.fill = relleno(fondo);
+      if (col.f) cell.numFmt = col.f;
+      if (col.c) cell.alignment = { horizontal: 'center' };
+      if (col.wrap) cell.alignment = { wrapText: true, vertical: 'top' };
+    }
+    function filaTotal(ws, cols, r, etiqueta, hastaCol, valores, fondo, fuente) {
+      ws.mergeCells(r, 1, r, hastaCol);
+      ws.getCell(r, 1).value = etiqueta;
+      cols.forEach((col, i) => {
+        const cell = ws.getCell(r, i + 1);
+        if (col.s) cell.value = valores(col, i + 1);
+        estilo(cell, col.s ? { f: col.f } : {}, fuente, fondo);
+      });
+    }
+
+    /* Hoja 1 — Informe: una fila por conductor, agrupado por vehículo */
+    const COLS = [
+      { k: 'liq', t: 'N° liq.', w: 8, c: true },
+      { k: 'rec', t: 'Fecha de recaudo', w: 16, c: true, f: 'dd/mm/yyyy hh:mm' },
+      { k: 'tar', t: 'Fecha de la tarjeta', w: 12, c: true, f: 'dd/mm/yyyy', fill: AMARILLO },
+      { k: 'veh', t: 'Vehículo', w: 9, c: true },
+      { k: 'placa', t: 'Placa', w: 9, c: true },
+      { k: 'tipo', t: 'Tipo', w: 7, c: true },
+      { k: 'ord', t: 'Cond. N°', w: 6, c: true },
+      { k: 'cond', t: 'Conductor', w: 24 },
+      { k: 'ruta', t: 'Ruta', w: 24 },
+      { k: 'viajes', t: 'Viajes', w: 7, f: NUM, s: true },
+      { k: 'regIni', t: 'Reg. inicial', w: 11, f: NUM },
+      { k: 'regFin', t: 'Reg. final', w: 11, f: NUM },
+      { k: 'pax', t: 'Pasajeros', w: 10, f: NUM, s: true },
+      { k: 'tarifa', t: 'Tarifa', w: 9, f: DINERO },
+      { k: 'prod', t: 'Producido', w: 13, f: DINERO, s: true },
+      ...tipos.map((t, i) => ({ k: 'g' + i, t, w: 11, f: DINERO, s: true })),
+      { k: 'gastos', t: 'Total gastos', w: 12, f: DINERO, s: true },
+      { k: 'neto', t: 'Por entregar', w: 13, f: DINERO, s: true },
+      { k: 'recaudo', t: 'Recaudo', w: 13, f: DINERO, s: true },
+      { k: 'dif', t: 'Diferencia', w: 18, f: DIF, s: true },
+      { k: 'det', t: 'Detalle de los gastos', w: 34, wrap: true },
+    ];
+    const ci = {};
+    COLS.forEach((c, i) => { ci[c.k] = i + 1; });
+    const L = k => letra(ci[k]);
+    const ws = hoja('Informe', 'INFORME DE RECAUDO POR VEHÍCULO', COLS, ci.veh);
+
+    const buses = [];   // en el orden del servidor (por número de bus)
+    inf.filas.forEach(f => {
+      let b = buses[buses.length - 1];
+      if (!b || b.id !== f.bus_id) {
+        b = { id: f.bus_id, numero: vehiculo(f.bus_numero), placa: f.bus_placa || '', tipo: TIPO[f.bus_grupo] || 'Bus', filas: [], tot: {} };
+        buses.push(b);
+      }
+      b.filas.push(f);
+    });
+
+    const primera = FT + 1;
+    const general = {};
+    let r = primera;
+    buses.forEach(b => {
+      b.filas.forEach(f => {
+        const g = {};
+        f.gastos.forEach(x => { g[x.tipo] = (g[x.tipo] || 0) + x.valor; });
+        const v = {
+          liq: f.recaudo_id, rec: f.created_at ? horaExcel(f.created_at) : null, tar: diaExcel(f.fecha),
+          veh: b.numero, placa: b.placa, tipo: b.tipo, ord: f.orden,
+          cond: f.conductor_nombre || '', ruta: f.ruta_nombre || '', viajes: f.viajes,
+          regIni: f.registradora_inicio, regFin: f.registradora_fin, pax: f.pasajeros, tarifa: f.tarifa,
+          prod: { formula: `${L('pax')}${r}*${L('tarifa')}${r}`, result: f.producido },
+          gastos: tipos.length ? { formula: `SUM(${L('g0')}${r}:${L('g' + (tipos.length - 1))}${r})`, result: f.total_gastos } : 0,
+          neto: { formula: `${L('prod')}${r}-${L('gastos')}${r}`, result: f.neto },
+          recaudo: f.recaudado,
+          dif: { formula: `${L('recaudo')}${r}-${L('neto')}${r}`, result: f.diferencia },
+          det: f.gastos.filter(x => x.observacion).map(x => `${x.tipo}: ${x.observacion}`).join(' · '),
+        };
+        tipos.forEach((t, i) => { v['g' + i] = g[t] || 0; });
+        COLS.forEach(col => {
+          const cell = ws.getCell(r, ci[col.k]);
+          cell.value = v[col.k] ?? null;
+          estilo(cell, col);
+          if (col.s) {
+            b.tot[col.k] = (b.tot[col.k] || 0) + valor(v[col.k]);
+            general[col.k] = (general[col.k] || 0) + valor(v[col.k]);
+          }
+        });
+        r++;
+      });
+    });
+    // Un solo total al final, de todos los vehículos (el usuario no quiere totales por carro
+    // debajo de cada bus; los totales por vehículo están en la hoja Resumen por vehículo).
+    const ultima = r - 1;
+    filaTotal(ws, COLS, r, 'TOTAL GENERAL', ci.ruta,
+      col => ({ formula: `SUM(${L(col.k)}${primera}:${L(col.k)}${ultima})`, result: general[col.k] || 0 }),
+      AZUL, arial({ bold: true, size: 11, color: { argb: BLANCO } }));
+    ws.getRow(r).height = 22;
+    const filaGeneral = r;
+    r += 2;
+    ['Cómo se calcula:',
+     '• Fecha de recaudo = día y hora en que se hizo la liquidación (cuando el conductor entregó la plata).',
+     '• Fecha de la tarjeta = día que trabajó el bus (el que se elige en Recaudo diario al liquidar).',
+     '• Producido = pasajeros × tarifa.   • Por entregar = producido − total gastos.   • Diferencia = recaudo − por entregar (negativa = faltante).',
+     '• Con relevo, cada conductor sale en su propio renglón (Cond. N° 1, 2, 3) con su tramo de registradora.',
+     '• El total general suma todos los vehículos del informe. El total de cada vehículo está en la hoja "Resumen por vehículo".',
+     '• Solo salen las columnas de los gastos que tuvieron valor en el periodo.',
+    ].forEach((t, i) => {
+      Object.assign(ws.getCell(r + i, 1), { value: t, font: arial({ size: 9, bold: i === 0, color: { argb: 'FF555555' } }) });
+    });
+
+    /* Hoja 2 — Resumen por vehículo (fórmulas sobre la hoja Informe) */
+    const sumadas = COLS.filter(c => c.s);
+    const RCOLS = [
+      { k: 'veh', t: 'Vehículo', w: 10, c: true }, { k: 'placa', t: 'Placa', w: 10, c: true },
+      { k: 'tipo', t: 'Tipo', w: 8, c: true }, { k: 'dias', t: 'Días liquidados', w: 10, f: NUM, c: true, s: true },
+      ...sumadas.map(c => ({ ...c, w: Math.max(c.w, 12) })),
+    ];
+    const rs = hoja('Resumen por vehículo', 'RESUMEN POR VEHÍCULO', RCOLS, 3);
+    const rango = k => `Informe!$${L(k)}$${primera}:$${L(k)}$${ultima}`;
+    const totRes = {};
+    buses.forEach((b, i) => {
+      const fr = FT + 1 + i;
+      const v = {
+        veh: b.numero, placa: b.placa, tipo: b.tipo,
+        dias: { formula: `COUNTIFS(${rango('veh')},$A${fr},${rango('ord')},1)`, result: new Set(b.filas.map(f => f.recaudo_id)).size },
+      };
+      sumadas.forEach(c => { v[c.k] = { formula: `SUMIFS(${rango(c.k)},${rango('veh')},$A${fr})`, result: b.tot[c.k] || 0 }; });
+      RCOLS.forEach((col, j) => {
+        const cell = rs.getCell(fr, j + 1);
+        cell.value = v[col.k];
+        estilo(cell, col);
+        if (col.s) totRes[col.k] = (totRes[col.k] || 0) + valor(v[col.k]);
+      });
+    });
+    const finRes = FT + buses.length;
+    filaTotal(rs, RCOLS, finRes + 1, 'TOTAL GENERAL', 3,
+      (col, n) => ({ formula: `SUM(${letra(n)}${FT + 1}:${letra(n)}${finRes})`, result: totRes[col.k] || 0 }),
+      AZUL, arial({ bold: true, size: 11, color: { argb: BLANCO } }));
+    const control = finRes + 3, colRec = RCOLS.findIndex(c => c.k === 'recaudo') + 1;
+    Object.assign(rs.getCell(control, 1), { value: 'Control: el recaudo total debe ser igual al de la hoja Informe →',
+      font: arial({ size: 9, color: { argb: 'FF555555' } }) });
+    Object.assign(rs.getCell(control, colRec), { value: { formula: `Informe!${L('recaudo')}${filaGeneral}`, result: general.recaudo || 0 },
+      numFmt: DINERO, font: arial({ size: 9, color: { argb: 'FF008000' } }) });
+
+    /* Hoja 3 — Detalle de gastos: un renglón por gasto, con su descripción */
+    const GCOLS = [
+      COLS[0], COLS[1], COLS[2], COLS[3], { k: 'cond', t: 'Conductor', w: 24 },
+      { k: 'tipoG', t: 'Tipo de gasto', w: 22 }, { k: 'valor', t: 'Valor', w: 13, f: DINERO, s: true },
+      { k: 'desc', t: 'Descripción', w: 36, wrap: true },
+    ];
+    const gs = hoja('Detalle de gastos', 'DETALLE DE LOS GASTOS', GCOLS, 0);
+    let fg = FT + 1;
+    const porTipo = {};
+    let totalGastos = 0;
+    inf.filas.forEach(f => f.gastos.forEach(x => {
+      const v = { liq: f.recaudo_id, rec: f.created_at ? horaExcel(f.created_at) : null, tar: diaExcel(f.fecha),
+        veh: vehiculo(f.bus_numero), cond: f.conductor_nombre || '', tipoG: x.tipo, valor: x.valor, desc: x.observacion || '' };
+      GCOLS.forEach((col, j) => { const cell = gs.getCell(fg, j + 1); cell.value = v[col.k] ?? null; estilo(cell, col); });
+      porTipo[x.tipo] = (porTipo[x.tipo] || 0) + x.valor;
+      totalGastos += x.valor;
+      fg++;
+    }));
+    if (fg === FT + 1) {
+      Object.assign(gs.getCell(fg, 1), { value: 'No hubo gastos en el periodo.', font: arial({ color: { argb: 'FF777777' } }) });
+    } else {
+      const finG = fg - 1, colV = letra(7);
+      filaTotal(gs, GCOLS, fg, 'TOTAL GASTOS', 6,
+        () => ({ formula: `SUM(${colV}${FT + 1}:${colV}${finG})`, result: totalGastos }),
+        AZUL, arial({ bold: true, color: { argb: BLANCO } }));
+      fg += 2;
+      Object.assign(gs.getCell(fg, 6), { value: 'Total por tipo de gasto', font: arial({ bold: true, color: { argb: AZUL } }) });
+      tipos.forEach((t, i) => {
+        const fila = fg + 1 + i;
+        Object.assign(gs.getCell(fila, 6), { value: t, font: arial(), border: BORDES });
+        Object.assign(gs.getCell(fila, 7), {
+          value: { formula: `SUMIFS($G$${FT + 1}:$G$${finG},$F$${FT + 1}:$F$${finG},F${fila})`, result: porTipo[t] || 0 },
+          numFmt: DINERO, font: arial(), border: BORDES });
+      });
+    }
+    return wb;
   }
 
   /* ── Tipos de gasto (Administrador) ── */
