@@ -123,8 +123,10 @@
       background-repeat: no-repeat; background-position: right 8px center;
     }
     .cond-input:focus { outline: none; border-color: var(--primary); }
+    /* fixed (posición calculada en ubicarDrop): con absolute, la tabla
+       (overflow:hidden) recortaba el desplegable de las últimas filas. */
     .cond-drop {
-      display: none; position: absolute; top: calc(100% + 2px); left: 0; right: 0;
+      display: none; position: fixed;
       background: var(--white); border: 1px solid var(--border2); border-radius: var(--radius-s);
       max-height: 220px; overflow-y: auto; z-index: 300;
       box-shadow: 0 6px 20px rgba(0,0,0,.12);
@@ -916,7 +918,34 @@
       el.classList.toggle('cond-hidden', q !== '' && el.dataset.id !== '' && !nombre.includes(q));
     });
     document.getElementById(`combo-${busId}`).classList.add('open');
+    ubicarDrop(busId);
   }
+
+  /* Ubica el desplegable bajo el campo; si abajo no cabe y arriba hay más
+     espacio (últimas filas de la página), lo abre hacia arriba. */
+  function ubicarDrop(busId) {
+    const inp  = document.querySelector(`#combo-${busId} .cond-input`);
+    const drop = document.getElementById(`cdrop-${busId}`);
+    if (!inp || !drop) return;
+    const r = inp.getBoundingClientRect();
+    const alto  = Math.min(drop.scrollHeight, 220);
+    const abajo = window.innerHeight - r.bottom;
+    drop.style.left  = r.left + 'px';
+    drop.style.width = r.width + 'px';
+    if (abajo < alto + 8 && r.top > abajo) {
+      drop.style.top    = '';
+      drop.style.bottom = (window.innerHeight - r.top + 2) + 'px';
+    } else {
+      drop.style.bottom = '';
+      drop.style.top    = (r.bottom + 2) + 'px';
+    }
+  }
+
+  function reubicarCombosAbiertos() {
+    document.querySelectorAll('.cond-combo.open').forEach(c => ubicarDrop(c.id.replace('combo-', '')));
+  }
+  window.addEventListener('scroll', reubicarCombosAbiertos, { passive: true });
+  window.addEventListener('resize', reubicarCombosAbiertos);
 
   function selectCond(busId, condId, el) {
     const inp = document.querySelector(`#combo-${busId} .cond-input`);
