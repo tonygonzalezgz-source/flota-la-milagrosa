@@ -338,16 +338,31 @@
     /* Relevo de conductor (conductores 2 y 3 del bus en el día) */
     .cond-wrap { flex: 1; min-width: 0; }
     .relevo-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 5px; }
-    .relevo-chip {
-      display: inline-flex; align-items: center; gap: 3px; max-width: 100%;
-      font-size: 11px; font-weight: 600; color: #7c3aed; background: #f3e8ff;
-      border-radius: 5px; padding: 2px 7px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    }
     .btn-relevo {
       font: 600 11px/1 inherit; color: var(--primary); background: none; cursor: pointer;
       border: 1px dashed var(--primary); border-radius: 5px; padding: 4px 8px; white-space: nowrap;
     }
     .btn-relevo:hover { background: var(--primary2); }
+    /* Bus con relevo: etiqueta en la unidad y franja debajo del bus con los conductores */
+    .tag-relevo {
+      display: inline-block; margin-top: 4px; font-size: 10px; font-weight: 700;
+      color: #7c3aed; background: #f3e8ff; border-radius: 5px; padding: 2px 7px;
+      text-transform: uppercase; letter-spacing: .4px; white-space: nowrap;
+    }
+    tr.fila-con-relevo td { border-bottom: none; }
+    tr.relevo-subfila td { background: #faf5ff; padding: 8px 14px 10px; }
+    .relevo-franja { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; font-size: 12.5px; color: #5b21b6; }
+    .rf-titulo { font-size: 11px; font-weight: 800; color: #7c3aed; text-transform: uppercase; letter-spacing: .4px; }
+    .rf-cond { display: inline-flex; align-items: center; gap: 6px; }
+    .rf-cond b { font-weight: 700; }
+    .rf-cond small { font-size: 11.5px; color: #7c3aed; }
+    .rf-num {
+      display: inline-flex; align-items: center; justify-content: center; flex: none;
+      width: 18px; height: 18px; border-radius: 50%; background: #7c3aed; color: #fff;
+      font-size: 11px; font-weight: 700;
+    }
+    .rf-flecha { color: #a78bfa; }
+    .relevo-franja .btn-relevo { margin-left: auto; background: var(--white); }
     input.viajes-inp.con-relevo { border-color: #c4b5fd; background: #faf5ff; color: #7c3aed; cursor: pointer; }
     .rel-card { border: 1px solid var(--border); border-radius: var(--radius-s); padding: 12px 14px; margin-bottom: 10px; }
     .rel-card.sale { background: #fafafb; }
@@ -428,6 +443,19 @@
         padding: 10px 14px; border-bottom: 1px solid var(--border);
       }
       tbody tr td:last-child { border-bottom: none; }
+
+      /* Franja de relevo pegada al final de la tarjeta del bus, un conductor por renglón */
+      tbody tr.fila-con-relevo { margin-bottom: 0; border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+      tbody tr.fila-con-relevo td { border-bottom: 1px solid var(--border); }
+      tbody tr.fila-con-relevo td:last-child { border-bottom: none; }
+      tbody tr.relevo-subfila { border-top: none; border-top-left-radius: 0; border-top-right-radius: 0; }
+      tbody tr.relevo-subfila td { display: block; padding: 10px 14px 12px; }
+      tbody tr.relevo-subfila td::before { display: none; }
+      .relevo-franja { flex-direction: column; align-items: flex-start; gap: 8px; }
+      .rf-cond { align-items: flex-start; }
+      .rf-cond small { display: block; margin-top: 1px; }
+      .rf-flecha, .rf-sep { display: none; }
+      .relevo-franja .btn-relevo { margin-left: 0; }
 
       tbody td::before {
         content: attr(data-label);
@@ -720,17 +748,58 @@
   function relevoHtml(b) {
     const estado = b.estado || (b._sugerido ? '' : 'trabajando');
     if (estado !== 'trabajando' || b._sugerido || !b.conductor_id) return '';
-    const rel = b.relevos || [];
-    const chips = rel.map(r => `<span class="relevo-chip" title="Conductor ${r.orden}: recibe con la registradora en ${fmtNum(r.registradora)}">↻ ${escapeHtml(nombreConductor(r.conductor_id) || 'Conductor ' + r.orden)} · ${fmtNum(r.registradora)}</span>`).join('');
-    return chips + `<button class="btn-relevo" onclick="abrirRelevo(${b.id})">${rel.length ? 'Editar relevo' : '+ Relevo'}</button>`;
+    // Con relevo, los conductores y "Editar relevo" van en la franja debajo del bus
+    if ((b.relevos || []).length) return '';
+    return `<button class="btn-relevo" onclick="abrirRelevo(${b.id})">+ Relevo</button>`;
+  }
+
+  function tieneRelevo(b) {
+    const estado = b.estado || (b._sugerido ? '' : 'trabajando');
+    return estado === 'trabajando' && !b._sugerido && !!b.conductor_id && (b.relevos || []).length > 0;
+  }
+
+  function tagRelevoHtml(b) {
+    return tieneRelevo(b) ? `<div class="tag-relevo">${b.relevos.length + 1} conductores</div>` : '';
+  }
+
+  /* Franja debajo del bus con los conductores del día en orden y el tramo de
+     registradora de cada uno (el torniquete lleva consecutivo). */
+  function franjaRelevoHtml(b) {
+    if (!tieneRelevo(b)) return '';
+    const lecturas = [b.registradora_inicio, ...b.relevos.map(r => r.registradora), b.registradora_fin];
+    const nombres  = [nombreConductor(b.conductor_id),
+                      ...b.relevos.map(r => nombreConductor(r.conductor_id) || `Conductor ${r.orden}`)];
+    const conds = nombres.map((nom, i) => {
+      const ini = lecturas[i], fin = lecturas[i + 1];
+      let tramo = '';
+      if (ini != null && fin != null) tramo = `${fmtNum(ini)} → ${fmtNum(fin)}${fin > ini ? ` (${fmtNum(fin - ini)} pax)` : ''}`;
+      else if (ini != null) tramo = `desde ${fmtNum(ini)}`;
+      else if (fin != null) tramo = `hasta ${fmtNum(fin)}`;
+      return `<span class="rf-cond"><span class="rf-num">${i + 1}</span><span><b>${escapeHtml(nom || '—')}</b>${tramo ? ` <small><span class="rf-sep">· </span>${tramo}</small>` : ''}</span></span>`;
+    }).join('<span class="rf-flecha">→</span>');
+    return `<tr class="relevo-subfila" id="relsub-${b.id}"><td colspan="8">
+        <div class="relevo-franja"><span class="rf-titulo">Relevo</span>${conds}
+          <button class="btn-relevo" onclick="abrirRelevo(${b.id})">Editar relevo</button></div>
+      </td></tr>`;
   }
 
   function pintarRelevo(busId) {
     const b = buses.find(x => x.id === busId);
+    if (!b) return;
     const el = document.getElementById(`relevo-${busId}`);
-    if (b && el) el.innerHTML = relevoHtml(b);
+    if (el) el.innerHTML = relevoHtml(b);
     const cellViajes = document.getElementById(`viajes-cell-${busId}`);
-    if (b && cellViajes) cellViajes.innerHTML = viajesCellHtml(b);
+    if (cellViajes) cellViajes.innerHTML = viajesCellHtml(b);
+    const tag = document.getElementById(`tagrel-${busId}`);
+    if (tag) tag.innerHTML = tagRelevoHtml(b);
+    // La franja se vuelve a dibujar (o desaparece si el bus ya no tiene relevo)
+    const franja = document.getElementById(`relsub-${busId}`);
+    if (franja) franja.remove();
+    const fila = document.getElementById(`fila-${busId}`);
+    if (fila) {
+      fila.classList.toggle('fila-con-relevo', tieneRelevo(b));
+      fila.insertAdjacentHTML('afterend', franjaRelevoHtml(b));
+    }
   }
 
   const fmtNum = n => (n == null || n === '') ? '—' : Number(n).toLocaleString('es-CO');
@@ -746,11 +815,13 @@
     const trClass = [
       sugerida ? 'row-sugerida' : '',
       docs.bloqueado ? 'row-doc-vencido' : '',
+      tieneRelevo(b) ? 'fila-con-relevo' : '',
     ].filter(Boolean).join(' ');
-    return `<tr class="${trClass}">
+    return `<tr id="fila-${b.id}" class="${trClass}">
       <td class="cell-unidad">
         <span class="bus-num">${b.numero}</span>
         ${b.placa ? `<div class="bus-placa">${escapeHtml(b.placa)}</div>` : ''}
+        <div id="tagrel-${b.id}">${tagRelevoHtml(b)}</div>
         ${sugerida ? '<div class="tag-ayer">Sugerido</div>' : ''}
         ${docsChipHtml(docs)}
       </td>
@@ -768,7 +839,7 @@
         </select>
       </td>
       <td class="cell-alist" data-label="Alistamiento" id="alist-cell-${b.id}">${alistCellHtml(b)}</td>
-    </tr>`;
+    </tr>${franjaRelevoHtml(b)}`;
   }
 
   // Input de viajes realizados: solo tiene sentido para buses trabajando ese día.
@@ -1183,6 +1254,8 @@
         const cellIni = document.getElementById(`reg-ini-cell-${busId}`);
         if (cellIni) cellIni.innerHTML = regCellHtml(bus, 'inicio');
       }
+      // La franja de relevo muestra el tramo de registradora de cada conductor
+      if (tieneRelevo(bus)) pintarRelevo(busId);
       const etiq = tipo === 'inicio' ? 'REG inicio' : 'REG fin';
       showToast(`Bus ${bus.numero}: ${etiq} ${val == null ? 'borrado' : val}`);
     } catch (e) {
