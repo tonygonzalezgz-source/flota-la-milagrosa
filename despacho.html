@@ -560,6 +560,13 @@
   let conductores = [];
   let buses    = [];        // {id, numero, placa, modelo, grupo, estado, conductor_id, ruta_id, cerrado}
 
+  // Solo consulta (p. ej. el Recaudador): ve la pantalla pero no cambia nada. La API
+  // tampoco le acepta guardados; esto evita que la pantalla lo invite a editar.
+  const SOLO_LECTURA = (() => {
+    try { return (JSON.parse(localStorage.getItem('currentUser') || 'null')?.soloLectura || []).includes('despacho'); }
+    catch (_) { return false; }
+  })();
+
   document.addEventListener('DOMContentLoaded', loadAll);
   // El shell mantiene el iframe vivo entre navegaciones y avisa al volver
   window.addEventListener('message', e => {
@@ -593,6 +600,9 @@
         document.getElementById('btnPdf').classList.remove('hidden');
       }
     } catch (_) { /* si falla el parse, dejar los botones ocultos */ }
+    if (SOLO_LECTURA) {
+      document.querySelector('.page-sub').textContent = 'Solo consulta: ves el despacho del día, pero no lo puedes cambiar.';
+    }
 
     try {
       const [despacho, conds] = await Promise.all([
@@ -607,7 +617,7 @@
       // como punto de partida (el despachador puede sobrescribirlo). El
       // save del primer campo del día persiste la sugerencia.
       buses.forEach(b => {
-        if (b.registradora_inicio == null && b.ultima_reg_fin != null) {
+        if (!SOLO_LECTURA && b.registradora_inicio == null && b.ultima_reg_fin != null) {
           b.registradora_inicio  = b.ultima_reg_fin;
           b._reg_ini_sugerida    = true;
         }
@@ -660,6 +670,15 @@
         </div>`;
     });
     document.getElementById('content').innerHTML = html;
+    if (SOLO_LECTURA) bloquearEdicion();
+  }
+
+  /* Solo consulta: nada de la planilla se puede tocar (ni relevos ni viajes). */
+  function bloquearEdicion() {
+    // Sin el "0" de ayuda: en una celda bloqueada parecería una lectura real.
+    document.querySelectorAll('#content input').forEach(el => { el.disabled = true; el.placeholder = '—'; });
+    document.querySelectorAll('#content select').forEach(el => { el.disabled = true; });
+    document.querySelectorAll('#content .btn-relevo').forEach(el => el.remove());
   }
 
   /* Documentos legales del bus: devuelve {estado, vencidos:[label], porVencer:[{label,dias}]} */
@@ -896,6 +915,7 @@
     const estado = b.estado || 'trabajando';
     if (estado !== 'trabajando') return `<span class="alist-na">—</span>`;
     const ok = !!b.tiene_alistamiento;
+    if (SOLO_LECTURA && !ok) return `<span class="alist-na">Pendiente</span>`;
     return `<button id="alist-btn-${b.id}" class="btn-alist ${ok ? 'completado' : 'pendiente'}"
                    onclick="abrirAlistamiento(${b.id})">${ok ? '✓ Ver' : '⚠ Registrar'}</button>`;
   }
@@ -913,7 +933,7 @@
     const btn = document.getElementById('btnCopiarAyer');
     if (!btn) return;
     const hayVacios = buses.some(b => !b.estado && !b.conductor_id && !b.ruta_id);
-    btn.classList.toggle('hidden', !hayVacios);
+    btn.classList.toggle('hidden', SOLO_LECTURA || !hayVacios);
   }
 
   function fechaMenos(iso, dias) {
@@ -1532,7 +1552,7 @@
   }
 
   function setGuardarVisible(visible) {
-    document.getElementById('btnGuardar').style.display = visible ? '' : 'none';
+    document.getElementById('btnGuardar').style.display = visible && !SOLO_LECTURA ? '' : 'none';
   }
 
   function renderModal() {
@@ -1583,6 +1603,7 @@
     </div>`;
 
     document.getElementById('modalBody').innerHTML = html;
+    if (SOLO_LECTURA) document.querySelectorAll('#modalBody input, #modalBody select').forEach(el => { el.disabled = true; });
   }
 
   // Muestra/oculta la caja de novedad según el radio seleccionado

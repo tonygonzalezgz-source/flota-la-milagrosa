@@ -176,11 +176,22 @@ ROLE_VIEWS = {
     "Despachador":    ["despacho", "historial-despacho", "chequeo", "mapa", "relojes", "mb-mapa", "mb-reportes"],
     "Jefe de Ruta":   ["dashboard", "despacho", "historial-despacho", "chequeo", "alistamiento", "relojes", "mb-mapa", "mb-reportes"],
     "Conductor":      ["alistamiento"],
-    "Recaudador":     ["recaudo-diario", "recaudo-pagos", "recaudo-caja"],
+    "Recaudador":     ["recaudo-diario", "recaudo-pagos", "recaudo-caja",
+                       "historial", "despacho", "historial-despacho", "chequeo", "alistamiento"],
+}
+
+# Vistas que el rol solo puede consultar: la pantalla esconde lo que guarda y
+# la API le abre únicamente los GET que usa (pedido del usuario 2026-10-29: el
+# Recaudador maneja dinero y no debe poder tocar la registradora ni la
+# movilidad de las que sale lo que entrega cada conductor).
+ROLE_VIEWS_LECTURA = {
+    "Recaudador": ["historial", "despacho", "historial-despacho", "chequeo", "alistamiento"],
 }
 
 # Roles que pueden operar el módulo de chequeo (llegada/salida en puestos)
 ROLES_CHEQUEO = ("Despachador", "Administrador", "Jefe de Ruta")
+# Ven la supervisión de todos los despachadores; el Recaudador solo la consulta.
+ROLES_CHEQUEO_SUPERVISION = ("Administrador", "Jefe de Ruta", "Recaudador")
 
 # Desde esta fecha (inclusive) los pasajeros de movilidad diaria salen de la
 # registradora que anota el despachador: pasajeros = registradora_fin -
@@ -1361,6 +1372,7 @@ def login():
         "iniciales":    user["iniciales"],
         "color":        user["color"],
         "allowedViews": ROLE_VIEWS.get(rol, []),
+        "soloLectura":  ROLE_VIEWS_LECTURA.get(rol, []),
         "bus_ids":      bus_ids,
         "tratamiento_aceptado": tratamiento_aceptado,
     })
@@ -1400,6 +1412,7 @@ def get_current_user():
         "iniciales": user["iniciales"],
         "color": user["color"],
         "allowedViews": allowed_views,
+        "soloLectura": ROLE_VIEWS_LECTURA.get(rol, []),
         "tratamiento_aceptado": tratamiento_aceptado,
         # Feature flag del chatbot (Fase 1): off salvo que FEATURE_CHATBOT sea true.
         "chatbot_enabled": _feature_chatbot_enabled(),
@@ -2020,7 +2033,7 @@ def delete_ruta(ruta_id):
 # ──────────────────────────────────────────
 
 @app.route("/api/conductores", methods=["GET"])
-@require_role("Administrador", "Analista", "Despachador", "Jefe de Ruta")
+@require_role("Administrador", "Analista", "Despachador", "Jefe de Ruta", "Recaudador")
 def get_conductores():
     db   = get_db()
     rows = db.execute(
@@ -2364,12 +2377,12 @@ def chequeo_salida():
 
 
 @app.route("/api/chequeo/historial", methods=["GET"])
-@require_role(*ROLES_CHEQUEO)
+@require_role(*ROLES_CHEQUEO, "Recaudador")
 def chequeo_historial():
     uid = request.jwt_user_id
     rol = request.jwt_user_rol
 
-    if rol in ("Administrador", "Jefe de Ruta"):
+    if rol in ROLES_CHEQUEO_SUPERVISION:
         desde = request.args.get("desde") or hoy_bogota()
         hasta = request.args.get("hasta") or hoy_bogota()
         filtro_usuario, params_extra = "", []
@@ -2422,7 +2435,7 @@ def _rutas_de_despachador(db, uid):
 
 
 @app.route("/api/despacho", methods=["GET"])
-@require_role("Administrador", "Analista", "Despachador", "Jefe de Ruta", "Conductor")
+@require_role("Administrador", "Analista", "Despachador", "Jefe de Ruta", "Conductor", "Recaudador")
 def get_despacho():
     """Devuelve las rutas activas y todos los buses (con su estado del día).
     Administrador y Despachador ven la misma flota completa y el mismo catálogo
@@ -2470,7 +2483,7 @@ def get_despacho():
 
 
 @app.route("/api/despacho/historial", methods=["GET"])
-@require_role("Administrador", "Analista", "Despachador", "Jefe de Ruta", "Propietario")
+@require_role("Administrador", "Analista", "Despachador", "Jefe de Ruta", "Propietario", "Recaudador")
 def get_historial_despacho():
     """Historial de despacho: todos los vehículos por cada fecha con actividad."""
     desde = request.args.get("desde", (date.today() - timedelta(days=30)).isoformat())
@@ -2983,7 +2996,7 @@ def ahora_bogota():
 
 
 @app.route("/api/alistamiento", methods=["GET"])
-@require_role("Administrador", "Analista", "Despachador", "Jefe de Ruta", "Conductor")
+@require_role("Administrador", "Analista", "Despachador", "Jefe de Ruta", "Conductor", "Recaudador")
 def get_alistamiento():
     """Devuelve el alistamiento de un bus para una fecha dada, o null si no existe."""
     fecha  = request.args.get("fecha", date.today().isoformat())
@@ -3056,7 +3069,7 @@ def upsert_alistamiento():
 
 
 @app.route("/api/alistamiento/historial", methods=["GET"])
-@require_role("Administrador", "Analista", "Despachador", "Jefe de Ruta", "Conductor")
+@require_role("Administrador", "Analista", "Despachador", "Jefe de Ruta", "Conductor", "Recaudador")
 def historial_alistamiento():
     """Historial de alistamientos de un bus, ordenado del más reciente al más antiguo."""
     bus_id = request.args.get("bus_id")
@@ -4713,6 +4726,9 @@ def admin_create_usuario():
 
     if not all([nombre, username, password]):
         return jsonify({"error": "Nombre, usuario y contraseña son requeridos"}), 400
+    # Un rol que no existe entraría sin vistas, pero con permisos que nadie revisó.
+    if rol not in ROLE_VIEWS:
+        return jsonify({"error": f"El rol «{rol}» no existe"}), 400
 
     hashed_pw = generate_password_hash(password, method='pbkdf2:sha256')
     db = get_db()
@@ -4751,6 +4767,9 @@ def admin_update_usuario(uid):
         db.close()
         return jsonify({"error": "Usuario no encontrado"}), 404
     antes = dict(antes)
+    if "rol" in data and data["rol"] != antes["rol"] and data["rol"] not in ROLE_VIEWS:
+        db.close()
+        return jsonify({"error": f"El rol «{data['rol']}» no existe"}), 400
 
     allowed = ["nombre", "username", "iniciales", "color", "activo", "puesto_id", "rol"]
     updates, values = [], []

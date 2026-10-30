@@ -1909,6 +1909,7 @@
       if (!currentUser || !me || !Array.isArray(me.allowedViews)) return;
       const sinCambios =
         JSON.stringify(me.allowedViews) === JSON.stringify(currentUser.allowedViews) &&
+        JSON.stringify(me.soloLectura || []) === JSON.stringify(currentUser.soloLectura || []) &&
         me.rol === currentUser.rol && me.nombre === currentUser.nombre &&
         me.iniciales === currentUser.iniciales && me.color === currentUser.color &&
         !!me.tratamiento_aceptado === !!currentUser.tratamiento_aceptado;
@@ -1923,6 +1924,7 @@
         initials:     me.iniciales,
         color:        me.color,
         allowedViews: me.allowedViews,
+        soloLectura:  me.soloLectura || [],
         nombre:       me.nombre,
         rol:          me.rol,
         iniciales:    me.iniciales,
@@ -2009,6 +2011,7 @@
         initials:     data.iniciales,
         color:        data.color,
         allowedViews: data.allowedViews,
+        soloLectura:  data.soloLectura || [],
         // campos en español que usan los dashboards internos
         nombre:       data.nombre,
         rol:          data.rol,

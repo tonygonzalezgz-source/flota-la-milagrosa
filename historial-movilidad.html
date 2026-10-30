@@ -691,6 +691,13 @@
       .topbar-title { font-size: 13px; }
       .table-wrap { border-radius: 10px; }
     }
+    /* Solo consulta (p. ej. el Recaudador): ve la movilidad y saca el reporte, sin guardar,
+       limpiar, importar ni enviar por WhatsApp. La API tampoco se lo acepta. */
+    body.solo-lectura #btnClear, body.solo-lectura #btnImport, body.solo-lectura #btnSaveAll,
+    body.solo-lectura #pendBar, body.solo-lectura #btnEnviarWa, body.solo-lectura .rf-item:has(#repPropietario),
+    body.solo-lectura .cell-acciones { display:none !important; }
+    body.solo-lectura #tbody input:disabled, body.solo-lectura #tbody select:disabled {
+      background:#f6f6f8; color:var(--txt2); cursor:default; }
   </style>
 </head>
 <body>
@@ -840,7 +847,7 @@
             <th>Ruta</th>
             <th>Novedades</th>
             <th>Estado</th>
-            <th></th>
+            <th class="cell-acciones"></th>
           </tr>
         </thead>
         <tbody id="tbody"></tbody>
@@ -1027,6 +1034,10 @@
   }
 
   let currentUser    = null;
+  const SOLO_LECTURA = (() => {
+    try { return (JSON.parse(localStorage.getItem('currentUser') || 'null')?.soloLectura || []).includes('historial'); }
+    catch (_) { return false; }
+  })();
   let allBuses       = [];
   let allRutas       = [];
   let allConductores = [];
@@ -1170,7 +1181,15 @@
   /* ── INIT ── */
   document.addEventListener('DOMContentLoaded', async () => {
     currentUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
-    restaurarBorrador();
+    if (SOLO_LECTURA) {
+      document.body.classList.add('solo-lectura');
+      // Cualquier fila que se pinte (al cargar, filtrar o con el refresco automático) queda bloqueada.
+      const tbody = document.getElementById('tbody');
+      const bloquear = () => tbody.querySelectorAll('input, select').forEach(el => { el.disabled = true; });
+      new MutationObserver(bloquear).observe(tbody, { childList: true, subtree: true });
+    } else {
+      restaurarBorrador();
+    }
 
     document.getElementById('datePicker').value = shiftIso(hoyBogota(), -1);
     document.getElementById('datePicker').addEventListener('change', () => recargarFecha());
