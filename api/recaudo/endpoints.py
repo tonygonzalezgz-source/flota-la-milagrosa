@@ -15,6 +15,9 @@ Reglas:
 - Una liquidación guardada NO se edita ni se borra. Solo el Administrador puede
   anularla (con motivo); queda en el historial y el bus vuelve a quedar por liquidar.
 - Recaudador liquida hoy y ayer (hora Bogotá). Administrador: cualquier día ya ocurrido.
+- Recaudador no cambia la registradora que trae el despacho: solo llena la que falta
+  y la inicial sigue el consecutivo (ver _lecturas_del_despacho). El Administrador sí
+  la corrige.
 - El propietario ve las liquidaciones vigentes de SUS buses (filtro por el token).
 - Todo cambio queda en el historial de modificaciones (auditoría).
 """
@@ -237,11 +240,18 @@ def recaudo_dia():
                       AND dp.fecha  < ?
                       AND dp.registradora_fin IS NOT NULL
                     ORDER BY dp.fecha DESC
-                    LIMIT 1) AS ultima_reg_fin
+                    LIMIT 1) AS ultima_reg_fin,
+                  (SELECT dp.fecha
+                     FROM despacho_diario dp
+                    WHERE dp.bus_id = b.id
+                      AND dp.fecha  < ?
+                      AND dp.registradora_fin IS NOT NULL
+                    ORDER BY dp.fecha DESC
+                    LIMIT 1) AS ultima_reg_fecha
              FROM buses b
         LEFT JOIN despacho_diario d ON d.bus_id = b.id AND d.fecha = ?
          ORDER BY b.numero""",
-        (fecha, fecha),
+        (fecha, fecha, fecha),
     ).fetchall()
     rutas = conn.execute(
         "SELECT id, nombre, grupo, color, activa FROM rutas ORDER BY grupo, nombre"
@@ -258,6 +268,7 @@ def recaudo_dia():
     salida = []
     for b in buses:
         b = dict(b)
+        b["ultima_reg_fecha"] = _fecha_iso(b["ultima_reg_fecha"])
         b["relevos"] = relevos.get(b["id"], [])   # los anotó el despachador; el formulario los precarga
         b["recaudo"] = vigentes.get(b["id"])
         b["anulados"] = anuladas.get(b["id"], [])
@@ -269,6 +280,8 @@ def recaudo_dia():
         "hoy":         hoy_bogota(),
         "editable":    editable,
         "motivo":      motivo,
+        # Quien no es Administrador no cambia la registradora del despacho.
+        "bloquea_registradora": not _es_admin(),
         "tarifas":     tarifas,
         "tipos_gasto": tipos,
         "rutas":       [dict(r) for r in rutas],
@@ -373,6 +386,70 @@ def _armar_tramos(conn, conductores_in, reg_inicio, reg_fin, tarifa, gastos):
     return tramos
 
 
+def _es_admin():
+    return getattr(request, "jwt_user_rol", None) == "Administrador"
+
+
+def _ultima_lectura(conn, bus_id, fecha):
+    """(lectura, fecha) final de la registradora del último día anterior a `fecha` que la tiene."""
+    f = conn.execute(
+        """SELECT registradora_fin, fecha FROM despacho_diario
+            WHERE bus_id = ? AND fecha < ? AND registradora_fin IS NOT NULL
+            ORDER BY fecha DESC LIMIT 1""",
+        (bus_id, fecha),
+    ).fetchone()
+    return (dict(f)["registradora_fin"], _fecha_iso(dict(f)["fecha"])) if f else (None, None)
+
+
+def _lecturas_del_despacho(conn, bus_id, fecha, despacho, reg_inicio, reg_fin, conductores_in):
+    """Quien no es Administrador no cambia la registradora: manda la que anotó el
+    despachador (pedido del usuario 2026-10-29; como en un punto de venta, quien recibe
+    la plata no anota los datos que dicen cuánta debe llegar). Solo llena la que falta.
+    La inicial sigue el consecutivo: es la del despacho o, si no la trae, la final del
+    último día con lectura; si el despacho trae otra, hay un salto y lo revisa el
+    despachador o el administrador. Devuelve las lecturas que digitó en recaudo."""
+    corregir = "Si está mal, pide al despachador o al administrador que la corrija antes de liquidar."
+    ultima, ultima_fecha = _ultima_lectura(conn, bus_id, fecha)
+    desp_inicio = despacho["registradora_inicio"] if despacho else None
+    desp_fin = despacho["registradora_fin"] if despacho else None
+    if desp_inicio is not None and ultima is not None and desp_inicio != ultima:
+        raise _Rechazo(f"Salto en la registradora: el despacho empieza en {_miles(desp_inicio)}, pero la "
+                       f"última lectura final (del {ultima_fecha}) fue {_miles(ultima)}. Pide al "
+                       "despachador o al administrador que la revise antes de liquidar.", 409)
+
+    digitadas = []
+    inicio = desp_inicio if desp_inicio is not None else ultima
+    if inicio is None:
+        digitadas.append("inicial")
+    elif reg_inicio != inicio:
+        origen = "la del despacho" if desp_inicio is not None else f"la final del {ultima_fecha}"
+        raise _Rechazo(f"La registradora inicial es {_miles(inicio)} ({origen}) y no se puede cambiar. "
+                       f"Si acaba de cambiar, vuelve a cargar. {corregir}", 409)
+    if desp_fin is None:
+        digitadas.append("final")
+    elif reg_fin != desp_fin:
+        raise _Rechazo(f"La registradora final es {_miles(desp_fin)} (la del despacho) y no se puede "
+                       f"cambiar. Si acaba de cambiar, vuelve a cargar. {corregir}", 409)
+
+    anotados = relevos_por_bus(conn, fecha, bus_id).get(bus_id, [])
+    if len(conductores_in) <= len(anotados):
+        raise _Rechazo(f"El despachador anotó {len(anotados)} relevo(s) y no se pueden quitar. {corregir}", 409)
+    for r in anotados:
+        c = conductores_in[r["orden"] - 2]
+        valor = c.get("registradora_fin") if isinstance(c, dict) else None
+        try:
+            valor = int(valor)
+        except (TypeError, ValueError):
+            valor = None
+        if valor != r["registradora"]:
+            raise _Rechazo(f"La registradora al relevo del conductor {r['orden'] - 1} es "
+                           f"{_miles(r['registradora'])} (la anotó el despachador) y no se puede "
+                           f"cambiar. {corregir}", 409)
+    if len(conductores_in) - 1 > len(anotados):
+        digitadas.append("relevo")
+    return digitadas
+
+
 def _vigente(conn, bus_id, fecha):
     return conn.execute(
         "SELECT id FROM recaudos WHERE bus_id = ? AND fecha = ? AND anulado_at IS NULL",
@@ -428,6 +505,9 @@ def liquidar():
         conductores_in = data.get("conductores")
         if not isinstance(conductores_in, list) or not 1 <= len(conductores_in) <= MAX_CONDUCTORES:
             raise _Rechazo(f"Debe haber entre 1 y {MAX_CONDUCTORES} conductores")
+        es_admin = _es_admin()
+        digitadas = [] if es_admin else _lecturas_del_despacho(
+            conn, bus_id, fecha, despacho, reg_inicio, reg_fin, conductores_in)
         gastos = _armar_gastos(conn, data.get("gastos"), len(conductores_in))
         tramos = _armar_tramos(conn, conductores_in, reg_inicio, reg_fin, tarifa, gastos)
     except _Rechazo as e:
@@ -483,7 +563,8 @@ def liquidar():
         correccion = None
         if despacho:
             antes = (despacho["registradora_inicio"], despacho["registradora_fin"])
-            if antes != (reg_inicio, reg_fin):
+            # Quien no es admin solo llena lo que faltaba: eso va como "digitadas".
+            if es_admin and antes != (reg_inicio, reg_fin):
                 correccion = antes
             conn.execute(
                 """UPDATE despacho_diario
@@ -531,6 +612,9 @@ def liquidar():
                             f"{reg_inicio}–{reg_fin}.")
         elif not despacho:
             descripcion += " El bus no tenía despacho: se creó con estos datos."
+        if digitadas:
+            descripcion += (" Registradora digitada en recaudo (el despacho no la traía): "
+                            + ", ".join(digitadas) + ".")
         auditoria.registrar(
             conn, "recaudo", "liquidacion", recaudo_id, "crear", descripcion,
             {"fecha": fecha, "bus": bus["numero"], "registradora": [reg_inicio, reg_fin],
@@ -539,6 +623,7 @@ def liquidar():
              "total_gastos": total_gastos, "neto": neto, "recaudado": recaudado,
              "diferencia": diferencia,
              "despacho_antes": list(correccion) if correccion else None,
+             "digitadas_en_recaudo": digitadas or None,
              "conductores": [{k: t[k] for k in ("conductor_nombre", "registradora_inicio",
                                                 "registradora_fin", "pasajeros", "producido",
                                                 "total_gastos", "recaudado", "diferencia")}

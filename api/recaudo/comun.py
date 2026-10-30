@@ -66,9 +66,10 @@ MAX_CONDUCTORES = 3
 
 # Puesta en marcha por etapas: el recaudo solo responde a estos roles; los demás
 # reciben 403. Desde el 2026-10-10: el Administrador y el Propietario (ve la
-# liquidación real de SUS buses en Mis Buses, web y app). El Recaudador todavía
-# no: queda sin vistas. Para abrírselo, agregar "Recaudador".
-ROLES_HABILITADOS = ("Administrador", "Propietario")
+# liquidación real de SUS buses en Mis Buses, web y app). Desde el 2026-10-29,
+# el Recaudador: liquida sin poder cambiar la registradora que trae el despacho
+# (ver _lecturas_bloqueadas en endpoints.py). Quitarlo de aquí lo deja sin vistas.
+ROLES_HABILITADOS = ("Administrador", "Propietario", "Recaudador")
 
 _deps = {}
 

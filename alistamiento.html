@@ -332,6 +332,13 @@
   const HOY    = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date());
   let buses    = [];        // {id, numero, placa, modelo, grupo, estado, conductor_id, tiene_alistamiento}
 
+  // Solo consulta (p. ej. el Recaudador): ve la pantalla pero no cambia nada. La API
+  // tampoco le acepta guardados; esto evita que la pantalla lo invite a editar.
+  const SOLO_LECTURA = (() => {
+    try { return (JSON.parse(localStorage.getItem('currentUser') || 'null')?.soloLectura || []).includes('alistamiento'); }
+    catch (_) { return false; }
+  })();
+
   document.addEventListener('DOMContentLoaded', loadAll);
   // El shell mantiene el iframe vivo entre navegaciones y avisa al volver
   window.addEventListener('message', e => {
@@ -355,6 +362,9 @@
 
   async function loadAll() {
     document.getElementById('fechaPill').textContent = formatoFecha(HOY);
+    if (SOLO_LECTURA) {
+      document.querySelector('.page-sub').textContent = 'Solo consulta: ves los alistamientos del día, pero no los puedes registrar.';
+    }
     try {
       const despacho = await apiFetch(`/api/despacho?fecha=${HOY}`);
       buses = despacho.buses || [];
@@ -418,6 +428,7 @@
     const estado = b.estado || 'trabajando';
     if (estado !== 'trabajando') return `<span class="alist-na">—</span>`;
     const ok = !!b.tiene_alistamiento;
+    if (SOLO_LECTURA && !ok) return `<span class="alist-na">Pendiente</span>`;
     return `<button id="alist-btn-${b.id}" class="btn-alist ${ok ? 'completado' : 'pendiente'}"
                    onclick="abrirAlistamiento(${b.id})">${ok ? '✓ Ver' : '⚠ Registrar'}</button>`;
   }
@@ -521,7 +532,7 @@
   }
 
   function setGuardarVisible(visible) {
-    document.getElementById('btnGuardar').style.display = visible ? '' : 'none';
+    document.getElementById('btnGuardar').style.display = visible && !SOLO_LECTURA ? '' : 'none';
   }
 
   function renderModal() {
@@ -572,6 +583,7 @@
     </div>`;
 
     document.getElementById('modalBody').innerHTML = html;
+    if (SOLO_LECTURA) document.querySelectorAll('#modalBody input, #modalBody select').forEach(el => { el.disabled = true; });
   }
 
   // Muestra/oculta la caja de novedad según el radio seleccionado

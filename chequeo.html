@@ -322,6 +322,9 @@
   const CU  = JSON.parse(localStorage.getItem('currentUser') || 'null');
   // Administrador y Jefe de Ruta ven la vista de supervisión (todos los despachadores)
   const ES_ADMIN = CU && (CU.rol === 'Administrador' || CU.rol === 'Jefe de Ruta');
+  // Solo consulta (p. ej. el Recaudador): ve la supervisión, sin marcar llegada ni salida.
+  const SOLO_LECTURA = !!(CU && (CU.soloLectura || []).includes('chequeo'));
+  const VISTA_SUPERVISION = ES_ADMIN || SOLO_LECTURA;
 
   let chequeoHoy = null;      // chequeo del día del despachador (o null)
   let puestosActivos = [];    // puestos disponibles para elegir al marcar llegada
@@ -348,7 +351,7 @@
   // recargar solo los datos (no re-ejecutar init, que alterna DOM y permisos)
   window.addEventListener('message', e => {
     if (e.data?.type !== 'VIEW_SHOWN') return;
-    if (ES_ADMIN) { loadHistorialAdmin(); }
+    if (VISTA_SUPERVISION) { loadHistorialAdmin(); }
     else { loadHoy(); loadHistorialMio(); }
   });
 
@@ -369,7 +372,7 @@
 
   function init() {
     document.getElementById('fechaPill').textContent = formatoFecha(HOY);
-    if (ES_ADMIN) {
+    if (VISTA_SUPERVISION) {
       document.getElementById('pageSub').textContent =
         'Historial de llegadas y salidas de los despachadores, con la ubicación registrada en cada marca.';
       document.getElementById('vistaAdmin').classList.remove('hidden');

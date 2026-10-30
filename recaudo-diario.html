@@ -103,6 +103,7 @@
     .sec-lbl { font-size:11.5px; font-weight:800; text-transform:uppercase; letter-spacing:.5px; color:var(--txt3); margin:4px 0 8px; }
     .campos { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin-bottom:14px; }
     .campo label { display:block; font-size:11.5px; font-weight:700; color:var(--txt2); margin-bottom:5px; }
+    .campo label .del-desp { font-weight:600; color:var(--txt3); text-transform:none; }   /* lectura bloqueada que viene del despacho */
     .campo input, .campo select { width:100%; padding:9px 10px; border:1.5px solid var(--border2); border-radius:var(--radius-s);
       font-family:inherit; font-size:15px; background:var(--white); color:var(--txt); }
     .campo input:focus, .campo select:focus { outline:none; border-color:var(--primary); }
@@ -735,6 +736,28 @@
     return { ...base, conductores };
   }
 
+  /* Quien no es admin no cambia la registradora que trae el despacho: solo llena la que
+     falta (como en un punto de venta, quien recibe la plata no anota cuánta debe llegar).
+     La inicial sigue el consecutivo: si el despacho arranca en otra lectura que la final
+     del último día, hay un salto y lo corrige el despachador o el administrador.
+     El servidor aplica la misma regla. */
+  function bloqueoReg(b) {
+    if (!D.bloquea_registradora || b.recaudo) return null;
+    return {
+      ini: (b.registradora_inicio ?? b.ultima_reg_fin) != null,
+      iniOrigen: b.registradora_inicio != null ? 'del despacho' : 'última lectura',
+      fin: b.registradora_fin != null,
+      relevos: (b.relevos || []).length,
+      salto: b.registradora_inicio != null && b.ultima_reg_fin != null && b.registradora_inicio !== b.ultima_reg_fin,
+    };
+  }
+  /* Lecturas que se digitan en recaudo porque el despacho no las traía (van al historial). */
+  function lecturasDigitadas(b) {
+    const bq = bloqueoReg(b);
+    if (!bq) return [];
+    return [!bq.ini && 'inicial', !bq.fin && 'final', form.conductores.length - 1 > bq.relevos && 'relevo'].filter(Boolean);
+  }
+
   let tab = 0;   // pestaña (conductor) visible
 
   function seleccionar(id, conservarEdicion = false) {
@@ -782,6 +805,14 @@
       return;
     }
 
+    const bq = bloqueoReg(b);
+    if (bq?.salto && D.editable) {
+      card.innerHTML = head + `<div class="aviso">Salto en la registradora: el despacho arranca en <b>${fmtNum(b.registradora_inicio)}</b>,
+        pero la última lectura final (del ${esc(b.ultima_reg_fecha || '')}) fue <b>${fmtNum(b.ultima_reg_fin)}</b>.
+        No se puede liquidar hasta que el despachador o el administrador lo revisen y corrijan.</div>`;
+      return;
+    }
+
     const cerrada = !!b.recaudo;   // una liquidación guardada no se modifica
     const editable = !cerrada && D.editable;
     const ro = editable ? '' : 'disabled';
@@ -812,11 +843,11 @@
     card.innerHTML = head + avisoCerrada + notaOblig + `
       <div class="sec-lbl">Registradora del día</div>
       <div class="campos">
-        <div class="campo"><label>Reg. inicial${req}</label>
-          <input id="fRegIni" inputmode="numeric" value="${valEnt(form.registradora_inicio)}" ${ro}
+        <div class="campo"><label>Reg. inicial${bq?.ini ? ` <small class="del-desp">${bq.iniOrigen}</small>` : req}</label>
+          <input id="fRegIni" inputmode="numeric" value="${valEnt(form.registradora_inicio)}" ${bq?.ini ? 'disabled' : ro}
                  oninput="setHeader('registradora_inicio', this)" /></div>
-        <div class="campo"><label>Reg. final${req}</label>
-          <input id="fRegFin" inputmode="numeric" value="${valEnt(form.registradora_fin)}" ${ro}
+        <div class="campo"><label>Reg. final${bq?.fin ? ' <small class="del-desp">del despacho</small>' : req}</label>
+          <input id="fRegFin" inputmode="numeric" value="${valEnt(form.registradora_fin)}" ${bq?.fin ? 'disabled' : ro}
                  oninput="setHeader('registradora_fin', this)" /></div>
         <div class="campo"><label>Pas. movilizados</label><div class="calc" id="cPax">—</div></div>
         <div class="campo"><label>Tarifa ${TIPO[b.grupo] ? TIPO[b.grupo].toLowerCase() : ''}</label><div class="calc">${fmtMoney(tarifaDe(b))}</div></div>
@@ -826,7 +857,7 @@
 
       <div class="sec-lbl">${n > 1 ? 'Conductores (relevo)' : 'Conductor'}</div>
       ${pestanas}${ayudaRelevo}
-      ${form.conductores.map((c, i) => htmlPanel(b, i, { editable, ro, req, valEnt })).join('')}
+      ${form.conductores.map((c, i) => htmlPanel(b, i, { editable, ro, req, valEnt, bq })).join('')}
       <div id="resumenBus"></div>
 
       <div class="acciones">
@@ -840,17 +871,18 @@
   }
 
   /* Panel de un conductor: datos, su tramo de registradora (si hay relevo), sus gastos y su entrega */
-  function htmlPanel(b, i, { editable, ro, req, valEnt }) {
+  function htmlPanel(b, i, { editable, ro, req, valEnt, bq }) {
     const c = form.conductores[i];
     const n = form.conductores.length;
     const ultimo = i === n - 1;
+    const relevoDelDespacho = bq && i < bq.relevos;   // lo anotó el despachador: no se cambia ni se quita
     const rutasGrupo = D.rutas.filter(r => (r.activa && r.grupo === b.grupo) || r.id === c.ruta_id);
     const tramo = n > 1 ? `<div class="tramo">
         <div class="campo"><label>Arranca en</label><div class="calc" id="cIni-${i}">—</div></div>
         ${ultimo
           ? `<div class="campo"><label>Termina en (reg. final)</label><div class="calc" id="cFin-${i}">—</div></div>`
-          : `<div class="campo"><label>Reg. al relevo${req}</label>
-               <input id="fRelevo-${i}" inputmode="numeric" value="${valEnt(c.registradora_fin)}" ${ro}
+          : `<div class="campo"><label>Reg. al relevo${relevoDelDespacho ? ' <small class="del-desp">del despacho</small>' : req}</label>
+               <input id="fRelevo-${i}" inputmode="numeric" value="${valEnt(c.registradora_fin)}" ${relevoDelDespacho ? 'disabled' : ro}
                       oninput="setCond(${i}, 'registradora_fin', leerEntero(this.value))" /></div>`}
         <div class="campo"><label>Pasajeros</label><div class="calc" id="cPaxC-${i}">—</div></div>
         <div class="campo"><label>Producido</label><div class="calc" id="cProdC-${i}">—</div></div>
@@ -894,7 +926,7 @@
                  oninput="setCond(${i}, 'observacion', this.value)" /></div>
       </div>
       <div class="nota cambio" id="notaGastos-${i}"></div>
-      ${editable && i > 0 && ultimo ? `<button class="btn danger quitar-relevo" onclick="quitarRelevo(${i})">Quitar este relevo</button>` : ''}
+      ${editable && i > 0 && ultimo && !(bq && i <= bq.relevos) ? `<button class="btn danger quitar-relevo" onclick="quitarRelevo(${i})">Quitar este relevo</button>` : ''}
       ${!editable && b.recaudo && n > 1 ? `<button class="btn" onclick="imprimirTirilla(${b.recaudo.id}, true, ${i + 1})">Imprimir tirilla de este conductor</button>` : ''}
     </div>`;
   }
@@ -1096,9 +1128,16 @@
 
     // Aviso de corrección del despacho (una sola fuente de verdad)
     const nota = document.getElementById('notaReg');
+    const bq = bloqueoReg(b);
     if (hayLecturas && !valida) {
       nota.className = 'nota cambio';
       nota.textContent = 'La registradora final no puede ser menor que la inicial.';
+    } else if (bq && D.editable) {
+      const faltan = [!bq.ini && 'inicial', !bq.fin && 'final'].filter(Boolean).join(' y ');
+      nota.className = faltan ? 'nota cambio' : 'nota';
+      nota.textContent = faltan
+        ? `El despacho no trae la registradora ${faltan}: la que escribas queda anotada en el despacho y en el historial de modificaciones.`
+        : 'La registradora viene del despacho y no se puede cambiar. Si está mal, pide al despachador o al administrador que la corrija antes de liquidar.';
     } else if (!b.recaudo && b.despacho_id && (ini !== b.registradora_inicio || fin !== b.registradora_fin) && D.editable) {
       const antes = `${b.registradora_inicio ?? '—'} → ${b.registradora_fin ?? '—'}`;
       nota.className = 'nota cambio';
@@ -1274,6 +1313,7 @@
       <div><span>Fecha de la tarjeta</span><span>${fmtDia(fecha)}</span></div>
       ${n === 1 ? `<div><span>Conductor</span><span>${nombre(0)}</span></div>` : ''}
       <div><span>Registradora${n > 1 ? ' del bus' : ''}</span><span>${fmtNum(ini)} → ${fmtNum(fin)}</span></div>
+      ${lecturasDigitadas(b).length ? `<div><span>Digitado en recaudo (no venía del despacho)</span><span class="warn">registradora ${lecturasDigitadas(b).join(', ')}</span></div>` : ''}
       ${tramos.map(bloque).join('')}
       ${n > 1 ? `<div class="sub"><span>Total del bus</span><span>${fmtNum(fin - ini)} pasajeros</span></div>
         <div><span>Producido</span><span>${fmtMoney(producido)}</span></div>
