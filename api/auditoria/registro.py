@@ -25,15 +25,19 @@ def _ip():
     return ip[:64] or None
 
 
-def registrar(conn, modulo, entidad, entidad_id, accion, descripcion, cambios=None):
-    """Agrega una fila al historial con el usuario del token (copia de su nombre y rol)."""
-    uid = getattr(request, "jwt_user_id", None)
-    usuario = {}
-    if uid:
-        fila = conn.execute(
-            "SELECT nombre, username, rol FROM usuarios WHERE id = ?", (uid,)
-        ).fetchone()
-        usuario = dict(fila) if fila else {}
+def registrar(conn, modulo, entidad, entidad_id, accion, descripcion, cambios=None, usuario=None):
+    """Agrega una fila al historial con el usuario del token (copia de su nombre y rol).
+    `usuario` ({id, nombre, username, rol}) lo reemplaza: al iniciar sesión aún no hay token."""
+    if usuario is not None:
+        uid = usuario.get("id")
+    else:
+        uid = getattr(request, "jwt_user_id", None)
+        usuario = {}
+        if uid:
+            fila = conn.execute(
+                "SELECT nombre, username, rol FROM usuarios WHERE id = ?", (uid,)
+            ).fetchone()
+            usuario = dict(fila) if fila else {}
     if isinstance(cambios, dict):
         cambios = {k: v for k, v in cambios.items() if k not in _SENSIBLES}
     conn.execute(
