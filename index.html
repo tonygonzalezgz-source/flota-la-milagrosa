@@ -860,6 +860,20 @@
       .pv-check, .pv-actions { padding-left: 16px; padding-right: 16px; }
       .pv-actions { flex-direction: column-reverse; }
     }
+
+    /* Aviso de cierre por inactividad (sesión segura) */
+    .aviso-inactividad {
+      position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 10000;
+      display: flex; align-items: center; gap: 14px; flex-wrap: wrap; justify-content: center;
+      max-width: calc(100% - 32px); padding: 12px 16px; border-radius: var(--radius-sm);
+      background: #1f1407; border: 1px solid rgba(245,158,11,.5); color: #fde68a;
+      font-size: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.45);
+    }
+    .aviso-inactividad[hidden] { display: none; }
+    .aviso-inactividad button {
+      border: 0; border-radius: 8px; padding: 8px 14px; cursor: pointer;
+      background: var(--yellow); color: #1f1407; font-weight: 700; font-size: 14px;
+    }
   </style>
 </head>
 <body>
@@ -1876,6 +1890,8 @@
           }
         }
 
+        iniciarVigilante();
+
         // Validar token en background (sin bloquear UI).
         // apiFetch NO lanza error con un 401, así que hay que revisar res.ok:
         // si el token está vencido, limpiar y volver al login en vez de dejar
@@ -2069,6 +2085,115 @@
     showToast('success', `¡Bienvenido, ${currentUser.name}!`);
     // Aviso de tratamiento de datos: solo Propietarios que aún no aceptaron.
     maybeShowPrivacyNotice();
+    iniciarVigilante();
+  }
+
+  /* ═══════════════════════════════════════
+     4.0 SESIÓN SEGURA (pedido del usuario 2026-10-29)
+     - Inactividad: quien maneja la caja queda fuera a los 15 min sin mover el
+       mouse ni teclear (aviso un minuto antes), como en un punto de venta. Cuenta
+       la actividad de todas las pestañas (localStorage) y de las vistas (iframes).
+     - Cuenta desactivada o con otro rol: cada minuto se confirma con /api/me
+       (el servidor ya rechaza sus peticiones; esto la saca de la pantalla).
+  ═══════════════════════════════════════ */
+  const SESION_SEGURA = {
+    rolesInactividad:  ['Recaudador'],
+    minutosInactividad: 15,
+    rolesVigilados:    ['Administrador', 'Recaudador'],
+  };
+  const CLAVE_ACTIVIDAD = 'ultimaActividad';
+  const EVENTOS_ACTIVIDAD = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'wheel', 'scroll'];
+  let vigilanteTimer = null, ultimaActividad = Date.now(), actividadGuardada = 0, cuentaRevisada = 0;
+
+  function marcarActividad() {
+    ultimaActividad = Date.now();
+    if (ultimaActividad - actividadGuardada > 5000) {   // no escribir en cada movimiento
+      actividadGuardada = ultimaActividad;
+      try { localStorage.setItem(CLAVE_ACTIVIDAD, String(ultimaActividad)); } catch (_) {}
+    }
+    ocultarAvisoInactividad();
+  }
+  function escucharActividad(doc) {
+    if (!doc || doc.__escuchaActividad) return;
+    doc.__escuchaActividad = true;
+    EVENTOS_ACTIVIDAD.forEach(ev => doc.addEventListener(ev, marcarActividad, { passive: true, capture: true }));
+  }
+  // Las vistas son iframes del mismo origen: cada documento que cargan también cuenta.
+  function escucharIframes() {
+    document.querySelectorAll('iframe').forEach(f => {
+      if (!f.__escuchaActividad) {
+        f.__escuchaActividad = true;
+        f.addEventListener('load', () => { try { escucharActividad(f.contentDocument); } catch (_) {} });
+      }
+      try { escucharActividad(f.contentDocument); } catch (_) {}
+    });
+  }
+
+  function iniciarVigilante() {
+    detenerVigilante();
+    if (!currentUser) return;
+    cuentaRevisada = Date.now();
+    escucharActividad(document);
+    escucharIframes();
+    marcarActividad();
+    vigilanteTimer = setInterval(revisarSesion, 10000);
+  }
+  function detenerVigilante() {
+    clearInterval(vigilanteTimer);
+    vigilanteTimer = null;
+    ocultarAvisoInactividad();
+  }
+
+  function revisarSesion() {
+    if (!currentUser) return detenerVigilante();
+    escucharIframes();
+    const rol = currentUser.rol;
+    if (SESION_SEGURA.rolesInactividad.includes(rol)) {
+      let ultima = ultimaActividad;
+      try { ultima = Math.max(ultima, Number(localStorage.getItem(CLAVE_ACTIVIDAD)) || 0); } catch (_) {}
+      const limite = SESION_SEGURA.minutosInactividad * 60000;
+      const quieto = Date.now() - ultima;
+      if (quieto >= limite) {
+        return cerrarSesionSegura(`Se cerró tu sesión por seguridad: ${SESION_SEGURA.minutosInactividad} minutos sin actividad. Vuelve a entrar para seguir.`);
+      }
+      if (quieto >= limite - 60000) mostrarAvisoInactividad();
+    }
+    if (SESION_SEGURA.rolesVigilados.includes(rol) && Date.now() - cuentaRevisada >= 60000) {
+      cuentaRevisada = Date.now();
+      apiFetch(`${API_URL}/me`, { headers: { 'X-Refresco-Auto': '1' } })
+        .then(res => {
+          if (res.status === 401 || res.status === 404) {
+            cerrarSesionSegura('Tu sesión ya no es válida (la cuenta fue desactivada o cambió de rol, o la sesión venció). Vuelve a entrar.');
+          }
+        })
+        .catch(() => { /* sin conexión: no se cierra la sesión por eso */ });
+    }
+  }
+
+  function mostrarAvisoInactividad() {
+    let el = document.getElementById('avisoInactividad');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'avisoInactividad';
+      el.className = 'aviso-inactividad';
+      el.setAttribute('role', 'alert');
+      el.innerHTML = '<span>Por seguridad, tu sesión se cerrará en 1 minuto por inactividad.</span>' +
+                     '<button type="button">Seguir trabajando</button>';
+      el.querySelector('button').addEventListener('click', marcarActividad);
+      document.body.appendChild(el);
+    }
+    el.hidden = false;
+  }
+  function ocultarAvisoInactividad() {
+    const el = document.getElementById('avisoInactividad');
+    if (el && !el.hidden) el.hidden = true;
+  }
+
+  function cerrarSesionSegura(mensaje) {
+    detenerVigilante();
+    doLogout(mensaje);
+    document.getElementById('lgErrorMsg').textContent = mensaje;
+    document.getElementById('lgError').classList.add('show');
   }
 
   /* ═══════════════════════════════════════
@@ -2309,7 +2434,8 @@
   /* ═══════════════════════════════════════
      9. LOGOUT
   ═══════════════════════════════════════ */
-  function doLogout() {
+  function doLogout(mensaje) {
+    detenerVigilante();
     // Reset state
     localStorage.removeItem('authToken');
     localStorage.removeItem('currentUser');
@@ -2354,7 +2480,7 @@
     ls.style.display = '';
     ls.classList.remove('exit');
 
-    showToast('info', 'Sesión cerrada correctamente.');
+    showToast('info', mensaje || 'Sesión cerrada correctamente.');
   }
 
   /* ═══════════════════════════════════════

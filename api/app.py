@@ -97,6 +97,31 @@ def _renovar_token_si_conviene(payload):
         return resp
 
 
+# Roles que manejan dinero o todo el sistema: en cada petición se confirma que la
+# cuenta siga activa y con el mismo rol, así desactivar a un recaudador lo saca de
+# una vez y no cuando venza su sesión (pedido del usuario 2026-10-29). Lo visto
+# se recuerda 60 s por instancia para no consultar la base en cada petición;
+# editar o desactivar una cuenta lo olvida en el acto.
+ROLES_SESION_VIGILADA = ("Administrador", "Recaudador")
+_SESION_TTL = 60
+_sesiones_vistas = {}   # (demo, user_id) → (vence, activo, rol)
+
+
+def _cuenta_vigente(user_id, rol):
+    clave = (bool(getattr(request, "jwt_demo", False)), user_id)
+    ahora = time.time()
+    visto = _sesiones_vistas.get(clave)
+    if not visto or visto[0] < ahora:
+        db = get_db()
+        try:
+            u = db.execute("SELECT activo, rol FROM usuarios WHERE id = ?", (user_id,)).fetchone()
+        finally:
+            db.close()
+        visto = (ahora + _SESION_TTL, bool(u and u["activo"]), u["rol"] if u else None)
+        _sesiones_vistas[clave] = visto
+    return visto[1] and visto[2] == rol
+
+
 # ── Decorador de autenticación JWT ──
 def require_auth(f):
     @wraps(f)
@@ -114,6 +139,9 @@ def require_auth(f):
             return jsonify({"error": "Sesión expirada. Inicia sesión nuevamente."}), 401
         except _jwt.InvalidTokenError:
             return jsonify({"error": "Token inválido"}), 401
+        if (request.jwt_user_rol in ROLES_SESION_VIGILADA
+                and not _cuenta_vigente(request.jwt_user_id, request.jwt_user_rol)):
+            return jsonify({"error": "Tu sesión ya no es válida. Inicia sesión nuevamente."}), 401
         _renovar_token_si_conviene(payload)
         return f(*args, **kwargs)
     return decorated
@@ -1292,6 +1320,64 @@ def migrate_db():
 #  Auth
 # ──────────────────────────────────────────
 
+# Bloqueo por cuenta: 5 intentos fallidos en 15 minutos la bloquean 15 minutos.
+# Se cuenta con el historial (módulo 'sesion'), que se comparte entre instancias;
+# el límite por IP de arriba vive en memoria y se pierde en cada arranque.
+_INTENTOS_MAX = 5
+_BLOQUEO_MIN = 15
+
+
+def _fallos_recientes(db, username):
+    """Horas (UTC, la más reciente primero) de los intentos fallidos de esa cuenta en
+    los últimos 15 minutos, sin contar los anteriores a su última entrada exitosa."""
+    desde = datetime.now(timezone.utc) - timedelta(minutes=_BLOQUEO_MIN)
+    try:
+        filas = db.execute(
+            """SELECT accion, creado_at FROM auditoria
+                WHERE modulo = 'sesion' AND usuario_login = ? AND creado_at >= ?
+                ORDER BY id DESC LIMIT 50""",
+            (username, desde if _es_pg() else desde.strftime("%Y-%m-%dT%H:%M:%SZ")),
+        ).fetchall()
+    except Exception as e:
+        # Sin historial no hay conteo, pero no se deja a nadie sin poder entrar.
+        try:
+            db.rollback()   # en Postgres el SELECT fallido aborta la transacción
+        except Exception:
+            pass
+        print(f"[login] no se pudo leer el historial de intentos: {e}")
+        return []
+    fallos = []
+    for f in filas:
+        if f["accion"] == "entrar":
+            break
+        if f["accion"] == "fallido":
+            v = f["creado_at"]
+            if isinstance(v, str):
+                v = datetime.strptime(v, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+            elif v.tzinfo is None:
+                v = v.replace(tzinfo=timezone.utc)
+            fallos.append(v)
+    return fallos
+
+
+def _anotar_sesion(db, accion, username, user, descripcion):
+    """Historial de inicios de sesión (nunca la contraseña). Si falla, no impide
+    entrar: solo se pierde ese rastro."""
+    try:
+        auditoria.registrar(
+            db, "sesion", "usuario", user["id"] if user else None, accion, descripcion,
+            usuario={"id": user["id"] if user else None, "nombre": user["nombre"] if user else None,
+                     "username": username, "rol": user["rol"] if user else None},
+        )
+        db.commit()
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        print(f"[login] no se pudo anotar en el historial: {e}")
+
+
 @app.route("/api/login", methods=["POST"])
 def login():
     ip = request.remote_addr or "unknown"
@@ -1310,14 +1396,38 @@ def login():
     request.jwt_demo = _demo_habilitada() and username == DEMO_USUARIO
 
     db = get_db()
+    username = username[:80]
+    fallos = _fallos_recientes(db, username)
+    if len(fallos) >= _INTENTOS_MAX:
+        libre = fallos[_INTENTOS_MAX - 1] + timedelta(minutes=_BLOQUEO_MIN)
+        minutos = max(1, -(-int((libre - datetime.now(timezone.utc)).total_seconds()) // 60))
+        _anotar_sesion(db, "bloqueado", username, None,
+                       f"Intento de entrar con la cuenta «{username}», bloqueada por intentos fallidos")
+        db.close()
+        return jsonify({"error": f"Por seguridad, la cuenta está bloqueada por {_INTENTOS_MAX} intentos "
+                                 f"fallidos. Intenta de nuevo en {minutos} min."}), 429
+
+    def _rechazo(user):
+        quedan = _INTENTOS_MAX - len(fallos) - 1
+        _anotar_sesion(db, "fallido", username, user,
+                       f"Intento fallido de entrar con la cuenta «{username}»"
+                       + ("" if user else " (no existe o está desactivada)"))
+        db.close()
+        msg = "Usuario o contraseña incorrectos."
+        if quedan <= 0:
+            msg += f" Por seguridad, la cuenta quedó bloqueada {_BLOQUEO_MIN} minutos."
+        elif quedan <= 2:
+            msg += (f" Te {'queda 1 intento' if quedan == 1 else f'quedan {quedan} intentos'} antes de "
+                    f"que la cuenta se bloquee {_BLOQUEO_MIN} minutos.")
+        return jsonify({"error": msg}), 401
+
     user = db.execute(
         "SELECT * FROM usuarios WHERE username = ? AND activo = 1",
         (username,),
     ).fetchone()
 
     if not user:
-        db.close()
-        return jsonify({"error": "Usuario o contraseña incorrectos."}), 401
+        return _rechazo(None)
 
     stored_pw = user["password"]
     # Migración perezosa: si la contraseña no está hasheada, verificar en texto plano y hashear
@@ -1341,9 +1451,9 @@ def login():
                 print(f"[login] no se pudo migrar la contraseña del usuario {user['id']}: {e}")
 
     if not valid:
-        db.close()
-        return jsonify({"error": "Usuario o contraseña incorrectos."}), 401
+        return _rechazo(user)
 
+    _anotar_sesion(db, "entrar", username, user, f"Inició sesión ({user['rol']})")
     rol = user["rol"]
     bus_ids = []
     if rol in ("Propietario", "Técnico Mant."):
@@ -4866,6 +4976,7 @@ def admin_create_usuario():
 @app.route("/api/admin/usuarios/<int:uid>", methods=["PUT"])
 @require_role("Administrador")
 def admin_update_usuario(uid):
+    _sesiones_vistas.clear()   # si se desactiva o cambia de rol, cuenta desde ya
     data = request.get_json(force=True)
     db   = get_db()
     antes = db.execute(
@@ -4930,6 +5041,7 @@ def admin_delete_usuario(uid):
     """Por defecto desactiva la cuenta (soft delete). Con ?hard=1 la elimina
     definitivamente, liberando el username (cédula) para poder crearla de nuevo
     con otro rol/puesto. El historial se conserva desvinculado (queda sin nombre)."""
+    _sesiones_vistas.clear()
     hard = request.args.get("hard") == "1"
     db = get_db()
     cuenta = db.execute("SELECT nombre, username, rol, activo FROM usuarios WHERE id = ?", (uid,)).fetchone()
