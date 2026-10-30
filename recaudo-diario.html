@@ -277,12 +277,12 @@
       .tipo-row > input { flex-basis:100%; }
     }
 
-    /* Tirilla de liquidación: fuera de la pantalla (así se puede medir) y sola al imprimir */
+    /* Tirilla de liquidación: fuera de la pantalla y sola al imprimir */
     #tirilla { position:absolute; left:-10000px; top:0; background:#fff; color:#000; }
     /* Impresora de matriz de punto con rollo de 76 mm: imprime unos 63 mm del centro del
        papel, así que el texto va en una columna angosta y centrada, en Arial (las letras
        finas o monoespaciadas salen borrosas con los puntos). */
-    #tirilla .copia { font-family:Arial, Helvetica, sans-serif; font-size:14px; line-height:1.25; padding:2mm 0 3mm; }
+    #tirilla .copia { font-family:Arial, Helvetica, sans-serif; font-size:14px; line-height:1.25; padding:1mm 0; }
     #tirilla.papel-76 .copia { width:56mm; margin:0 10mm; }
     #tirilla.papel-58 .copia { width:44mm; margin:0 7mm; font-size:12px; }
     .t-centro { text-align:center; }
@@ -299,6 +299,10 @@
     .t-nota { font-size:.85em; padding-left:6px; }
     .t-firma { margin-top:20px; border-top:1px solid #000; text-align:center; font-size:.85em; padding-top:1px; }
     #tirilla .fuerte { font-weight:800; }
+    /* Sin `size`: la hoja la pone el driver de la impresora (rollo de 297 mm) y Chrome centra
+       en ella cualquier página más pequeña, con blanco arriba y abajo y su encabezado y pie.
+       Así la tirilla arranca arriba de la hoja y no queda nada impreso después de la firma. */
+    @page { margin:0; }
     @media print {
       body { padding:0 !important; background:#fff !important; }
       body > *:not(#tirilla) { display:none !important; }
@@ -307,7 +311,6 @@
       #tirilla .copia:last-child { break-after:auto; page-break-after:auto; }
     }
   </style>
-  <style id="estiloPagina"></style>
 </head>
 <body>
   <div class="page-header">
@@ -1440,8 +1443,7 @@
   }
 
   /* Una tirilla por conductor (la copia de la empresa, con la firma del conductor), cada
-     una en su propia "página" del rollo; el alto de la página es el de la tirilla para no
-     gastar papel en blanco. `soloOrden` reimprime solo la tirilla de un conductor. */
+     una en su propia "página" del rollo. `soloOrden` reimprime solo la tirilla de un conductor. */
   function imprimirTirilla(id, reimpresion, soloOrden = null) {
     const r = liquidacionPorId(id);
     if (!r) return toast('No se encontró la liquidación para imprimir', true);
@@ -1451,9 +1453,6 @@
       .filter(c => soloOrden == null || c.orden === soloOrden)
       .map(c => htmlCopia(r, c, reimpresion))
       .join('');
-    const altoPx = Math.max(...[...cont.querySelectorAll('.copia')].map(c => c.offsetHeight));
-    const altoMm = Math.ceil(altoPx * 25.4 / 96) + 2;
-    document.getElementById('estiloPagina').textContent = `@page { size: ${papel}mm ${altoMm}mm; margin: 0; }`;
     window.print();
   }
 
