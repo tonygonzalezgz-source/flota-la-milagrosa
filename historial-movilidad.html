@@ -1867,6 +1867,16 @@
   }
 
   function avisarConflictos(lista) {
+    // Bus liquidado en Recaudo: su conductor y ruta ya no se cambian desde aquí.
+    const liquidados = [...new Set(lista.filter(c => c.motivo === 'liquidado').map(c => c.bus_id))];
+    lista = lista.filter(c => c.motivo !== 'liquidado');
+    if (liquidados.length) {
+      const nums = liquidados.map(id => allBuses.find(b => b.id == id)?.numero ?? id).join(', ');
+      mostrarError(`${liquidados.length === 1 ? 'El bus' : 'Los buses'} ${nums} ya ${liquidados.length === 1 ? 'está liquidado' : 'están liquidados'} en Recaudo: ` +
+        `el conductor y la ruta no se cambian. Si hay un error, el administrador debe anular la liquidación. ` +
+        `Haz clic en «Conflicto» para descartar lo que escribiste.`, 30000);
+      if (!lista.length) return;
+    }
     const det = lista.slice(0, 4).map(c => {
       const campo = CAMPO_DE_API[c.campo];
       const bus   = allBuses.find(b => b.id == c.bus_id);

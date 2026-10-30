@@ -2472,12 +2472,14 @@ def get_despacho():
         (fecha, fecha, fecha),
     ).fetchall()
     relevos = _relevos_por_bus(db, fecha)
+    liquidados = _buses_liquidados(db, fecha)
 
     db.close()
     salida = []
     for b in buses:
         b = dict(b)
         b["relevos"] = relevos.get(b["id"], [])
+        b["liquidado"] = b["id"] in liquidados   # la pantalla bloquea su fila
         salida.append(b)
     return jsonify({"fecha": fecha, "rutas": rutas, "buses": salida})
 
@@ -2541,12 +2543,35 @@ def batch_upsert_despacho():
 
     if not fecha:
         return jsonify({"error": "fecha es requerida"}), 400
+    try:
+        fecha = date.fromisoformat(str(fecha)).isoformat()
+    except ValueError:
+        return jsonify({"error": "Fecha inválida (use AAAA-MM-DD)"}), 400
+    error_fecha = _fecha_despacho_permitida(fecha)
+    if error_fecha:
+        return jsonify({"error": error_fecha}), 403
 
     estados_validos = ("trabajando", "taller", "descanso")
     db    = get_db()
     saved = 0
     pax_por_bus = {}   # bus_id → pasajeros según la registradora (fin - inicio)
     relevos = _relevos_por_bus(db, fecha)
+    liquidados = _buses_liquidados(db, fecha)
+    actuales = {d["bus_id"]: dict(d) for d in db.execute(
+        """SELECT d.id, d.bus_id, d.estado, d.conductor_id, d.ruta_id, d.viajes_realizados,
+                  d.registradora_inicio, d.registradora_fin, b.numero, b.placa
+             FROM despacho_diario d JOIN buses b ON b.id = d.bus_id
+            WHERE d.fecha = ?""",
+        (fecha,),
+    ).fetchall()}
+
+    def _mismo(a, b):
+        if a is None or b is None:
+            return a is None and b is None
+        try:
+            return int(a) == int(b)
+        except (TypeError, ValueError):
+            return str(a) == str(b)
 
     # Validación previa: si algún bus queda en 'trabajando' pero tiene
     # documentos vencidos (SOAT / Tecnomecánica / Tarjeta de Operación), se
@@ -2625,6 +2650,24 @@ def batch_upsert_despacho():
             viajes = None
             reg_inicio = None
             reg_fin = None
+
+        # Bus ya liquidado en Recaudo: su despacho de ese día no se cambia (ni
+        # estado, ni conductor, ni lecturas). Si llega igual, no se reescribe.
+        antes = actuales.get(bus_id)
+        if bus_id in liquidados:
+            if antes and (antes["estado"] or "trabajando") == estado and all(
+                    _mismo(antes[k], v) for k, v in (
+                        ("conductor_id", conductor_id), ("ruta_id", ruta_id),
+                        ("viajes_realizados", viajes), ("registradora_inicio", reg_inicio),
+                        ("registradora_fin", reg_fin))):
+                continue
+            numero = antes["numero"] if antes else bus_id
+            db.close()
+            return jsonify({"error": f"El bus {numero} ya está liquidado en Recaudo: su despacho de ese "
+                                     "día no se cambia. Si hay un error, el administrador debe anular la "
+                                     "liquidación."}), 409
+
+        if estado != "trabajando":
             # Un bus que no trabaja tampoco tiene relevo.
             if relevos.get(bus_id):
                 db.execute("DELETE FROM despacho_relevos WHERE bus_id = ? AND fecha = ?", (bus_id, fecha))
@@ -2653,6 +2696,28 @@ def batch_upsert_despacho():
              viajes, reg_inicio, reg_fin, uid),
         )
         saved += 1
+
+        # Al historial: una lectura que ya existía y cambia, o un cambio de estado
+        # que borra las lecturas (taller/descanso). La primera anotación no va.
+        if antes:
+            txt = lambda v: "—" if v is None else str(v)
+            lect_antes = (antes["registradora_inicio"], antes["registradora_fin"])
+            corrigio = any(a is not None and not _mismo(a, n)
+                           for a, n in zip(lect_antes, (reg_inicio, reg_fin)))
+            if corrigio:
+                bus_txt = f"{antes['numero']} ({antes['placa'] or 's/placa'})"
+                if estado != "trabajando" and (antes["estado"] or "trabajando") == "trabajando":
+                    descripcion = (f"Pasó el bus {bus_txt} del {fecha} a {estado} y se borraron sus "
+                                   f"lecturas de registradora ({txt(lect_antes[0])}–{txt(lect_antes[1])})")
+                else:
+                    descripcion = (f"Cambió en el despacho la registradora del bus {bus_txt} del {fecha}: "
+                                   f"{txt(lect_antes[0])}–{txt(lect_antes[1])} → {txt(reg_inicio)}–{txt(reg_fin)}")
+                auditoria.registrar(
+                    db, "despacho", "despacho", antes["id"], "editar", descripcion,
+                    {"fecha": fecha, "bus": antes["numero"],
+                     "estado": [antes["estado"], estado] if (antes["estado"] or "trabajando") != estado else None,
+                     "registradora": [list(lect_antes), [reg_inicio, reg_fin]]},
+                )
         pax = _pax_registradora(reg_inicio, reg_fin)
         if pax is not None:
             pax_por_bus[bus_id] = pax
@@ -2724,6 +2789,26 @@ def _relevos_por_bus(db, fecha, bus_id=None):
     return out
 
 
+def _buses_liquidados(db, fecha):
+    """Buses con liquidación vigente en Recaudo ese día: su despacho ya no se cambia
+    (el recaudo copió de ahí la registradora y el conductor; se corrige anulando)."""
+    return {r["bus_id"] for r in db.execute(
+        "SELECT bus_id FROM recaudos WHERE fecha = ? AND anulado_at IS NULL", (fecha,)).fetchall()}
+
+
+def _fecha_despacho_permitida(fecha):
+    """Quien no es Administrador solo guarda el despacho de hoy o de ayer (hora
+    Bogotá): la pantalla solo manda hoy, y así nadie reescribe por la API la
+    registradora de un día viejo. Devuelve el mensaje de error o None."""
+    if getattr(request, "jwt_user_rol", None) == "Administrador":
+        return None
+    hoy = hoy_bogota()
+    ayer = (date.fromisoformat(hoy) - timedelta(days=1)).isoformat()
+    if fecha not in (hoy, ayer):
+        return "El despacho solo se guarda para hoy o ayer. Para otro día, pide al administrador."
+    return None
+
+
 def _validar_lecturas_relevo(reg_inicio, reg_fin, lecturas):
     """Las lecturas van en consecutivo: REG inicio < relevo(s) < REG fin, porque
     cada conductor tiene que haber movido al menos un pasajero. Devuelve el
@@ -2747,9 +2832,12 @@ def guardar_relevos_despacho():
     data = request.get_json(silent=True) or {}
     fecha = data.get("fecha")
     try:
-        date.fromisoformat(str(fecha))
+        fecha = date.fromisoformat(str(fecha)).isoformat()
     except ValueError:
         return jsonify({"error": "Fecha inválida (use AAAA-MM-DD)"}), 400
+    error_fecha = _fecha_despacho_permitida(fecha)
+    if error_fecha:
+        return jsonify({"error": error_fecha}), 403
     relevos_in = data.get("relevos") or []
     if not isinstance(relevos_in, list) or len(relevos_in) > MAX_RELEVOS:
         return jsonify({"error": "Máximo 2 relevos: 3 conductores por bus en el día"}), 400
@@ -2772,7 +2860,7 @@ def guardar_relevos_despacho():
         bus_id = entero(data.get("bus_id"), "el bus", requerido=True)
         desp = db.execute(
             """SELECT d.id, d.estado, d.conductor_id, d.registradora_inicio, d.registradora_fin,
-                      b.numero
+                      b.numero, b.placa
                  FROM despacho_diario d JOIN buses b ON b.id = d.bus_id
                 WHERE d.bus_id = ? AND d.fecha = ?""",
             (bus_id, fecha),
@@ -2819,6 +2907,7 @@ def guardar_relevos_despacho():
     viajes = [v for v in [viajes1] + [r["viajes"] for r in relevos] if v is not None]
     total = sum(viajes) if viajes else None
     uid = getattr(request, "jwt_user_id", None)
+    previos = _relevos_por_bus(db, fecha, bus_id).get(bus_id, [])
     db.execute("DELETE FROM despacho_relevos WHERE bus_id = ? AND fecha = ?", (bus_id, fecha))
     for r in relevos:
         db.execute(
@@ -2834,6 +2923,20 @@ def guardar_relevos_despacho():
             WHERE id = ?""",
         (total, uid, desp["id"]),
     )
+    # Al historial si cambió quién recibe o con qué lectura (reparte los pasajeros
+    # entre conductores, y con ellos lo que entrega cada uno).
+    clave = lambda lista: [(r["orden"], r["conductor_id"], r["registradora"]) for r in lista]
+    if clave(previos) != clave(relevos):
+        nombres = {r["id"]: r["nombre"] for r in db.execute("SELECT id, nombre FROM conductores").fetchall()}
+        txt = lambda lista: "; ".join(
+            f"conductor {r['orden']} {nombres.get(r['conductor_id'], r['conductor_id'])} desde {r['registradora']}"
+            for r in lista) or "sin relevo"
+        auditoria.registrar(
+            db, "despacho", "relevo", desp["id"], "editar",
+            f"Relevo del bus {desp['numero']} ({desp['placa'] or 's/placa'}) del {fecha}: "
+            f"{txt(previos)} → {txt(relevos)}",
+            {"fecha": fecha, "bus": desp["numero"], "antes": clave(previos), "despues": clave(relevos)},
+        )
     db.commit()
     guardados = _relevos_por_bus(db, fecha, bus_id).get(bus_id, [])
     db.close()
@@ -3644,7 +3747,7 @@ def batch_upsert_movilidad():
     data       = request.get_json(force=True)
     fecha      = data.get("fecha")
     registros  = data.get("registros", [])
-    usuario_id = data.get("usuario_id")
+    usuario_id = getattr(request, "jwt_user_id", None)   # el autor sale de la sesión, no del cuerpo
     # solo_datos=True (importación BEA): solo escribe vueltas/pasajeros/km.
     # Conductor, ruta y novedades existentes no se modifican; en registros
     # nuevos, conductor y ruta salen únicamente del despacho del día.
@@ -3702,6 +3805,8 @@ def batch_upsert_movilidad():
     # cuando el despachador se equivocó. La corrección se propaga al despacho
     # del día para que reportes y demás vistas reflejen la realidad.
     puede_corregir_despacho = getattr(request, "jwt_user_rol", None) in ("Administrador", "Analista")
+    # Un bus liquidado en Recaudo ya no cambia su despacho (ver _buses_liquidados).
+    liquidados = _buses_liquidados(db, fecha) if puede_corregir_despacho else set()
 
     existentes = {}
     if not solo_datos:
@@ -3763,6 +3868,10 @@ def batch_upsert_movilidad():
             # campo que el cliente envió, nunca del otro.
             if (campo in ("conductor_id", "ruta_id") and puede_corregir_despacho
                     and d and valor and valor != d.get(campo)):
+                if bus_id in liquidados:
+                    conflictos.append({"bus_id": bus_id, "campo": campo, "actual": vigente,
+                                       "tuyo": valor, "motivo": "liquidado"})
+                    continue
                 db.execute(
                     f"UPDATE despacho_diario SET {campo} = ? WHERE bus_id = ? AND fecha = ?",
                     (valor, bus_id, fecha),

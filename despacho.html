@@ -344,6 +344,12 @@
     }
     .btn-relevo:hover { background: var(--primary2); }
     /* Bus con relevo: etiqueta en la unidad y franja debajo del bus con los conductores */
+    /* Bus ya liquidado en Recaudo: su fila del despacho queda bloqueada */
+    .tag-liquidado {
+      display: inline-block; margin-top: 4px; font-size: 10px; font-weight: 700;
+      color: #15803d; background: rgba(34,197,94,.12); border-radius: 5px; padding: 2px 7px;
+      text-transform: uppercase; letter-spacing: .4px; white-space: nowrap;
+    }
     .tag-relevo {
       display: inline-block; margin-top: 4px; font-size: 10px; font-weight: 700;
       color: #7c3aed; background: #f3e8ff; border-radius: 5px; padding: 2px 7px;
@@ -670,15 +676,22 @@
         </div>`;
     });
     document.getElementById('content').innerHTML = html;
-    if (SOLO_LECTURA) bloquearEdicion();
+    if (SOLO_LECTURA) bloquearEdicion(document.getElementById('content'));
+    // Un bus ya liquidado en Recaudo no cambia su despacho (la API tampoco lo acepta):
+    // si hay un error, el administrador anula la liquidación.
+    buses.filter(b => b.liquidado).forEach(b => {
+      [document.getElementById(`fila-${b.id}`), document.getElementById(`relsub-${b.id}`)]
+        .forEach(el => el && bloquearEdicion(el));
+    });
   }
 
-  /* Solo consulta: nada de la planilla se puede tocar (ni relevos ni viajes). */
-  function bloquearEdicion() {
+  /* Solo consulta o bus liquidado: nada se puede tocar (ni relevos ni viajes).
+     El alistamiento sigue disponible: no cambia el despacho. */
+  function bloquearEdicion(zona) {
     // Sin el "0" de ayuda: en una celda bloqueada parecería una lectura real.
-    document.querySelectorAll('#content input').forEach(el => { el.disabled = true; el.placeholder = '—'; });
-    document.querySelectorAll('#content select').forEach(el => { el.disabled = true; });
-    document.querySelectorAll('#content .btn-relevo').forEach(el => el.remove());
+    zona.querySelectorAll('input').forEach(el => { el.disabled = true; el.placeholder = '—'; });
+    zona.querySelectorAll('select').forEach(el => { el.disabled = true; });
+    zona.querySelectorAll('.btn-relevo').forEach(el => el.remove());
   }
 
   /* Documentos legales del bus: devuelve {estado, vencidos:[label], porVencer:[{label,dias}]} */
@@ -841,6 +854,7 @@
         <span class="bus-num">${b.numero}</span>
         ${b.placa ? `<div class="bus-placa">${escapeHtml(b.placa)}</div>` : ''}
         <div id="tagrel-${b.id}">${tagRelevoHtml(b)}</div>
+        ${b.liquidado ? '<div class="tag-liquidado" title="Ya se liquidó en Recaudo: el despacho de este bus no se cambia">Liquidado</div>' : ''}
         ${sugerida ? '<div class="tag-ayer">Sugerido</div>' : ''}
         ${docsChipHtml(docs)}
       </td>
