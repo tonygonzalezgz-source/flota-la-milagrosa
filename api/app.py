@@ -3530,17 +3530,11 @@ def dashboard_propietario():
     today = date.today().isoformat()
     user_id = _usuario_consultado()
     db = get_db()
+    is_prop, bus_ids = _bus_ids_for_user(db, user_id)
 
-    bus_ids = []
-    if user_id:
-        user = db.execute(
-            "SELECT rol FROM usuarios WHERE id = ? AND activo = 1", (user_id,)
-        ).fetchone()
-        if user and user["rol"] == "Propietario":
-            rows = db.execute(
-                "SELECT bus_id FROM usuario_buses WHERE usuario_id = ?", (user_id,)
-            ).fetchall()
-            bus_ids = [r["bus_id"] for r in rows]
+    if is_prop and not bus_ids:
+        db.close()
+        return jsonify({"status_counts": [], "today_passengers": 0, "alerts": []})
 
     if bus_ids:
         ph = ",".join("?" * len(bus_ids))
