@@ -1766,8 +1766,15 @@ def chat():
 #  Buses
 # ──────────────────────────────────────────
 
+# Roles con alguna pantalla que lista los buses (la consulta trae los datos de
+# la tarjeta de propiedad). Conductor y Operador EDS no la usan.
+ROLES_BUSES_LECTURA = ("Administrador", "Analista", "Técnico Mant.", "Técnico Cámaras",
+                       "Jefe Op. Tecnológicas", "Operador Lavada", "Propietario",
+                       "Despachador", "Jefe de Ruta", "Recaudador")
+
+
 @app.route("/api/buses", methods=["GET"])
-@require_auth
+@require_role(*ROLES_BUSES_LECTURA)
 def get_buses():
     user_id = _usuario_consultado()
     db = get_db()
@@ -1791,7 +1798,7 @@ def get_buses():
 
 
 @app.route("/api/buses/<int:bus_id>", methods=["GET"])
-@require_auth
+@require_role(*ROLES_BUSES_LECTURA)
 def get_bus(bus_id):
     if not _puede_ver_bus(bus_id):
         return _sin_acceso_bus()
@@ -3422,7 +3429,7 @@ def get_maint_estado(bus_id):
 
 
 @app.route("/api/mantenimiento/estado-flota", methods=["GET"])
-@require_auth
+@require_role("Administrador", "Propietario")
 def get_maint_estado_flota():
     """Estado de mantenimiento de TODOS los buses en una sola petición
     (evita el N+1 de una llamada por bus desde los dashboards).
@@ -3518,7 +3525,7 @@ def create_maint_registro():
 # ──────────────────────────────────────────
 
 @app.route("/api/dashboard/propietario", methods=["GET"])
-@require_auth
+@require_role("Administrador", "Propietario")
 def dashboard_propietario():
     today = date.today().isoformat()
     user_id = _usuario_consultado()
@@ -3591,6 +3598,8 @@ def dashboard_propietario():
 
 # Roles que solo pueden ver los buses que tienen asignados (usuario_buses).
 ROLES_CON_BUSES_ASIGNADOS = ("Propietario", "Técnico Mant.")
+# Roles con alguna pantalla que consulta la movilidad (dashboard, historial, Mis Buses).
+ROLES_MOVILIDAD_LECTURA = ("Administrador", "Analista", "Jefe de Ruta", "Recaudador", "Propietario")
 
 
 def _usuario_consultado():
@@ -3642,7 +3651,7 @@ def _bus_ids_for_user(db, user_id):
 
 
 @app.route("/api/movilidad", methods=["GET"])
-@require_auth
+@require_role(*ROLES_MOVILIDAD_LECTURA)
 def get_movilidad():
     fecha            = request.args.get("fecha", date.today().isoformat())
     user_id          = _usuario_consultado()
@@ -3703,7 +3712,7 @@ def get_movilidad():
 
 
 @app.route("/api/movilidad/rango", methods=["GET"])
-@require_auth
+@require_role(*ROLES_MOVILIDAD_LECTURA)
 def get_movilidad_rango():
     desde            = request.args.get("desde", date.today().isoformat())
     hasta            = request.args.get("hasta", date.today().isoformat())
@@ -4067,7 +4076,7 @@ def delete_movilidad_fecha(fecha):
 
 
 @app.route("/api/movilidad/fechas", methods=["GET"])
-@require_auth
+@require_role(*ROLES_MOVILIDAD_LECTURA)
 def get_movilidad_fechas():
     """Fechas que tienen al menos un registro (para resaltar el calendario)."""
     user_id = _usuario_consultado()
@@ -4346,7 +4355,7 @@ def create_gasto():
 
 
 @app.route("/api/gastos", methods=["GET"])
-@require_auth
+@require_role("Administrador", "Propietario")
 def get_gastos():
     """Lista metadata (SIN el base64) filtrada por dueño."""
     user_id   = request.jwt_user_id
@@ -4391,7 +4400,7 @@ def get_gastos():
 
 
 @app.route("/api/gastos/<int:gasto_id>/comprobante", methods=["GET"])
-@require_auth
+@require_role("Administrador", "Propietario")
 def get_gasto_comprobante(gasto_id):
     user_id = request.jwt_user_id
     db = get_db()
@@ -4441,6 +4450,7 @@ def delete_gasto(gasto_id):
 # ──────────────────────────────────────────
 
 ROLES_TECNOLOGIA = ("Administrador", "Técnico Cámaras", "Jefe Op. Tecnológicas")
+ROLES_TECNOLOGIA_LECTURA = (*ROLES_TECNOLOGIA, "Analista", "Propietario")
 # Roles que ven TODAS las intervenciones (de todos los técnicos). El resto
 # (Técnico Cámaras) solo ve/borra las suyas; Propietario se limita a sus buses.
 TECNOLOGIA_ROLES_VER_TODO = ("Administrador", "Jefe Op. Tecnológicas")
@@ -4498,7 +4508,7 @@ def create_intervencion_tecnologia():
 
 
 @app.route("/api/tecnologia", methods=["GET"])
-@require_auth
+@require_role(*ROLES_TECNOLOGIA_LECTURA)
 def get_intervenciones_tecnologia():
     """Lista metadata (SIN base64 de fotos) filtrada por dueño si es Propietario."""
     bus_id = request.args.get("bus_id", type=int)
@@ -5556,12 +5566,12 @@ def _documentos_vencidos_bus(row_bus, hoy=None):
 
 
 @app.route("/api/documentos/alertas", methods=["GET"])
-@require_auth
+@require_role("Administrador", "Analista", "Jefe de Ruta", "Propietario")
 def get_documentos_alertas():
     """Alertas de documentos legales por bus, filtradas por rol.
 
     Propietario/Técnico Mant. → solo sus buses asignados.
-    Cualquier otro rol autenticado → toda la flota.
+    Los demás roles permitidos → toda la flota.
     Devuelve una fila por (bus × documento) que esté por vencer (≤30 días) o
     ya vencido, incluidas las fechas nulas (sin registrar) como aviso."""
     db  = get_db()
