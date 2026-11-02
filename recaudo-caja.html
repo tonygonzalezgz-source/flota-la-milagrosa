@@ -268,6 +268,20 @@
   let cierres = [];
   let cierreAReabrir = null;
 
+  /* Todo lo que se escribe en Recaudo queda en mayúscula (pedido del usuario 2026-11-02).
+     En captura, antes del oninput del campo, para que el formulario ya guarde la mayúscula.
+     Los números (inputmode=numeric) y los campos con data-tal-cual no se tocan. */
+  document.addEventListener('input', e => {
+    const el = e.target;
+    const texto = el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && (el.type === 'text' || el.type === 'search'));
+    if (!texto || el.inputMode === 'numeric' || el.hasAttribute('data-tal-cual')) return;
+    const may = el.value.toUpperCase();
+    if (may === el.value || may.length !== el.value.length) return;
+    const [ini, fin] = [el.selectionStart, el.selectionEnd];
+    el.value = may;
+    try { el.setSelectionRange(ini, fin); } catch (_) {}
+  }, true);
+
   document.addEventListener('DOMContentLoaded', () => {
     const hoy = hoyBogota();
     document.getElementById('fHasta').value = hoy;

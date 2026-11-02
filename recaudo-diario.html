@@ -515,6 +515,20 @@
     try { localStorage.setItem(PAPEL_KEY, papel); } catch (_) {}
   }
 
+  /* Todo lo que se escribe en Recaudo queda en mayúscula (pedido del usuario 2026-11-02).
+     En captura, antes del oninput del campo, para que el formulario ya guarde la mayúscula.
+     Los números (inputmode=numeric) y los campos con data-tal-cual no se tocan. */
+  document.addEventListener('input', e => {
+    const el = e.target;
+    const texto = el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && (el.type === 'text' || el.type === 'search'));
+    if (!texto || el.inputMode === 'numeric' || el.hasAttribute('data-tal-cual')) return;
+    const may = el.value.toUpperCase();
+    if (may === el.value || may.length !== el.value.length) return;
+    const [ini, fin] = [el.selectionStart, el.selectionEnd];
+    el.value = may;
+    try { el.setSelectionRange(ini, fin); } catch (_) {}
+  }, true);
+
   document.addEventListener('DOMContentLoaded', () => {
     const inp = document.getElementById('fecha');
     inp.value = fecha;
@@ -523,6 +537,8 @@
     cargar();
   });
   window.addEventListener('message', e => { if (e.data?.type === 'VIEW_SHOWN' && !dirty) cargar(); });
+  /* Reimprimir es solo del Administrador: tras imprimir se vacía la tirilla para que ⌘P no la repita */
+  window.addEventListener('afterprint', () => { if (!ES_ADMIN) document.getElementById('tirilla').innerHTML = ''; });
   window.addEventListener('beforeunload', e => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
   // Al corregir un campo se le quita la marca roja; las lecturas (final y relevos) las marca recalcular().
   ['input', 'change'].forEach(tipo => document.addEventListener(tipo, e => {
@@ -865,7 +881,7 @@
 
       <div class="acciones">
         <div class="meta"></div>
-        ${cerrada ? `<button class="btn" onclick="imprimirTirilla(${b.recaudo.id}, true)">Imprimir tirilla${n > 1 ? 's' : ''}</button>` : ''}
+        ${cerrada && ES_ADMIN ? `<button class="btn" onclick="imprimirTirilla(${b.recaudo.id}, true)">Imprimir tirilla${n > 1 ? 's' : ''}</button>` : ''}
         ${cerrada && ES_ADMIN && !enCaja ? `<button class="btn danger" onclick="abrirAnular()">Anular liquidación</button>` : ''}
         ${editable ? `<button class="btn-primary" id="btnGuardar" onclick="guardar()">Guardar liquidación</button>` : ''}
       </div>
@@ -930,7 +946,7 @@
       </div>
       <div class="nota cambio" id="notaGastos-${i}"></div>
       ${editable && i > 0 && ultimo && !(bq && i <= bq.relevos) ? `<button class="btn danger quitar-relevo" onclick="quitarRelevo(${i})">Quitar este relevo</button>` : ''}
-      ${!editable && b.recaudo && n > 1 ? `<button class="btn" onclick="imprimirTirilla(${b.recaudo.id}, true, ${i + 1})">Imprimir tirilla de este conductor</button>` : ''}
+      ${ES_ADMIN && !editable && b.recaudo && n > 1 ? `<button class="btn" onclick="imprimirTirilla(${b.recaudo.id}, true, ${i + 1})">Imprimir tirilla de este conductor</button>` : ''}
     </div>`;
   }
 
@@ -1219,8 +1235,8 @@
           Motivo: ${esc(a.motivo_anulacion || '')}<br>
           <span class="montos">Liquidada el ${fmtHora(a.created_at)}${a.usuario_nombre ? ' por ' + esc(a.usuario_nombre) : ''} · ${conds} ·
           ${fmtNum(a.pasajeros)} pax · Producido ${fmtMoney(a.producido)} · Gastos ${fmtMoney(a.total_gastos)} ·
-          Recaudado ${fmtMoney(a.recaudado)} · ${textoDif(a.diferencia)} ·
-          <a href="#" onclick="imprimirTirilla(${a.id}, true); return false;">ver tirilla</a></span>
+          Recaudado ${fmtMoney(a.recaudado)} · ${textoDif(a.diferencia)}${ES_ADMIN ? ` ·
+          <a href="#" onclick="imprimirTirilla(${a.id}, true); return false;">ver tirilla</a>` : ''}</span>
         </div>`;
       }).join('') + '</div>';
   }
@@ -1445,6 +1461,7 @@
   /* Una tirilla por conductor (la copia de la empresa, con la firma del conductor), cada
      una en su propia "página" del rollo. `soloOrden` reimprime solo la tirilla de un conductor. */
   function imprimirTirilla(id, reimpresion, soloOrden = null) {
+    if (reimpresion && !ES_ADMIN) return toast('Solo el administrador puede reimprimir', true);
     const r = liquidacionPorId(id);
     if (!r) return toast('No se encontró la liquidación para imprimir', true);
     const cont = document.getElementById('tirilla');
@@ -1827,7 +1844,7 @@
     try {
       const tipos = await apiFetch('/api/recaudo/tipos-gasto');
       cont.innerHTML = tipos.map(t => `<div class="tipo-row ${t.activo ? '' : 'inactivo'}">
-          <input value="${esc(t.nombre)}" maxlength="60" onchange="editarTipo(${t.id}, { nombre: this.value })" />
+          <input value="${esc(t.nombre)}" maxlength="60" data-tal-cual onchange="editarTipo(${t.id}, { nombre: this.value })" />
           <label class="tipo-op" title="Siempre a la vista en el formulario"><input type="checkbox" ${t.fijo ? 'checked' : ''}
                  onchange="editarTipo(${t.id}, { fijo: this.checked ? 1 : 0 })" /> Fijo</label>
           <label class="tipo-op" title="No deja guardar el gasto sin escribir qué fue"><input type="checkbox" ${t.requiere_detalle ? 'checked' : ''}

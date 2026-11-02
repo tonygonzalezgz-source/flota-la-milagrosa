@@ -369,6 +369,20 @@
     try { localStorage.setItem(PAPEL_KEY, papel); } catch (_) {}
   }
 
+  /* Todo lo que se escribe en Recaudo queda en mayúscula (pedido del usuario 2026-11-02).
+     En captura, antes del oninput del campo, para que el formulario ya guarde la mayúscula.
+     Los números (inputmode=numeric) y los campos con data-tal-cual no se tocan. */
+  document.addEventListener('input', e => {
+    const el = e.target;
+    const texto = el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && (el.type === 'text' || el.type === 'search'));
+    if (!texto || el.inputMode === 'numeric' || el.hasAttribute('data-tal-cual')) return;
+    const may = el.value.toUpperCase();
+    if (may === el.value || may.length !== el.value.length) return;
+    const [ini, fin] = [el.selectionStart, el.selectionEnd];
+    el.value = may;
+    try { el.setSelectionRange(ini, fin); } catch (_) {}
+  }, true);
+
   document.addEventListener('DOMContentLoaded', () => {
     const inp = $('fecha');
     inp.value = fecha;
@@ -377,6 +391,8 @@
     cargar();
   });
   window.addEventListener('message', e => { if (e.data?.type === 'VIEW_SHOWN' && !dirty) cargar(); });
+  /* Reimprimir es solo del Administrador: tras imprimir se vacía la tirilla para que ⌘P no la repita */
+  window.addEventListener('afterprint', () => { if (!ES_ADMIN) document.getElementById('tirilla').innerHTML = ''; });
   window.addEventListener('beforeunload', e => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
   ['input', 'change'].forEach(tipo => document.addEventListener(tipo, e => e.target.classList?.remove('err')));
 
@@ -473,7 +489,7 @@
         ${ES_ADMIN ? `<td data-label="Registró">${esc(p.usuario_nombre || '')}</td>` : ''}
         <td data-label="Estado">${estado(p)}</td>
         <td data-label=""><div class="btns">
-          <button class="btn sm" onclick="imprimirRecibo(${p.id}, true)">Reimprimir</button>
+          ${ES_ADMIN ? `<button class="btn sm" onclick="imprimirRecibo(${p.id}, true)">Reimprimir</button>` : ''}
           ${ES_ADMIN && !p.anulado_at && !p.cierre_id ? `<button class="btn sm danger" onclick="abrirAnular(${p.id})">Anular</button>` : ''}
         </div></td>
       </tr>`).join('')}
@@ -837,6 +853,7 @@
   }
 
   function imprimirRecibo(id, reimpresion) {
+    if (reimpresion && !ES_ADMIN) return toast('Solo el administrador puede reimprimir', true);
     const p = D.pagos.find(x => x.id === id);
     if (!p) return toast('No se encontró el pago para imprimir', true);
     const cont = $('tirilla');

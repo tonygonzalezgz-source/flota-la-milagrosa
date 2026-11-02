@@ -74,7 +74,8 @@ def _entero(valor, etiqueta, requerido=True):
 
 
 def _texto(valor, largo=500):
-    return (str(valor or "").strip()[:largo]) or None
+    """Texto libre del recaudo: todo queda en mayúscula (pedido del usuario 2026-11-02)."""
+    return (str(valor or "").strip().upper()[:largo]) or None
 
 
 def aproximar_mil(valor):
@@ -921,7 +922,7 @@ def crear_tipo_gasto():
     data = request.get_json(silent=True) or {}
     conn = db()
     try:
-        nombre = _nombre_tipo(data.get("nombre"))
+        nombre = _nombre_tipo(data.get("nombre")).upper()   # los nuevos, en mayúscula
         if _nombre_repetido(conn, nombre):
             raise _Rechazo(f"Ya existe un gasto llamado «{nombre}»", 409)
     except _Rechazo as e:
