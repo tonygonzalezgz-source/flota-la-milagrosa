@@ -617,10 +617,13 @@
   };
   function comboPintar(k, texto) {
     const c = COMBOS[k];
-    const lista = c.lista((texto || '').toLowerCase().trim()).slice(0, 60);
+    /* Toda la lista, sin tope: con los conductores son cientos y se recorre con el scroll */
+    const lista = c.lista((texto || '').toLowerCase().trim());
     c.activo = lista.length ? 0 : -1;
+    const cuantos = k === 'ter' && lista.length
+      ? `<div class="combo-vacio">${lista.length} ${lista.length === 1 ? 'persona' : 'personas'}${texto ? '' : ' · escribe el nombre o la cédula para filtrar'}</div>` : '';
     $(`${k}Drop`).innerHTML = lista.length
-      ? lista.map((x, i) => `<div class="combo-opt ${i === 0 ? 'act' : ''}" data-id="${esc(c.clave(x))}"
+      ? cuantos + lista.map((x, i) => `<div class="combo-opt ${i === 0 ? 'act' : ''}" data-id="${esc(c.clave(x))}"
             onmousedown="event.preventDefault(); comboElegir('${k}', '${esc(c.clave(x))}')">${c.html(x)}</div>`).join('')
       : `<div class="combo-vacio">${c.vacio}</div>`;
   }
