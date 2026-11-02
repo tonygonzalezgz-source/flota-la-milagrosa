@@ -85,7 +85,14 @@
     .combo-opt { padding:8px 10px; font-size:13.5px; cursor:pointer; }
     .combo-opt:hover, .combo-opt.act { background:#eef2ff; }
     .combo-opt small { color:var(--txt3); margin-left:6px; }
-    .combo-vacio { padding:10px; font-size:12.5px; color:var(--txt3); }
+    .combo-vacio { padding:10px; font-size:12.5px; color:var(--txt3); line-height:1.5; }
+    /* Quién paga: documento y de qué catálogo sale (tercero, conductor, propietario) */
+    .opt-sub { display:flex; align-items:center; gap:5px; flex-wrap:wrap; margin-top:2px; font-size:11.5px; color:var(--txt3); }
+    .tag { display:inline-block; border-radius:999px; padding:1px 7px; font-size:10.5px; font-weight:700; white-space:nowrap; }
+    .tag.tercero     { background:rgba(99,102,241,.12); color:#4f46e5; }
+    .tag.conductor   { background:rgba(245,158,11,.16); color:#b45309; }
+    .tag.propietario { background:rgba(34,197,94,.13); color:#15803d; }
+    .tag.falta       { background:rgba(239,68,68,.12); color:#dc2626; }
 
     .filtros { display:flex; gap:6px; flex-wrap:wrap; }
     .filtro { border:1px solid var(--border2); background:var(--white); border-radius:999px; padding:4px 10px;
@@ -399,10 +406,23 @@
 
   /* ── Helpers de datos ── */
   const concepto = id => D.conceptos.find(c => c.id === Number(id));
-  const busPorId = id => D.buses.find(b => b.id === id);
-  const terceroPorId = id => D.terceros.find(t => t.id === id);
+  const busPorId = id => D.buses.find(b => String(b.id) === String(id));
   const etiquetaBus = b => `${TIPO[b.grupo] || 'Bus'} ${b.numero}${b.placa ? ' · ' + b.placa : ''}`;
-  const etiquetaTercero = t => `${t.nombre} · ${t.tipo_documento} ${docConDv(t.documento, t.dv)}`;
+  /* Quién paga: terceros, conductores y propietarios en una sola lista (clave 't5', 'c12', 'm7'…) */
+  const pagadorPorClave = k => D.pagadores.find(x => x.clave === k);
+  const etiquetaPagador = x => x.documento ? `${x.nombre} · ${x.tipo_documento} ${docConDv(x.documento, x.dv)}` : x.nombre;
+  function origenesPagador(x) {
+    return x.origenes.map(o => [o, o === 'tercero' ? 'Tercero' : o === 'conductor' ? 'Conductor'
+      : x.buses.length ? `Propietario · ${x.buses.length > 1 ? 'vehículos' : 'vehículo'} ${x.buses.join(', ')}` : 'Propietario']);
+  }
+  function faltaDocumento(x) {
+    if (x.origenes.includes('conductor'))
+      return 'Este conductor no tiene la cédula en Catálogo › Conductores. Complétala allá o créalo con "+ Nuevo tercero".';
+    return `${x.buses.length > 1 ? 'Los vehículos' : 'El vehículo'} ${x.buses.join(', ')} no tiene${x.buses.length > 1 ? 'n' : ''} el documento del propietario `
+      + '(tarjeta de propiedad). Complétalo en Catálogo › Buses o créalo con "+ Nuevo tercero".';
+  }
+  /* Sin tildes y en minúscula: "perez" encuentra a "PÉREZ" */
+  const norm = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
   const entra = c => c && c.signo === 2;
   const pideBus = c => c && (c.tercero === 'PROPIETARIO' || c.referencia === 'VEHICULO');
   /* "vehículo 12 · NOMBRE" / "NOMBRE · NIT 900123456-7" de un pago guardado */
@@ -516,11 +536,12 @@
     if (c && c.tercero === 'PAGADOR') {
       html += `<div class="campo"><label for="terTxt">${entra(c) ? 'Quién paga' : 'A quién se le paga'}<span class="req">*</span></label>
         <div class="combo" id="terCombo">
-          <input id="terTxt" placeholder="Escribe el nombre o el documento" autocomplete="off"
+          <input id="terTxt" placeholder="Escribe el nombre o la cédula" autocomplete="off"
                  onfocus="comboAbrir('ter')" oninput="comboFiltrar('ter')" onkeydown="comboTecla(event, 'ter')" onblur="comboCerrar('ter')" />
           <div class="combo-drop" id="terDrop"></div>
         </div>
-        <div class="ayuda"><button class="link" onclick="abrirTercero()">+ Nuevo tercero</button></div></div>`;
+        <div class="ayuda aviso" id="terInfo"></div>
+        <div class="ayuda">Terceros, conductores y propietarios de los vehículos · <button class="link" onclick="abrirTercero()">+ Nuevo tercero</button></div></div>`;
     }
     if (c && c.tercero === 'FIJO') {
       html += `<div class="campo"><div class="ayuda">Va a nombre del NIT fijo del concepto: <b>${esc(c.nit_fijo || '')}</b></div></div>`;
@@ -530,11 +551,12 @@
     $('lblObs').innerHTML = ninguno ? 'Qué se pagó<span class="req">*</span>' : 'Observación <span class="sub">(opcional)</span>';
   }
 
-  /* ── Buscadores: bus por número o placa, tercero por nombre o documento ──
+  /* ── Buscadores: bus por número o placa, quién paga por nombre o documento ──
      Al salir del campo con un número de bus o un documento exacto, queda elegido. */
   const COMBOS = {
     bus: {
       id: null, activo: -1,
+      clave: b => String(b.id),
       lista(t) {
         const todos = [...D.buses].sort((a, b) => String(a.numero).localeCompare(String(b.numero), 'es', { numeric: true }));
         if (!t) return todos;
@@ -563,18 +585,34 @@
     },
     ter: {
       id: null, activo: -1,
+      clave: x => x.clave,
       lista(t) {
-        if (!t) return D.terceros;
-        const d = t.replace(/\D/g, '');
-        return D.terceros.filter(x => x.nombre.toLowerCase().includes(t) || (d && String(x.documento).includes(d))
-          || String(x.documento).toLowerCase().includes(t));
+        if (!t) return D.pagadores;
+        const q = norm(t), d = t.split('-')[0].replace(/\D/g, '');
+        /* 0 documento exacto · 1 nombre o documento que empieza así · 2 lo contiene */
+        const rango = x => {
+          const doc = String(x.documento || '').toLowerCase(), nombres = x.nombres.map(norm);
+          if (doc && (doc === d || doc === q)) return 0;
+          if (nombres.some(n => n.startsWith(q)) || (d && doc.startsWith(d))) return 1;
+          return nombres.some(n => n.includes(q)) || (d && doc.includes(d)) || (doc && doc.includes(q)) ? 2 : -1;
+        };
+        return D.pagadores.filter(x => rango(x) >= 0).sort((a, b) => rango(a) - rango(b));
       },
-      html: x => `${esc(x.nombre)}<small>${esc(x.tipo_documento)} ${esc(docConDv(x.documento, x.dv))}</small>`,
-      texto: x => etiquetaTercero(x),
-      buscar: id => terceroPorId(id),
-      exacto: t => D.terceros.find(x => String(x.documento).toLowerCase() === t.split('-')[0].replace(/[.\s]/g, '')
-        || x.nombre.toLowerCase() === t),
-      vacio: 'No hay un tercero con ese nombre o documento. Créalo con "+ Nuevo tercero".',
+      html: x => `${esc(x.nombre)}<div class="opt-sub">${x.documento
+          ? `<span>${esc(x.tipo_documento)} ${esc(docConDv(x.documento, x.dv))}</span>` : '<span class="tag falta">Sin documento</span>'}
+        ${origenesPagador(x).map(([cls, txt]) => `<span class="tag ${cls}">${esc(txt)}</span>`).join('')}</div>`,
+      texto: x => etiquetaPagador(x),
+      buscar: k => pagadorPorClave(k),
+      exacto(t) {
+        const doc = t.split('-')[0].replace(/[.\s]/g, '');
+        return D.pagadores.find(x => x.documento && String(x.documento).toLowerCase() === doc)
+          || D.pagadores.find(x => x.nombres.some(n => norm(n) === norm(t)));
+      },
+      vacio: 'No está en terceros, conductores ni propietarios con ese nombre o documento. Créalo con "+ Nuevo tercero".',
+      alElegir() {
+        const x = pagadorPorClave(COMBOS.ter.id), info = $('terInfo');
+        if (info) info.textContent = x && !x.documento ? faltaDocumento(x) : '';
+      },
     },
   };
   function comboPintar(k, texto) {
@@ -582,8 +620,8 @@
     const lista = c.lista((texto || '').toLowerCase().trim()).slice(0, 60);
     c.activo = lista.length ? 0 : -1;
     $(`${k}Drop`).innerHTML = lista.length
-      ? lista.map((x, i) => `<div class="combo-opt ${i === 0 ? 'act' : ''}" data-id="${x.id}"
-            onmousedown="event.preventDefault(); comboElegir('${k}', ${x.id})">${c.html(x)}</div>`).join('')
+      ? lista.map((x, i) => `<div class="combo-opt ${i === 0 ? 'act' : ''}" data-id="${esc(c.clave(x))}"
+            onmousedown="event.preventDefault(); comboElegir('${k}', '${esc(c.clave(x))}')">${c.html(x)}</div>`).join('')
       : `<div class="combo-vacio">${c.vacio}</div>`;
   }
   function comboAbrir(k) {
@@ -608,7 +646,7 @@
       opts[c.activo].scrollIntoView({ block: 'nearest' });
     } else if (e.key === 'Enter' && c.activo >= 0) {
       e.preventDefault();
-      comboElegir(k, Number(opts[c.activo].dataset.id));
+      comboElegir(k, opts[c.activo].dataset.id);
       e.target.blur();
     }
   }
@@ -630,7 +668,7 @@
     const actual = c.id ? c.buscar(c.id) : null;
     if (actual && t === c.texto(actual)) return;
     const x = c.exacto(t.toLowerCase());
-    if (x) { comboElegir(k, x.id); return; }
+    if (x) { comboElegir(k, c.clave(x)); return; }
     c.id = undefined;
     inp.classList.add('err');
     c.alElegir?.();
@@ -656,8 +694,13 @@
       return;
     }
     const b = pideBus(c) ? busPorId(COMBOS.bus.id) : null;
-    const t = c.tercero === 'PAGADOR' ? terceroPorId(COMBOS.ter.id) : null;
-    pendiente = { concepto_id: c.id, valor, observacion: obs, ...(b ? { bus_id: b.id } : {}), ...(t ? { tercero_id: t.id } : {}) };
+    const t = c.tercero === 'PAGADOR' ? pagadorPorClave(COMBOS.ter.id) : null;
+    if (t && !t.documento) {
+      $('terTxt').classList.add('err');
+      toast(faltaDocumento(t), true);
+      return;
+    }
+    pendiente = { concepto_id: c.id, valor, observacion: obs, ...(b ? { bus_id: b.id } : {}), ...(t ? { pagador: t.clave } : {}) };
     $('confTitulo').textContent = entra(c) ? 'Confirmar entrada a caja' : 'Confirmar salida de caja';
     $('confResumen').innerHTML = `
       <div><span>Concepto</span><span>${esc(c.nombre)}</span></div>
@@ -715,10 +758,16 @@
     btn.disabled = true;
     try {
       const r = await apiFetch('/api/recaudo/terceros', { method: 'POST', body: JSON.stringify(body) });
-      D.terceros.push(r.tercero);
-      D.terceros.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+      const nt = r.tercero;
+      /* Si ya salía como conductor o propietario con ese documento, ahora sale una vez, como tercero */
+      const previo = D.pagadores.find(x => x.documento === nt.documento);
+      D.pagadores = D.pagadores.filter(x => x !== previo);
+      D.pagadores.push({ clave: 't' + nt.id, nombre: nt.nombre, tipo_documento: nt.tipo_documento, documento: nt.documento, dv: nt.dv,
+        nombres: [...new Set([nt.nombre, ...(previo?.nombres || [])])],
+        origenes: ['tercero', ...(previo?.origenes || [])], buses: previo?.buses || [] });
+      D.pagadores.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
       cerrarModal('modalTercero');
-      if ($('terTxt')) comboElegir('ter', r.tercero.id);
+      if ($('terTxt')) comboElegir('ter', 't' + nt.id);
       toast('Tercero creado');
     } catch (e) {
       toast(e.message, true);
