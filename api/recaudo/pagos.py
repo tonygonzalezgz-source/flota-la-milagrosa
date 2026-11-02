@@ -7,7 +7,8 @@ parqueos, abonos, anticipos, reembolsos…).
   (2, crédito) o SALE (1, débito) de la caja.
 - A quién va la factura (NIT del archivo plano) depende del tercero del concepto:
     PROPIETARIO → el propietario según la tarjeta de propiedad del bus elegido;
-    PAGADOR     → un tercero de Catálogo › Recaudo › Terceros;
+    PAGADOR     → un tercero de Catálogo › Recaudo › Terceros, o un conductor o
+                  propietario de la flota, que queda como tercero (terceros.py);
     FIJO        → el NIT fijo del concepto;
     NINGUNO     → nadie (la observación es obligatoria: qué se pagó).
 - La fecha es la de hoy en Bogotá (la pone el servidor). Solo efectivo.
@@ -26,7 +27,7 @@ import auditoria
 from . import bp
 from .comun import EMPRESA_POR_DEFECTO, ROLES_RECAUDO, db, hoy_bogota, rol
 from .endpoints import _ahora, _entero, _fecha_iso, _fecha_valida, _hora_utc, _Rechazo, _texto
-from .terceros import TIPOS_DOCUMENTO, buscar as buscar_tercero, documento_con_dv, listar as listar_terceros
+from .terceros import TIPOS_DOCUMENTO, documento_con_dv, pagadores, tercero_de_pagador
 
 ADMIN = ("Administrador",)
 _PAGO_MAXIMO = 50_000_000
@@ -127,7 +128,7 @@ def pagos_del_dia():
         "pagos": pagos,
         "totales": totales_pagos(pagos),
         "conceptos": conceptos_pago(conn),
-        "terceros": listar_terceros(conn, solo_activos=True),
+        "pagadores": pagadores(conn),
         "tipos_documento": TIPOS_DOCUMENTO,
         "buses": buses,
     }
@@ -180,11 +181,14 @@ def registrar_pago():
                 aviso = (f"El bus {bus['numero']} no tiene el documento del propietario (tarjeta de "
                          "propiedad): complétalo en Catálogo › Buses antes del archivo plano.")
         elif tipo == "PAGADOR":
-            tercero_id = _entero(data.get("tercero_id"),
-                                 "Quién paga" if entra else "A quién se le paga")
-            tercero = buscar_tercero(conn, tercero_id)
-            if not tercero or not tercero.get("activo"):
-                raise _Rechazo("El tercero no existe o está inactivo")
+            # `pagador`: clave de la lista de "Quién paga" (tercero, conductor o propietario);
+            # `tercero_id` se sigue aceptando.
+            clave = data.get("pagador")
+            if not clave:
+                clave = "t%d" % _entero(data.get("tercero_id"),
+                                        "Quién paga" if entra else "A quién se le paga")
+            tercero = tercero_de_pagador(conn, clave)
+            tercero_id = tercero["id"]
             copia.update(nombre=tercero["nombre"], tipo_documento=tercero["tipo_documento"],
                          documento=tercero["documento"], dv=tercero.get("dv"))
         elif tipo == "FIJO":
