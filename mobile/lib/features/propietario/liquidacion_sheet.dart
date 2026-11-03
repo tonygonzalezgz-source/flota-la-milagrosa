@@ -96,7 +96,8 @@ List<Widget> _contenido(Liquidacion l) {
       ),
     const SizedBox(height: 16),
     _Bloque(children: [
-      _fila('Registradora', '${miles(l.registradoraInicio)} → ${miles(l.registradoraFin)}'),
+      if (l.registradoraInicio != null && l.registradoraFin != null)
+        _fila('Registradora', '${miles(l.registradoraInicio!)} → ${miles(l.registradoraFin!)}'),
       _fila('Pasajeros × tarifa', '${miles(l.pasajeros)} × ${pesos(l.tarifa)}'),
       _fila('Producido', pesos(l.producido), fuerte: true),
       if (!l.relevo) ...[
@@ -133,7 +134,8 @@ List<Widget> _contenido(Liquidacion l) {
                 style: const TextStyle(fontSize: 12, color: AppColors.muted),
               ),
             ),
-          _fila('Registradora', '${miles(c.registradoraInicio)} → ${miles(c.registradoraFin)}'),
+          if (c.registradoraInicio != null && c.registradoraFin != null)
+            _fila('Registradora', '${miles(c.registradoraInicio!)} → ${miles(c.registradoraFin!)}'),
           _fila('Pasajeros × tarifa', '${miles(c.pasajeros)} × ${pesos(l.tarifa)}'),
           _fila('Producido', pesos(c.producido), fuerte: true),
           ..._gastos(l.gastosDe(c.orden)),

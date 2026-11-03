@@ -190,7 +190,7 @@ PG_SCHEMA    = os.path.join(os.path.dirname(__file__), "supabase_schema.sql")
 # Versión del esquema. IMPORTANTE: incrementar en 1 cada vez que se agregue
 # una migración (ALTER/CREATE) a migrate_db(); si no se incrementa, la
 # migración nueva NO corre en las BD ya versionadas.
-SCHEMA_VERSION = 20   # 20: terceros y pagos diarios del recaudo
+SCHEMA_VERSION = 21   # 21: buses con sensores (pasajeros de la movilidad en el recaudo)
 
 ROLE_VIEWS = {
     "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho", "historial-despacho", "gastos", "tecnologia", "chequeo", "eds", "lavada", "mapa", "relojes", "mb-mapa", "mb-reportes", "mb-rutas", "mb-equipos", "recaudo-diario", "recaudo-pagos", "recaudo-caja", "auditoria"],
@@ -1864,6 +1864,10 @@ def get_bus(bus_id):
     return jsonify(dict(row))
 
 
+# Con qué cuenta pasajeros cada bus: la registradora (torniquete) o sensores, cuyos
+# pasajeros registra la analista en movilidad y son los que se liquidan en el recaudo.
+CUENTA_PASAJEROS = ("registradora", "sensores")
+
 # ── Historial de modificaciones del catálogo: etiquetas legibles por campo ──
 _ETQ_BUS = {
     "numero": "Número", "placa": "Placa", "modelo": "Modelo", "grupo": "Grupo",
@@ -1872,6 +1876,7 @@ _ETQ_BUS = {
     "tarjeta_op_vencimiento": "Tarjeta de operación",
     "tp_propietario_nombre": "Propietario (tarjeta de propiedad)",
     "tp_propietario_documento": "Documento del propietario (tarjeta de propiedad)",
+    "cuenta_pasajeros": "Cuenta pasajeros con",
 }
 _ETQ_RUTA = {"nombre": "Nombre", "descripcion": "Descripción", "grupo": "Grupo",
              "color": "Color", "activa": "Activa"}
@@ -1917,18 +1922,22 @@ def create_bus():
     # Propietario según la tarjeta de propiedad: es el tercero (NIT) del archivo plano contable.
     tp_nombre  = (data.get("tp_propietario_nombre") or "").strip() or None
     tp_doc     = (data.get("tp_propietario_documento") or "").strip() or None
+    cuenta_pax = data.get("cuenta_pasajeros") or "registradora"
 
     if not numero:
         return jsonify({"error": "El número de bus es requerido"}), 400
+    if cuenta_pax not in CUENTA_PASAJEROS:
+        return jsonify({"error": "Cuenta pasajeros con: elige registradora o sensores"}), 400
 
     db = get_db()
     try:
         cursor = db.execute(
             "INSERT INTO buses (numero, placa, modelo, grupo, estado, km_actuales, propietario_id, "
             "soat_vencimiento, tecno_vencimiento, tarjeta_op_vencimiento, "
-            "tp_propietario_nombre, tp_propietario_documento) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-            (numero, placa, modelo, grupo, estado, km, prop_id, soat, tecno, tarjeta_op, tp_nombre, tp_doc),
+            "tp_propietario_nombre, tp_propietario_documento, cuenta_pasajeros) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (numero, placa, modelo, grupo, estado, km, prop_id, soat, tecno, tarjeta_op, tp_nombre, tp_doc,
+             cuenta_pax),
         )
         new_id = cursor.lastrowid
         auditoria.registrar(
@@ -1957,8 +1966,11 @@ def update_bus(bus_id):
     fields = [
         "numero", "placa", "modelo", "grupo", "estado", "km_actuales", "propietario_id",
         "soat_vencimiento", "tecno_vencimiento", "tarjeta_op_vencimiento",
-        "tp_propietario_nombre", "tp_propietario_documento",
+        "tp_propietario_nombre", "tp_propietario_documento", "cuenta_pasajeros",
     ]
+    if "cuenta_pasajeros" in data and data["cuenta_pasajeros"] not in CUENTA_PASAJEROS:
+        db.close()
+        return jsonify({"error": "Cuenta pasajeros con: elige registradora o sensores"}), 400
     nullable = ("propietario_id", "soat_vencimiento", "tecno_vencimiento", "tarjeta_op_vencimiento",
                 "tp_propietario_nombre", "tp_propietario_documento")
     updates, values = [], []

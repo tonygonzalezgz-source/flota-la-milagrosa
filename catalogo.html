@@ -1886,7 +1886,8 @@
         <td><strong>${b.numero}</strong></td>
         <td>${b.placa || '<span style="color:var(--txt3)">—</span>'}</td>
         <td>${b.modelo || '<span style="color:var(--txt3)">—</span>'}</td>
-        <td><span class="badge badge-${(b.grupo||'A').toLowerCase()}">${b.grupo}</span></td>
+        <td><span class="badge badge-${(b.grupo||'A').toLowerCase()}">${b.grupo}</span>${b.cuenta_pasajeros === 'sensores'
+          ? '<div style="font-size:11px;color:var(--txt3);margin-top:3px" title="Cuenta pasajeros con sensores (sin registradora)">Sensores</div>' : ''}</td>
         <td><span class="badge badge-${estadoClass}">${capitalizar(b.estado)}</span></td>
         <td>${(b.km_actuales||0).toLocaleString()} km</td>
         <td>${prop ? prop.nombre : '<span style="color:var(--txt3)">—</span>'}
@@ -2136,6 +2137,14 @@
               <option value="B" ${d && d.grupo === 'B' ? 'selected' : ''}>MICRO</option>
             </select>
           </div>
+        </div>
+        <div class="field full">
+          <label>Cuenta pasajeros con</label>
+          <select id="f-cuenta-pax">
+            <option value="registradora" ${!d || d.cuenta_pasajeros !== 'sensores' ? 'selected' : ''}>Registradora (torniquete)</option>
+            <option value="sensores" ${d && d.cuenta_pasajeros === 'sensores' ? 'selected' : ''}>Sensores (los pasajeros los registra la analista en movilidad)</option>
+          </select>
+          <div style="font-size:11px;color:var(--txt3);margin-top:4px">Con sensores, el recaudo se liquida con los pasajeros de la movilidad del día.</div>
         </div>
         <div class="form-row">
           <div class="field">
@@ -2418,6 +2427,7 @@
           tarjeta_op_vencimiento: tarjVal,
           tp_propietario_nombre:    document.getElementById('f-tp-nombre').value.trim().toUpperCase(),
           tp_propietario_documento: document.getElementById('f-tp-documento').value.replace(/\D/g, ''),
+          cuenta_pasajeros: document.getElementById('f-cuenta-pax').value,
         };
         if (!body.numero) { showToast('El número de bus es requerido', 'error'); return; }
         url    = modalId ? `/api/buses/${modalId}` : '/api/buses';

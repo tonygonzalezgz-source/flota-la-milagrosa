@@ -240,6 +240,8 @@ def recaudo_dia():
     # datos (respaldo de la lectura inicial cuando el despacho no la trae).
     buses = conn.execute(
         """SELECT b.id, b.numero, b.placa, b.modelo, b.grupo,
+                  COALESCE(b.cuenta_pasajeros, 'registradora') AS cuenta_pasajeros,
+                  m.pasajeros AS movilidad_pasajeros,
                   d.id AS despacho_id, d.estado, d.conductor_id, d.ruta_id,
                   d.viajes_realizados, d.registradora_inicio, d.registradora_fin,
                   (SELECT dp.registradora_fin
@@ -258,8 +260,9 @@ def recaudo_dia():
                     LIMIT 1) AS ultima_reg_fecha
              FROM buses b
         LEFT JOIN despacho_diario d ON d.bus_id = b.id AND d.fecha = ?
+        LEFT JOIN registros_movilidad m ON m.bus_id = b.id AND m.fecha = ?
          ORDER BY b.numero""",
-        (fecha, fecha, fecha),
+        (fecha, fecha, fecha, fecha),
     ).fetchall()
     rutas = conn.execute(
         "SELECT id, nombre, grupo, color, activa FROM rutas ORDER BY grupo, nombre"
@@ -337,11 +340,12 @@ def _armar_gastos(conn, gastos_in, n_conductores):
     return gastos
 
 
-def _armar_tramos(conn, conductores_in, reg_inicio, reg_fin, tarifa, gastos):
+def _armar_tramos(conn, conductores_in, reg_inicio, reg_fin, tarifa, gastos, pax_total=None):
     """Valida los conductores y calcula el tramo de registradora y los totales de cada uno.
     Obligatorios por conductor: conductor, ruta, viajes (>= 1), pasajeros (>= 1) y recaudo.
-    Los gastos son opcionales."""
-    tramos, vistos, inicio = [], set(), reg_inicio
+    Los gastos son opcionales. Bus con sensores (`pax_total`, de la movilidad): sin
+    registradora; con relevo, cada conductor lleva sus pasajeros y el último lo que falta."""
+    tramos, vistos, inicio, repartidos = [], set(), reg_inicio, 0
     for i, c in enumerate(conductores_in):
         n = i + 1
         ultimo = n == len(conductores_in)
@@ -368,19 +372,32 @@ def _armar_tramos(conn, conductores_in, reg_inicio, reg_fin, tarifa, gastos):
         if viajes < 1:
             raise _Rechazo(f"Los viajes{cual} deben ser al menos 1")
 
-        # El último conductor termina en la lectura final del bus; los demás en su relevo.
-        if ultimo:
-            fin = reg_fin
+        if pax_total is not None:
+            inicio = fin = None
+            if ultimo:
+                pasajeros = pax_total - repartidos
+                if pasajeros < 1:
+                    raise _Rechazo(f"Los pasajeros repartidos ({_miles(repartidos)}) no dejan pasajeros al "
+                                   f"conductor {n}: la movilidad del día tiene {_miles(pax_total)}")
+            else:
+                pasajeros = _entero(c.get("pasajeros"), f"Los pasajeros del conductor {n}")
+                if pasajeros < 1:
+                    raise _Rechazo(f"Los pasajeros del conductor {n} deben ser al menos 1")
+                repartidos += pasajeros
         else:
-            fin = _entero(c.get("registradora_fin"), f"La registradora al relevo del conductor {n}")
-            if fin < inicio or fin > reg_fin:
-                raise _Rechazo(f"La registradora al relevo del conductor {n} debe estar "
-                               f"entre {inicio} y {reg_fin}")
+            # El último conductor termina en la lectura final del bus; los demás en su relevo.
+            if ultimo:
+                fin = reg_fin
+            else:
+                fin = _entero(c.get("registradora_fin"), f"La registradora al relevo del conductor {n}")
+                if fin < inicio or fin > reg_fin:
+                    raise _Rechazo(f"La registradora al relevo del conductor {n} debe estar "
+                                   f"entre {inicio} y {reg_fin}")
+            pasajeros = fin - inicio
+            if pasajeros < 1:
+                raise _Rechazo(f"No hay pasajeros{cual}: la registradora final debe ser mayor que la inicial")
 
         recaudado = _entero(c.get("recaudado"), f"El recaudo entregado{cual}")
-        pasajeros = fin - inicio
-        if pasajeros < 1:
-            raise _Rechazo(f"No hay pasajeros{cual}: la registradora final debe ser mayor que la inicial")
         producido = pasajeros * tarifa
         total_gastos = sum(g["valor"] for g in gastos if g["orden_conductor"] == n)
         neto = aproximar_mil(producido - total_gastos)
@@ -460,6 +477,13 @@ def _lecturas_del_despacho(conn, bus_id, fecha, despacho, reg_inicio, reg_fin, c
     return digitadas
 
 
+def _pasajeros_movilidad(conn, bus_id, fecha):
+    """Pasajeros que registró la analista en movilidad ese día (buses con sensores)."""
+    f = conn.execute("SELECT pasajeros FROM registros_movilidad WHERE bus_id = ? AND fecha = ?",
+                     (bus_id, fecha)).fetchone()
+    return dict(f)["pasajeros"] if f else None
+
+
 def _vigente(conn, bus_id, fecha):
     return conn.execute(
         "SELECT id FROM recaudos WHERE bus_id = ? AND fecha = ? AND anulado_at IS NULL",
@@ -481,18 +505,29 @@ def liquidar():
     conn = db()
     try:
         bus_id = _entero(data.get("bus_id"), "El vehículo")
-        reg_inicio = _entero(data.get("registradora_inicio"), "La registradora inicial")
-        reg_fin = _entero(data.get("registradora_fin"), "La registradora final")
-        if reg_fin < reg_inicio:
-            raise _Rechazo("Lectura inválida: la registradora final es menor que la inicial")
-        if reg_fin == reg_inicio:
-            raise _Rechazo("No hay pasajeros: la registradora final es igual a la inicial")
-
-        bus = conn.execute("SELECT id, numero, placa, grupo FROM buses WHERE id = ?",
-                           (bus_id,)).fetchone()
+        bus = conn.execute("SELECT * FROM buses WHERE id = ?", (bus_id,)).fetchone()
         if not bus:
             raise _Rechazo("El vehículo no existe", 404)
         bus = dict(bus)
+
+        # Bus con sensores: los pasajeros son los que registró la analista en movilidad
+        # (nadie los digita en recaudo); sin movilidad todavía, se espera.
+        sensores = (bus.get("cuenta_pasajeros") or "registradora") == "sensores"
+        pax_total = None
+        if sensores:
+            reg_inicio = reg_fin = None
+            pax_total = _pasajeros_movilidad(conn, bus_id, fecha)
+            if not pax_total:
+                raise _Rechazo(f"Falta la movilidad del bus {bus['numero']} del {fecha}: cuenta pasajeros con "
+                               "sensores y la analista aún no los registra. Cuando estén, vuelve a cargar "
+                               "y liquida.", 409)
+        else:
+            reg_inicio = _entero(data.get("registradora_inicio"), "La registradora inicial")
+            reg_fin = _entero(data.get("registradora_fin"), "La registradora final")
+            if reg_fin < reg_inicio:
+                raise _Rechazo("Lectura inválida: la registradora final es menor que la inicial")
+            if reg_fin == reg_inicio:
+                raise _Rechazo("No hay pasajeros: la registradora final es igual a la inicial")
 
         if _vigente(conn, bus_id, fecha):
             raise _Rechazo(f"El bus {bus['numero']} ya está liquidado ese día. Una liquidación "
@@ -516,15 +551,15 @@ def liquidar():
         if not isinstance(conductores_in, list) or not 1 <= len(conductores_in) <= MAX_CONDUCTORES:
             raise _Rechazo(f"Debe haber entre 1 y {MAX_CONDUCTORES} conductores")
         es_admin = _es_admin()
-        digitadas = [] if es_admin else _lecturas_del_despacho(
+        digitadas = [] if es_admin or sensores else _lecturas_del_despacho(
             conn, bus_id, fecha, despacho, reg_inicio, reg_fin, conductores_in)
         gastos = _armar_gastos(conn, data.get("gastos"), len(conductores_in))
-        tramos = _armar_tramos(conn, conductores_in, reg_inicio, reg_fin, tarifa, gastos)
+        tramos = _armar_tramos(conn, conductores_in, reg_inicio, reg_fin, tarifa, gastos, pax_total)
     except _Rechazo as e:
         conn.close()
         return jsonify({"error": str(e)}), e.status
 
-    pasajeros = reg_fin - reg_inicio
+    pasajeros = pax_total if sensores else reg_fin - reg_inicio
     producido = sum(t["producido"] for t in tramos)
     total_gastos = sum(g["valor"] for g in gastos)
     neto = sum(t["neto"] for t in tramos)   # cada conductor ya viene aproximado
@@ -574,11 +609,12 @@ def liquidar():
         if despacho:
             antes = (despacho["registradora_inicio"], despacho["registradora_fin"])
             # Quien no es admin solo llena lo que faltaba: eso va como "digitadas".
-            if es_admin and antes != (reg_inicio, reg_fin):
+            if es_admin and not sensores and antes != (reg_inicio, reg_fin):
                 correccion = antes
             conn.execute(
                 """UPDATE despacho_diario
-                      SET registradora_inicio = ?, registradora_fin = ?,
+                      SET registradora_inicio = COALESCE(?, registradora_inicio),
+                          registradora_fin    = COALESCE(?, registradora_fin),
                           conductor_id      = COALESCE(conductor_id, ?),
                           ruta_id           = COALESCE(ruta_id, ?),
                           viajes_realizados = COALESCE(viajes_realizados, ?),
@@ -596,7 +632,8 @@ def liquidar():
                 (bus_id, fecha, primero["conductor_id"], primero["ruta_id"], viajes_total,
                  reg_inicio, reg_fin, uid),
             )
-        sync_pax_movilidad(conn, fecha, {bus_id: pasajeros})
+        if not sensores:   # con sensores la movilidad es la fuente: no se reescribe
+            sync_pax_movilidad(conn, fecha, {bus_id: pasajeros})
 
         nombres = ", ".join(t["conductor_nombre"] for t in tramos)
         detalle_gastos = ", ".join(f"{g['tipo_nombre']} {auditoria.pesos(g['valor'])}" for g in gastos)
@@ -610,7 +647,8 @@ def liquidar():
         )
         if len(tramos) > 1:
             descripcion += " Relevo: " + "; ".join(
-                f"{t['orden']}) {t['conductor_nombre']} {t['registradora_inicio']}→{t['registradora_fin']}: "
+                f"{t['orden']}) {t['conductor_nombre']}"
+                + (f" {t['registradora_inicio']}→{t['registradora_fin']}" if not sensores else "") + ": "
                 f"{_miles(t['pasajeros'])} pax, producido {auditoria.pesos(t['producido'])}, "
                 f"gastos {auditoria.pesos(t['total_gastos'])}, entregó {auditoria.pesos(t['recaudado'])}, "
                 f"{_resultado(t['diferencia'])}"
@@ -622,6 +660,8 @@ def liquidar():
                             f"{reg_inicio}–{reg_fin}.")
         elif not despacho:
             descripcion += " El bus no tenía despacho: se creó con estos datos."
+        if sensores:
+            descripcion += " Pasajeros de la movilidad (el bus cuenta con sensores, sin registradora)."
         if digitadas:
             descripcion += (" Registradora digitada en recaudo (el despacho no la traía): "
                             + ", ".join(digitadas) + ".")

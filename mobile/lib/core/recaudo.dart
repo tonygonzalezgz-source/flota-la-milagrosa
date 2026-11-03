@@ -31,8 +31,9 @@ class TramoRecaudo {
   final String cedula;
   final String ruta;
   final int? viajes;
-  final int registradoraInicio;
-  final int registradoraFin;
+  /// Sin registradora (bus con sensores: los pasajeros salen de la movilidad).
+  final int? registradoraInicio;
+  final int? registradoraFin;
   final int pasajeros;
   final int producido;
   final int totalGastos;
@@ -62,8 +63,8 @@ class TramoRecaudo {
         cedula: asStr(j['conductor_cedula']),
         ruta: asStr(j['ruta_nombre']),
         viajes: asInt(j['viajes']),
-        registradoraInicio: asInt(j['registradora_inicio']) ?? 0,
-        registradoraFin: asInt(j['registradora_fin']) ?? 0,
+        registradoraInicio: asInt(j['registradora_inicio']),
+        registradoraFin: asInt(j['registradora_fin']),
         pasajeros: asInt(j['pasajeros']) ?? 0,
         producido: asInt(j['producido']) ?? 0,
         totalGastos: asInt(j['total_gastos']) ?? 0,
@@ -77,8 +78,9 @@ class Liquidacion {
   final int id;
   final String fecha;
   final int busId;
-  final int registradoraInicio;
-  final int registradoraFin;
+  /// Sin registradora (bus con sensores: los pasajeros salen de la movilidad).
+  final int? registradoraInicio;
+  final int? registradoraFin;
   final int pasajeros;
   final int tarifa;
   final int producido;
@@ -118,8 +120,8 @@ class Liquidacion {
         id: asInt(j['id']) ?? 0,
         fecha: Fechas.normalizar(j['fecha']),
         busId: asInt(j['bus_id']) ?? 0,
-        registradoraInicio: asInt(j['registradora_inicio']) ?? 0,
-        registradoraFin: asInt(j['registradora_fin']) ?? 0,
+        registradoraInicio: asInt(j['registradora_inicio']),
+        registradoraFin: asInt(j['registradora_fin']),
         pasajeros: asInt(j['pasajeros']) ?? 0,
         tarifa: asInt(j['tarifa']) ?? 0,
         producido: asInt(j['producido']) ?? 0,
