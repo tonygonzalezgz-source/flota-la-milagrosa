@@ -517,6 +517,15 @@
     try { localStorage.setItem(PAPEL_KEY, papel); } catch (_) {}
   }
 
+  /* Sin sugerencias del navegador (palabras o montos escritos antes) en Recaudo
+     (pedido del usuario 2026-11-03): todos los campos, también los que se dibujan después. */
+  function sinSugerencias() {
+    document.querySelectorAll('input:not([autocomplete="off"]), textarea:not([autocomplete="off"])')
+      .forEach(el => el.setAttribute('autocomplete', 'off'));
+  }
+  new MutationObserver(sinSugerencias).observe(document.documentElement, { childList: true, subtree: true });
+  document.addEventListener('DOMContentLoaded', sinSugerencias);
+
   /* Todo lo que se escribe en Recaudo queda en mayúscula (pedido del usuario 2026-11-02).
      En captura, antes del oninput del campo, para que el formulario ya guarde la mayúscula.
      Los números (inputmode=numeric) y los campos con data-tal-cual no se tocan. */
@@ -1447,7 +1456,6 @@
     const fila = (k, v, cls = '') => `<div class="t-fila ${cls}"><span>${k}</span><span>${v}</span></div>`;
     const total = r.conductores.length;
     const gastos = r.gastos.filter(g => g.orden_conductor === c.orden);
-    const dif = c.diferencia;
     const obs = [c.observacion, c.orden === 1 ? r.observacion : null].filter(Boolean).join(' · ');
     // Dos fechas: la de la tarjeta (el día que trabajó el bus, el que se eligió al liquidar)
     // y la del recaudo (cuando se liquidó, es decir, cuando el conductor entregó la plata).
@@ -1474,9 +1482,6 @@
       ${fila('Total gastos', fmtMoney(c.total_gastos), 'fuerte')}
       <div class="t-linea"></div>
       ${fila('Por entregar', fmtMoney(c.neto), 'fuerte')}
-      <div class="t-sec">RECAUDO</div>
-      ${fila('Recaudo', fmtMoney(c.recaudado), 'grande')}
-      ${fila(dif < 0 ? 'FALTANTE' : dif > 0 ? 'SOBRANTE' : 'CUADRADO', fmtMoney(Math.abs(dif)), 'fuerte')}
       <div class="t-sec">CONDUCTOR</div>
       <div>${esc(c.conductor_cedula || '')}</div><div class="fuerte">${esc((c.conductor_nombre || '').toUpperCase())}</div>
       ${obs ? `<div class="t-nota">Obs: ${esc(obs)}</div>` : ''}
