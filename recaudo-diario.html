@@ -548,7 +548,9 @@
     cargar();
   });
   window.addEventListener('message', e => { if (e.data?.type === 'VIEW_SHOWN' && !dirty) cargar(); });
-  /* Reimprimir es solo del Administrador: tras imprimir se vacía la tirilla para que ⌘P no la repita */
+  /* Reimprimir: el recaudador una vez (la suya), el Administrador las que quiera; lo cuenta el
+     servidor. Tras imprimir se vacía la tirilla para que ⌘P no la repita. */
+  const puedeReimprimir = r => ES_ADMIN || (r.usuario_id === CU.id && (r.reimpresiones || 0) < 1);
   window.addEventListener('afterprint', () => { if (!ES_ADMIN) document.getElementById('tirilla').innerHTML = ''; });
   window.addEventListener('beforeunload', e => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
   // Al corregir un campo se le quita la marca roja; las lecturas (final y relevos) las marca recalcular().
@@ -921,7 +923,8 @@
 
       <div class="acciones">
         <div class="meta"></div>
-        ${cerrada && ES_ADMIN ? `<button class="btn" onclick="imprimirTirilla(${b.recaudo.id}, true)">Imprimir tirilla${n > 1 ? 's' : ''}</button>` : ''}
+        ${cerrada && puedeReimprimir(b.recaudo) ? `<button class="btn" onclick="imprimirTirilla(${b.recaudo.id}, true)">${ES_ADMIN
+          ? `Imprimir tirilla${n > 1 ? 's' : ''}` : `Reimprimir tirilla${n > 1 ? 's' : ''} (1 vez)`}</button>` : ''}
         ${cerrada && ES_ADMIN && !enCaja ? `<button class="btn danger" onclick="abrirAnular()">Anular liquidación</button>` : ''}
         ${editable ? `<button class="btn-primary" id="btnGuardar" onclick="guardar()">Guardar liquidación</button>` : ''}
       </div>
@@ -1572,10 +1575,16 @@
 
   /* Una tirilla por conductor (la copia de la empresa, con la firma del conductor), cada
      una en su propia "página" del rollo. `soloOrden` reimprime solo la tirilla de un conductor. */
-  function imprimirTirilla(id, reimpresion, soloOrden = null) {
-    if (reimpresion && !ES_ADMIN) return toast('Solo el administrador puede reimprimir', true);
+  async function imprimirTirilla(id, reimpresion, soloOrden = null) {
     const r = liquidacionPorId(id);
     if (!r) return toast('No se encontró la liquidación para imprimir', true);
+    if (reimpresion) {
+      // El servidor la autoriza (el recaudador, una vez) y la anota en la auditoría
+      try {
+        const res = await apiFetch(`/api/recaudo/${id}/reimpresion`, { method: 'POST', body: JSON.stringify({ orden: soloOrden }) });
+        r.reimpresiones = res.reimpresiones;
+      } catch (e) { return toast(e.message, true); }
+    }
     const cont = document.getElementById('tirilla');
     cont.className = 'papel-' + papel;
     cont.innerHTML = r.conductores
@@ -1583,6 +1592,7 @@
       .map(c => htmlCopia(r, c, reimpresion))
       .join('');
     window.print();
+    if (reimpresion && !ES_ADMIN && selId) renderForm();   // ya usó su reimpresión: se quita el botón
   }
 
   /* ── Informe de recaudo (Administrador): Excel por vehículo ──
