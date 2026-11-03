@@ -219,7 +219,75 @@ def _liquidaciones_del_dia(conn, fecha, bus_id=None):
             anuladas.setdefault(e["bus_id"], []).append(e)
         else:
             vigentes[e["bus_id"]] = e
+    veces = reimpresiones(conn, "liquidacion", [e["id"] for e in vigentes.values()])
+    for e in vigentes.values():
+        e["reimpresiones"] = veces.get(e["id"], 0)
     return vigentes, anuladas
+
+
+# ──────────────────────────────────────────
+#  Reimprimir (tirilla de liquidación y recibo de pago diario)
+# ──────────────────────────────────────────
+
+# Si al guardar no salió la tirilla (papel, impresora apagada, se canceló), quien la
+# registró puede reimprimirla UNA vez; las demás copias, el Administrador (pedido del
+# usuario 2026-11-03). Cada reimpresión queda en la auditoría, que es la que se cuenta.
+REIMPRESIONES_RECAUDADOR = 1
+
+
+def reimpresiones(conn, entidad, ids):
+    """{id: veces que se reimprimió} según la auditoría (entidad 'liquidacion' o 'pago')."""
+    if not ids:
+        return {}
+    marcas = ",".join("?" * len(ids))
+    filas = conn.execute(
+        f"""SELECT entidad_id, COUNT(*) AS n FROM auditoria
+             WHERE modulo = 'recaudo' AND entidad = ? AND accion = 'reimprimir'
+               AND entidad_id IN ({marcas})
+          GROUP BY entidad_id""",
+        (entidad, *[str(i) for i in ids]),
+    ).fetchall()
+    return {int(dict(f)["entidad_id"]): int(dict(f)["n"]) for f in filas}
+
+
+def autorizar_reimpresion(conn, entidad, registro_id, usuario_id, descripcion):
+    """Anota la reimpresión o lanza _Rechazo. Quien no es Administrador solo reimprime lo
+    que registró él y solo REIMPRESIONES_RECAUDADOR veces."""
+    hechas = reimpresiones(conn, entidad, [registro_id]).get(registro_id, 0)
+    if not _es_admin():
+        if usuario_id != getattr(request, "jwt_user_id", None):
+            raise _Rechazo("Solo quien la registró puede reimprimirla. Pide la copia al administrador.", 403)
+        if hechas >= REIMPRESIONES_RECAUDADOR:
+            raise _Rechazo("Ya se reimprimió una vez. Para otra copia, pide al administrador.", 403)
+    auditoria.registrar(conn, "recaudo", entidad, registro_id, "reimprimir",
+                        f"{descripcion} (reimpresión {hechas + 1})", {"reimpresion": hechas + 1})
+    conn.commit()
+    return hechas + 1
+
+
+@bp.route("/api/recaudo/<int:recaudo_id>/reimpresion", methods=["POST"])
+@rol(*ROLES_RECAUDO)
+def reimprimir_liquidacion(recaudo_id):
+    """Body: {orden?} (solo la tirilla de ese conductor). Devuelve las veces reimpresa."""
+    data = request.get_json(silent=True) or {}
+    conn = db()
+    filas = _cargar(conn, "r.id = ?", [recaudo_id])
+    if not filas:
+        conn.close()
+        return jsonify({"error": "Liquidación no encontrada"}), 404
+    r = filas[0]
+    orden = data.get("orden")
+    cual = f", conductor {orden}" if orden else ""
+    try:
+        veces = autorizar_reimpresion(
+            conn, "liquidacion", recaudo_id, r.get("usuario_id"),
+            f"Reimprimió la tirilla de la liquidación N° {str(recaudo_id).zfill(6)} "
+            f"(bus {r['bus_numero']} del {_fecha_iso(r['fecha'])}{cual})")
+    except _Rechazo as e:
+        conn.close()
+        return jsonify({"error": str(e)}), e.status
+    conn.close()
+    return jsonify({"ok": True, "reimpresiones": veces})
 
 
 # ──────────────────────────────────────────

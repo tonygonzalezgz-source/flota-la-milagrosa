@@ -26,7 +26,8 @@ import auditoria
 
 from . import bp
 from .comun import EMPRESA_POR_DEFECTO, ROLES_RECAUDO, db, hoy_bogota, rol
-from .endpoints import _ahora, _entero, _fecha_iso, _fecha_valida, _hora_utc, _Rechazo, _texto
+from .endpoints import (_ahora, _entero, _fecha_iso, _fecha_valida, _hora_utc, _Rechazo, _texto,
+                        autorizar_reimpresion, reimpresiones)
 from .terceros import TIPOS_DOCUMENTO, documento_con_dv, pagadores, tercero_de_pagador
 
 ADMIN = ("Administrador",)
@@ -118,6 +119,9 @@ def pagos_del_dia():
         params.append(getattr(request, "jwt_user_id", None))
     conn = db()
     pagos = cargar_pagos(conn, where, params)
+    veces = reimpresiones(conn, "pago", [p["id"] for p in pagos])
+    for p in pagos:
+        p["reimpresiones"] = veces.get(p["id"], 0)
     buses = [dict(b) for b in conn.execute(
         """SELECT id, numero, placa, grupo, tp_propietario_nombre, tp_propietario_documento
              FROM buses ORDER BY numero"""
@@ -231,6 +235,28 @@ def registrar_pago():
     pago = cargar_pagos(conn, "p.id = ?", [pago_id])[0]
     conn.close()
     return jsonify({"ok": True, "pago": pago, "aviso": aviso}), 201
+
+
+@bp.route("/api/recaudo/pagos/<int:pago_id>/reimpresion", methods=["POST"])
+@rol(*ROLES_RECAUDO)
+def reimprimir_pago(pago_id):
+    """Una vez para quien lo registró; más copias, el Administrador (ver endpoints.py)."""
+    conn = db()
+    filas = cargar_pagos(conn, "p.id = ? AND p.empresa_id = ?", [pago_id, EMPRESA_POR_DEFECTO])
+    if not filas:
+        conn.close()
+        return jsonify({"error": "Pago no encontrado"}), 404
+    p = filas[0]
+    try:
+        veces = autorizar_reimpresion(
+            conn, "pago", pago_id, p.get("usuario_id"),
+            f"Reimprimió el recibo del pago {numero_pago(pago_id)} ({p['concepto_nombre']} "
+            f"por {auditoria.pesos(p['valor'])})")
+    except _Rechazo as e:
+        conn.close()
+        return jsonify({"error": str(e)}), e.status
+    conn.close()
+    return jsonify({"ok": True, "reimpresiones": veces})
 
 
 # ──────────────────────────────────────────

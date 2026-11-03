@@ -400,7 +400,9 @@
     cargar();
   });
   window.addEventListener('message', e => { if (e.data?.type === 'VIEW_SHOWN' && !dirty) cargar(); });
-  /* Reimprimir es solo del Administrador: tras imprimir se vacía la tirilla para que ⌘P no la repita */
+  /* Reimprimir: el recaudador una vez (el suyo), el Administrador los que quiera; lo cuenta el
+     servidor. Tras imprimir se vacía la tirilla para que ⌘P no la repita. */
+  const puedeReimprimir = p => ES_ADMIN || (p.usuario_id === CU.id && (p.reimpresiones || 0) < 1);
   window.addEventListener('afterprint', () => { if (!ES_ADMIN) document.getElementById('tirilla').innerHTML = ''; });
   window.addEventListener('beforeunload', e => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
   ['input', 'change'].forEach(tipo => document.addEventListener(tipo, e => e.target.classList?.remove('err')));
@@ -498,7 +500,7 @@
         ${ES_ADMIN ? `<td data-label="Registró">${esc(p.usuario_nombre || '')}</td>` : ''}
         <td data-label="Estado">${estado(p)}</td>
         <td data-label=""><div class="btns">
-          ${ES_ADMIN ? `<button class="btn sm" onclick="imprimirRecibo(${p.id}, true)">Reimprimir</button>` : ''}
+          ${puedeReimprimir(p) ? `<button class="btn sm" onclick="imprimirRecibo(${p.id}, true)">${ES_ADMIN ? 'Reimprimir' : 'Reimprimir (1 vez)'}</button>` : ''}
           ${ES_ADMIN && !p.anulado_at && !p.cierre_id ? `<button class="btn sm danger" onclick="abrirAnular(${p.id})">Anular</button>` : ''}
         </div></td>
       </tr>`).join('')}
@@ -861,14 +863,21 @@
     </div>`;
   }
 
-  function imprimirRecibo(id, reimpresion) {
-    if (reimpresion && !ES_ADMIN) return toast('Solo el administrador puede reimprimir', true);
+  async function imprimirRecibo(id, reimpresion) {
     const p = D.pagos.find(x => x.id === id);
     if (!p) return toast('No se encontró el pago para imprimir', true);
+    if (reimpresion) {
+      // El servidor la autoriza (el recaudador, una vez) y la anota en la auditoría
+      try {
+        const res = await apiFetch(`/api/recaudo/pagos/${id}/reimpresion`, { method: 'POST' });
+        p.reimpresiones = res.reimpresiones;
+      } catch (e) { return toast(e.message, true); }
+    }
     const cont = $('tirilla');
     cont.className = 'papel-' + papel;
     cont.innerHTML = htmlRecibo(p, reimpresion);
     window.print();
+    if (reimpresion && !ES_ADMIN) renderLista();   // ya usó su reimpresión: se quita el botón
   }
 
   function abrirModal(id)  { $(id).classList.remove('hidden'); }
