@@ -6,7 +6,9 @@ parqueos, abonos, anticipos, reembolsos…).
   son RECAUDOS CU y CIERRE DE CAJA). El `signo` del concepto dice si la plata ENTRA
   (2, crédito) o SALE (1, débito) de la caja.
 - A quién va la factura (NIT del archivo plano) depende del tercero del concepto:
-    PROPIETARIO → el propietario según la tarjeta de propiedad del bus elegido;
+    PROPIETARIO → el propietario según la tarjeta de propiedad del bus elegido; en las
+                  entradas además se pide quién paga (conductor, tercero o el mismo
+                  propietario): sale en el recibo, el cierre y la descripción del plano;
     PAGADOR     → un tercero de Catálogo › Recaudo › Terceros, o un conductor o
                   propietario de la flota, que queda como tercero (terceros.py);
     FIJO        → el NIT fijo del concepto;
@@ -99,6 +101,9 @@ def quien(p):
     if p.get("tercero_nombre"):
         doc = documento_con_dv({"documento": p.get("tercero_documento"), "dv": p.get("tercero_dv")})
         partes.append(p["tercero_nombre"] + (f" ({doc})" if doc else ""))
+    if p.get("pagador_nombre"):
+        doc = documento_con_dv({"documento": p.get("pagador_documento"), "dv": p.get("pagador_dv")})
+        partes.append("pagó " + p["pagador_nombre"] + (f" ({doc})" if doc else ""))
     return " · ".join(partes)
 
 
@@ -148,7 +153,7 @@ def pagos_del_dia():
 @bp.route("/api/recaudo/pagos", methods=["POST"])
 @rol(*ROLES_RECAUDO)
 def registrar_pago():
-    """Body: {concepto_id, valor, bus_id?, tercero_id?, observacion?}."""
+    """Body: {concepto_id, valor, bus_id?, pagador?, tercero_id?, observacion?}."""
     data = request.get_json(silent=True) or {}
     conn = db()
     aviso = None
@@ -169,7 +174,7 @@ def registrar_pago():
         entra = concepto["signo"] == 2
 
         bus, copia = None, {"nombre": None, "tipo_documento": None, "documento": None, "dv": None}
-        tercero_id = None
+        tercero_id, pagador = None, None
         if tipo == "PROPIETARIO" or concepto.get("referencia") == "VEHICULO":
             bus_id = _entero(data.get("bus_id"), "El vehículo")
             fila = conn.execute(
@@ -184,6 +189,12 @@ def registrar_pago():
             if not documento:
                 aviso = (f"El bus {bus['numero']} no tiene el documento del propietario (tarjeta de "
                          "propiedad): complétalo en Catálogo › Buses antes del archivo plano.")
+            if entra:
+                # La factura va al propietario, pero la plata la pone quien paga (el conductor,
+                # un tercero o el mismo propietario): se guarda aparte (pedido del usuario 2026-11-03).
+                if not data.get("pagador"):
+                    raise _Rechazo("Falta llenar: quién paga")
+                pagador = tercero_de_pagador(conn, data["pagador"])
         elif tipo == "PAGADOR":
             # `pagador`: clave de la lista de "Quién paga" (tercero, conductor o propietario);
             # `tercero_id` se sigue aceptando.
@@ -209,17 +220,24 @@ def registrar_pago():
                (empresa_id, fecha, concepto_id, concepto_nombre, cuenta, signo, centro_costo,
                 concepto_tercero, referencia, valor, bus_id, bus_numero, bus_placa, tercero_id,
                 tercero_nombre, tercero_tipo_documento, tercero_documento, tercero_dv,
-                observacion, usuario_id)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                pagador_tercero_id, pagador_nombre, pagador_tipo_documento, pagador_documento,
+                pagador_dv, observacion, usuario_id)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (EMPRESA_POR_DEFECTO, hoy_bogota(), concepto_id, concepto["nombre"], concepto["cuenta"],
          concepto["signo"], concepto.get("centro_costo"), tipo, concepto.get("referencia") or "",
          valor, bus["id"] if bus else None, bus["numero"] if bus else None,
          bus.get("placa") if bus else None, tercero_id, copia["nombre"], copia["tipo_documento"],
-         copia["documento"], copia["dv"], observacion, uid),
+         copia["documento"], copia["dv"],
+         pagador["id"] if pagador else None, pagador["nombre"] if pagador else None,
+         pagador["tipo_documento"] if pagador else None, pagador["documento"] if pagador else None,
+         pagador.get("dv") if pagador else None, observacion, uid),
     )
     pago_id = cur.lastrowid
     pago = {"bus_numero": bus["numero"] if bus else None, "tercero_nombre": copia["nombre"],
-            "tercero_documento": copia["documento"], "tercero_dv": copia["dv"]}
+            "tercero_documento": copia["documento"], "tercero_dv": copia["dv"],
+            "pagador_nombre": pagador["nombre"] if pagador else None,
+            "pagador_documento": pagador["documento"] if pagador else None,
+            "pagador_dv": pagador.get("dv") if pagador else None}
     detalle = quien(pago)
     auditoria.registrar(
         conn, "recaudo", "pago", pago_id, "crear",
@@ -229,7 +247,8 @@ def registrar_pago():
          + (f". Obs: {observacion}" if observacion else "") + "."),
         {"concepto": concepto["nombre"], "cuenta": concepto["cuenta"], "signo": concepto["signo"],
          "valor": valor, "bus": bus["numero"] if bus else None, "tercero": copia["nombre"],
-         "documento": copia["documento"], "observacion": observacion},
+         "documento": copia["documento"], "pagador": pagador["nombre"] if pagador else None,
+         "observacion": observacion},
     )
     conn.commit()
     pago = cargar_pagos(conn, "p.id = ?", [pago_id])[0]

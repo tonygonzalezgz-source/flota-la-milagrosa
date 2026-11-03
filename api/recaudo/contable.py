@@ -339,7 +339,8 @@ def archivo_plano():
         elif tipo == "FIJO":
             nit = (p.get("nit_fijo_actual") if en_catalogo else None) or p.get("tercero_documento") or ""
         if tipo == "PROPIETARIO" and p.get("bus_numero") is not None:
-            detalle = f"VEH{p['bus_numero']}"
+            # Con quién pagó (abono préstamo, admon): el NIT sigue siendo el del propietario
+            detalle = f"VEH{p['bus_numero']} {p.get('pagador_nombre') or ''}"
         elif tipo == "PAGADOR":
             detalle = p.get("tercero_nombre") or ""
         else:

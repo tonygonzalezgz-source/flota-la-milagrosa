@@ -1,4 +1,4 @@
-"""Tablas del módulo Recaudo — SCHEMA_VERSION 21.
+"""Tablas del módulo Recaudo — SCHEMA_VERSION 22.
 
 - `recaudo_tarifas`: valor del pasaje por grupo de vehículo (A buses, B micros).
 - `recaudo_tipos_gasto`: gastos que el conductor puede reportar (ACPM, Taller…).
@@ -275,6 +275,11 @@ def _tablas(serial, ts, ts_default, ref_empresa):
             tercero_tipo_documento  TEXT,
             tercero_documento       TEXT,
             tercero_dv              TEXT,
+            pagador_tercero_id      INTEGER REFERENCES recaudo_terceros(id),
+            pagador_nombre          TEXT,
+            pagador_tipo_documento  TEXT,
+            pagador_documento       TEXT,
+            pagador_dv              TEXT,
             observacion             TEXT,
             usuario_id              INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
             created_at              {ts} {ts_default},
@@ -294,6 +299,8 @@ def _tablas(serial, ts, ts_default, ref_empresa):
 # Pagos diarios en el cierre de caja — SCHEMA_VERSION 20.
 # Buses que cuentan pasajeros con sensores (sin registradora): se liquidan con los
 # pasajeros de la movilidad y la registradora queda vacía — SCHEMA_VERSION 21.
+# Quién paga en las entradas a nombre del propietario (abono préstamo, admon): la
+# factura sigue a nombre del propietario y aparte se guarda quién pagó — SCHEMA_VERSION 22.
 _COLUMNAS_PG = [
     "ALTER TABLE recaudos ADD COLUMN IF NOT EXISTS cierre_id INTEGER REFERENCES recaudo_cierres(id)",
     "ALTER TABLE buses ADD COLUMN IF NOT EXISTS tp_propietario_nombre TEXT",
@@ -309,6 +316,11 @@ _COLUMNAS_PG = [
     "ALTER TABLE recaudos ALTER COLUMN registradora_fin DROP NOT NULL",
     "ALTER TABLE recaudo_conductores ALTER COLUMN registradora_inicio DROP NOT NULL",
     "ALTER TABLE recaudo_conductores ALTER COLUMN registradora_fin DROP NOT NULL",
+    "ALTER TABLE recaudo_pagos ADD COLUMN IF NOT EXISTS pagador_tercero_id INTEGER REFERENCES recaudo_terceros(id)",
+    "ALTER TABLE recaudo_pagos ADD COLUMN IF NOT EXISTS pagador_nombre TEXT",
+    "ALTER TABLE recaudo_pagos ADD COLUMN IF NOT EXISTS pagador_tipo_documento TEXT",
+    "ALTER TABLE recaudo_pagos ADD COLUMN IF NOT EXISTS pagador_documento TEXT",
+    "ALTER TABLE recaudo_pagos ADD COLUMN IF NOT EXISTS pagador_dv TEXT",
 ]
 _COLUMNAS_SQLITE = [
     "ALTER TABLE recaudos ADD COLUMN cierre_id INTEGER REFERENCES recaudo_cierres(id)",
@@ -321,6 +333,11 @@ _COLUMNAS_SQLITE = [
     "ALTER TABLE recaudo_cierres ADD COLUMN egresos INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE recaudo_cierres ADD COLUMN pago_ids TEXT NOT NULL DEFAULT '[]'",
     "ALTER TABLE buses ADD COLUMN cuenta_pasajeros TEXT NOT NULL DEFAULT 'registradora'",
+    "ALTER TABLE recaudo_pagos ADD COLUMN pagador_tercero_id INTEGER REFERENCES recaudo_terceros(id)",
+    "ALTER TABLE recaudo_pagos ADD COLUMN pagador_nombre TEXT",
+    "ALTER TABLE recaudo_pagos ADD COLUMN pagador_tipo_documento TEXT",
+    "ALTER TABLE recaudo_pagos ADD COLUMN pagador_documento TEXT",
+    "ALTER TABLE recaudo_pagos ADD COLUMN pagador_dv TEXT",
 ]
 _INDICES = ["CREATE INDEX IF NOT EXISTS idx_recaudos_caja ON recaudos(usuario_id, cierre_id)"]
 

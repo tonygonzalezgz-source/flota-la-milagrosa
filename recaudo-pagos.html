@@ -452,6 +452,9 @@
   const norm = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
   const entra = c => c && c.signo === 2;
   const pideBus = c => c && (c.tercero === 'PROPIETARIO' || c.referencia === 'VEHICULO');
+  /* Quién paga: el tercero del concepto (PAGADOR) o, en las entradas a nombre del propietario
+     (abono préstamo, admon), quien pone la plata; la factura sigue al propietario. */
+  const pidePagador = c => c && (c.tercero === 'PAGADOR' || (c.tercero === 'PROPIETARIO' && entra(c)));
   /* "vehículo 12 · NOMBRE" / "NOMBRE · NIT 900123456-7" de un pago guardado */
   function quienPago(p) {
     const partes = [];
@@ -560,7 +563,7 @@
           <div class="combo-drop" id="busDrop"></div>
         </div><div class="ayuda" id="busInfo"></div></div>`;
     }
-    if (c && c.tercero === 'PAGADOR') {
+    if (pidePagador(c)) {
       html += `<div class="campo"><label for="terTxt">${entra(c) ? 'Quién paga' : 'A quién se le paga'}<span class="req">*</span></label>
         <div class="combo" id="terCombo">
           <input id="terTxt" placeholder="Escribe el nombre o la cédula" autocomplete="off"
@@ -714,7 +717,7 @@
     const faltan = [];   // [id del campo, qué falta]
     if (!c) faltan.push(['fConcepto', 'el concepto']);
     if (pideBus(c) && !COMBOS.bus.id) faltan.push(['busTxt', 'el vehículo']);
-    if (c && c.tercero === 'PAGADOR' && !COMBOS.ter.id) faltan.push(['terTxt', entra(c) ? 'quién paga' : 'a quién se le paga']);
+    if (pidePagador(c) && !COMBOS.ter.id) faltan.push(['terTxt', entra(c) ? 'quién paga' : 'a quién se le paga']);
     if (!valor) faltan.push(['fValor', 'el valor']);
     if (c && c.tercero === 'NINGUNO' && !obs) faltan.push(['fObs', 'qué se pagó']);
     if (faltan.length) {
@@ -724,7 +727,7 @@
       return;
     }
     const b = pideBus(c) ? busPorId(COMBOS.bus.id) : null;
-    const t = c.tercero === 'PAGADOR' ? pagadorPorClave(COMBOS.ter.id) : null;
+    const t = pidePagador(c) ? pagadorPorClave(COMBOS.ter.id) : null;
     if (t && !t.documento) {
       $('terTxt').classList.add('err');
       toast(faltaDocumento(t), true);
@@ -851,6 +854,9 @@
       ${p.bus_numero != null ? fila('Vehículo', `${p.bus_numero}${p.bus_placa ? ' · ' + esc(p.bus_placa) : ''}`) : ''}
       ${p.tercero_nombre ? `<div class="t-sec">${p.concepto_tercero === 'PROPIETARIO' ? 'PROPIETARIO' : ingreso ? 'RECIBIDO DE' : 'PAGADO A'}</div>
         <div class="fuerte">${esc(p.tercero_nombre.toUpperCase())}</div>${doc ? `<div>${doc}</div>` : ''}` : ''}
+      ${p.pagador_nombre ? `<div class="t-sec">RECIBIDO DE</div>
+        <div class="fuerte">${esc(p.pagador_nombre.toUpperCase())}</div>
+        ${p.pagador_documento ? `<div>${p.pagador_tipo_documento ? esc(p.pagador_tipo_documento) + ' ' : 'Doc. '}${esc(docConDv(p.pagador_documento, p.pagador_dv))}</div>` : ''}` : ''}
       ${p.observacion ? `<div class="t-nota" style="margin-top:3px">Obs: ${esc(p.observacion)}</div>` : ''}
       <div class="t-linea"></div>
       ${fila('VALOR', fmtMoney(p.valor), 'grande')}
