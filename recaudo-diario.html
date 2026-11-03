@@ -179,6 +179,8 @@
     .g-quitar:hover { color:#dc2626; }
     .gasto-row input.nota.requerido::placeholder { color:#dc2626; opacity:.75; }
     .gasto-agregar { padding:8px 0; border-bottom:1px dashed var(--border); }
+    .gasto-mas { padding:4px 0 8px; border-bottom:1px solid var(--border); }
+    .gasto-mas button { border:none; background:none; color:var(--primary); font:700 12.5px inherit; cursor:pointer; padding:2px 0; }
     .gasto-agregar select { width:100%; max-width:320px; padding:8px 10px; border:1.5px dashed var(--primary);
       border-radius:var(--radius-s); background:var(--white); color:var(--primary); font:700 13.5px inherit; cursor:pointer; }
     .tipo-row .tipo-op { display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:600;
@@ -731,8 +733,7 @@
         conductores: b.recaudo.conductores.map(c => ({
           conductor_id: c.conductor_id, ruta_id: c.ruta_id, viajes: c.viajes,
           registradora_fin: c.registradora_fin, recaudado: c.recaudado, observacion: c.observacion || '',
-          gastos: Object.fromEntries((b.recaudo.gastos || []).filter(g => g.orden_conductor === c.orden).map(g =>
-            [g.tipo_gasto_id, { valor: g.valor, observacion: g.observacion || '' }])),
+          gastos: gastosGuardados((b.recaudo.gastos || []).filter(g => g.orden_conductor === c.orden)),
         })),
       };
     }
@@ -971,19 +972,25 @@
     const gastos = form.conductores[i].gastos;
     const visibles = D.tipos_gasto.filter(t => t.fijo || t.id in gastos);
     const otros = D.tipos_gasto.filter(t => !t.fijo && !(t.id in gastos));
-    const filas = visibles.map(t => {
-      const g = gastos[t.id] || {};
+    const fila = (t, k, quitable) => {
+      const g = gastos[k] || {};
       return `<div class="gasto-row">
-        <label for="g-${i}-${t.id}">${esc(t.nombre)}${t.fijo || soloLectura ? ''
-          : `<button class="g-quitar" title="Quitar este gasto" onclick="quitarGasto(${i}, ${t.id})">×</button>`}</label>
-        <input class="valor" id="g-${i}-${t.id}" inputmode="numeric" placeholder="$0" ${ro}
+        <label for="g-${i}-${k}">${esc(t.nombre)}${!quitable || soloLectura ? ''
+          : `<button class="g-quitar" title="Quitar este gasto" onclick="quitarGasto(${i}, '${k}')">×</button>`}</label>
+        <input class="valor" id="g-${i}-${k}" inputmode="numeric" placeholder="$0" ${ro}
                value="${g.valor ? fmtNum(g.valor) : ''}"
-               oninput="formatearDinero(this); setGasto(${i}, ${t.id}, 'valor', leerEntero(this.value))" />
-        <input class="nota${t.requiere_detalle ? ' requerido' : ''}" id="gn-${i}-${t.id}" maxlength="200" ${ro}
+               oninput="formatearDinero(this); setGasto(${i}, '${k}', 'valor', leerEntero(this.value))" />
+        <input class="nota${t.requiere_detalle ? ' requerido' : ''}" id="gn-${i}-${k}" maxlength="200" ${ro}
                placeholder="${t.requiere_detalle ? 'Descripción (obligatoria)' : 'Nota (opcional)'}"
-               value="${esc(g.observacion || '')}" oninput="setGasto(${i}, ${t.id}, 'observacion', this.value)" />
+               value="${esc(g.observacion || '')}" oninput="setGasto(${i}, '${k}', 'observacion', this.value)" />
       </div>`;
-    }).join('');
+    };
+    /* Los que piden descripción ("Otros") pueden ir varias veces: cada uno con lo que fue */
+    const filas = visibles.map(t => fila(t, String(t.id), !t.fijo)
+      + clavesExtra(gastos, t.id).map(k => fila(t, k, true)).join('')
+      + (t.requiere_detalle && !soloLectura
+        ? `<div class="gasto-mas"><button onclick="agregarGasto(${i}, ${t.id}, true)">+ Agregar otro «${esc(t.nombre)}»</button></div>` : '')
+    ).join('');
     const agregar = otros.length && !soloLectura ? `<div class="gasto-agregar">
         <select onchange="agregarGasto(${i}, this.value)" aria-label="Agregar otro gasto">
           <option value="">+ Agregar otro gasto…</option>
@@ -993,35 +1000,58 @@
         <div class="g-valor" id="cGastos-${i}">$0</div><div></div></div>`;
   }
 
-  /* Agrega a la vista un gasto de la lista (no fijo) y deja el cursor en su valor */
-  function agregarGasto(i, tipoId) {
-    if (!tipoId) return;
-    const gastos = form.conductores[i].gastos;
-    if (!(tipoId in gastos)) gastos[tipoId] = { valor: null, observacion: '' };
-    renderForm();
-    document.getElementById(`g-${i}-${tipoId}`)?.focus();
+  /* Cada gasto en `gastos` va con su clave: el id del tipo ('7') para el primero y
+     '7-2', '7-3'… para los demás del mismo tipo (solo los que piden descripción). */
+  function clavesExtra(gastos, tipoId) {
+    return Object.keys(gastos).filter(k => k.startsWith(tipoId + '-'))
+      .sort((a, b) => Number(a.split('-')[1]) - Number(b.split('-')[1]));
+  }
+  function gastosGuardados(lista) {
+    const gastos = {};
+    lista.forEach(g => {
+      let k = String(g.tipo_gasto_id), n = 1;
+      while (k in gastos) k = `${g.tipo_gasto_id}-${++n}`;
+      gastos[k] = { valor: g.valor, observacion: g.observacion || '' };
+    });
+    return gastos;
   }
 
-  function quitarGasto(i, tipoId) {
-    delete form.conductores[i].gastos[tipoId];
+  /* Agrega a la vista un gasto de la lista (no fijo) y deja el cursor en su valor.
+     `otroMas`: uno más del mismo tipo (los que piden descripción). */
+  function agregarGasto(i, tipoId, otroMas = false) {
+    if (!tipoId) return;
+    const gastos = form.conductores[i].gastos;
+    let k = String(tipoId);
+    if (otroMas && k in gastos) {
+      const ultimo = clavesExtra(gastos, tipoId).map(x => Number(x.split('-')[1])).pop() || 1;
+      k = `${tipoId}-${ultimo + 1}`;
+    }
+    if (!(k in gastos)) gastos[k] = { valor: null, observacion: '' };
+    dirty = true;
+    renderForm();
+    document.getElementById(`g-${i}-${k}`)?.focus();
+  }
+
+  function quitarGasto(i, k) {
+    delete form.conductores[i].gastos[k];
     dirty = true;
     renderForm();
   }
 
-  function setGasto(i, tipoId, campo, valor) {
+  function setGasto(i, k, campo, valor) {
     const gastos = form.conductores[i].gastos;
-    gastos[tipoId] = { ...(gastos[tipoId] || {}), [campo]: valor };
+    gastos[k] = { ...(gastos[k] || {}), [campo]: valor };
     dirty = true;
     recalcular();
   }
 
-  /* Gastos con valor de un conductor (para calcular y enviar) */
+  /* Gastos con valor de un conductor (para calcular y enviar), en el orden del formulario */
   function gastosDe(i) {
     const gastos = form.conductores[i].gastos;
-    return D.tipos_gasto
-      .filter(t => (gastos[t.id]?.valor || 0) > 0)
-      .map(t => ({ orden_conductor: i + 1, tipo_gasto_id: t.id, nombre: t.nombre, valor: gastos[t.id].valor,
-                   observacion: (gastos[t.id].observacion || '').trim() }));
+    return D.tipos_gasto.flatMap(t => [String(t.id), ...clavesExtra(gastos, t.id)]
+      .filter(k => (gastos[k]?.valor || 0) > 0)
+      .map(k => ({ clave: k, orden_conductor: i + 1, tipo_gasto_id: t.id, nombre: t.nombre, valor: gastos[k].valor,
+                   observacion: (gastos[k].observacion || '').trim() })));
   }
   function gastosDelForm() { return form.conductores.flatMap((_, i) => gastosDe(i)); }
 
@@ -1291,7 +1321,7 @@
       // Gastos que piden descripción (p. ej. "Otros"): con valor, hay que decir qué fue
       gastosDe(k).forEach(g => {
         const t = D.tipos_gasto.find(x => x.id === g.tipo_gasto_id);
-        if (t?.requiere_detalle && !g.observacion) faltan.push([`gn-${k}-${t.id}`, `descripción del gasto ${t.nombre}` + cual, k]);
+        if (t?.requiere_detalle && !g.observacion) faltan.push([`gn-${k}-${g.clave}`, `descripción del gasto ${t.nombre}` + cual, k]);
       });
     });
     if (n > 1 && !faltan.length) {

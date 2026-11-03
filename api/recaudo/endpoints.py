@@ -303,7 +303,9 @@ def recaudo_dia():
 # ──────────────────────────────────────────
 
 def _armar_gastos(conn, gastos_in, n_conductores):
-    """Valida los gastos reportados: tipo activo, valor > 0, sin repetir tipo por conductor."""
+    """Valida los gastos reportados: tipo activo, valor > 0, sin repetir tipo por conductor,
+    salvo los que piden descripción (p. ej. "Otros"): esos pueden ir varias veces, cada uno
+    con lo que fue (pedido del usuario 2026-11-03)."""
     if gastos_in in (None, ""):
         return []
     if not isinstance(gastos_in, list) or len(gastos_in) > 40:
@@ -319,7 +321,7 @@ def _armar_gastos(conn, gastos_in, n_conductores):
         orden = _entero(g.get("orden_conductor"), "El conductor del gasto", requerido=False) or 1
         if not 1 <= orden <= n_conductores:
             raise _Rechazo(f"El gasto {nombre} apunta a un conductor que no está en la liquidación")
-        if (orden, tipo_id) in vistos:
+        if (orden, tipo_id) in vistos and not tipos[tipo_id]["requiere_detalle"]:
             raise _Rechazo(f"El gasto {nombre} está repetido")
         vistos.add((orden, tipo_id))
         valor = _entero(g.get("valor"), f"El valor de {nombre}")
