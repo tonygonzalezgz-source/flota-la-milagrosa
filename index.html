@@ -487,6 +487,36 @@
     }
 
     .sb-logout:hover { color: var(--red); background: rgba(239,68,68,.08); }
+    .sb-logout.sb-clave { margin-left: 0; }
+    .sb-logout.sb-clave:hover { color: var(--blue); background: var(--blue-dim); }
+
+    /* ─── CAMBIAR MI CONTRASEÑA ─── */
+    .cc-bg { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center;
+      justify-content: center; z-index: 3000; padding: 16px; }
+    .cc-bg.hidden { display: none; }
+    .cc-card { background: #fff; color: #111; border-radius: 14px; width: 100%; max-width: 400px; padding: 22px;
+      box-shadow: 0 12px 40px rgba(0,0,0,.35); font-family: inherit; max-height: 92vh; overflow: auto; }
+    .cc-card h3 { font-size: 17px; font-weight: 800; margin: 0 0 4px; }
+    .cc-sub { font-size: 12.5px; color: #555; line-height: 1.5; margin-bottom: 14px; }
+    .cc-campo { margin-bottom: 12px; }
+    .cc-campo label { display: block; font-size: 11.5px; font-weight: 700; color: #555; margin-bottom: 5px; }
+    .cc-pw { position: relative; }
+    .cc-pw input { width: 100%; padding: 10px 40px 10px 11px; border: 1.5px solid #d0d0d8; border-radius: 9px;
+      font-family: inherit; font-size: 16px; color: #111; background: #fff; box-sizing: border-box; }
+    .cc-pw input:focus { outline: none; border-color: var(--blue); }
+    .cc-pw input.err { border-color: var(--red); background: #fff5f5; }
+    .cc-ver { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); background: none; border: none;
+      color: #888; cursor: pointer; padding: 5px; border-radius: 6px; }
+    .cc-ver:hover { color: var(--blue); }
+    .cc-ayuda { font-size: 11.5px; color: #888; margin-top: 5px; }
+    .cc-error { display: none; background: #fef2f2; color: #b91c1c; border-radius: 9px; padding: 9px 11px;
+      font-size: 12.5px; font-weight: 600; margin-bottom: 12px; line-height: 1.45; }
+    .cc-error.show { display: block; }
+    .cc-acciones { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+    .cc-btn { border: 1px solid #d0d0d8; background: #fff; color: #111; border-radius: 9px; padding: 10px 16px;
+      font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+    .cc-btn.primario { border: none; background: var(--blue); color: #fff; }
+    .cc-btn:disabled { opacity: .5; cursor: default; }
 
     /* ─── MAIN CONTENT AREA ─── */
     #mainContent {
@@ -1520,6 +1550,11 @@
         <div class="sb-uname" id="sbName">—</div>
         <div class="sb-urole" id="sbRole">—</div>
       </div>
+      <button class="sb-logout sb-clave" onclick="abrirCambioClave()" title="Cambiar mi contraseña" aria-label="Cambiar mi contraseña">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+          <circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3 21 2"/><path d="m16 7 3 3"/><path d="m18.5 4.5 2 2"/>
+        </svg>
+      </button>
       <button class="sb-logout" onclick="doLogout()" title="Cerrar sesión">
         <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24">
           <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
@@ -1788,6 +1823,29 @@
 </div><!-- /appShell -->
 
 <!-- TOAST -->
+<!-- Cambiar mi contraseña (cualquier usuario, también el Administrador) -->
+<div class="cc-bg hidden" id="ccModal" onclick="if (event.target === this) cerrarCambioClave()">
+  <div class="cc-card" role="dialog" aria-modal="true" aria-labelledby="ccTitulo">
+    <h3 id="ccTitulo">Cambiar mi contraseña</h3>
+    <div class="cc-sub" id="ccSub">Al guardarla se cierra la sesión y entras de nuevo con la contraseña nueva.</div>
+    <div class="cc-error" id="ccError"></div>
+      <div class="cc-campo"><label for="ccActual">Contraseña actual</label>
+        <div class="cc-pw"><input type="password" id="ccActual" maxlength="128" autocomplete="current-password" />
+          <button type="button" class="cc-ver" onclick="verClave('ccActual', this)" title="Mostrar/ocultar" aria-label="Mostrar contraseña"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>
+      <div class="cc-campo"><label for="ccNueva">Contraseña nueva</label>
+        <div class="cc-pw"><input type="password" id="ccNueva" maxlength="128" autocomplete="new-password" />
+          <button type="button" class="cc-ver" onclick="verClave('ccNueva', this)" title="Mostrar/ocultar" aria-label="Mostrar contraseña"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button></div>
+        <div class="cc-ayuda">Mínimo 8 caracteres.</div></div>
+      <div class="cc-campo"><label for="ccRepite">Repite la contraseña nueva</label>
+        <div class="cc-pw"><input type="password" id="ccRepite" maxlength="128" autocomplete="new-password" />
+          <button type="button" class="cc-ver" onclick="verClave('ccRepite', this)" title="Mostrar/ocultar" aria-label="Mostrar contraseña"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button></div></div>
+    <div class="cc-acciones">
+      <button class="cc-btn" onclick="cerrarCambioClave()">Cancelar</button>
+      <button class="cc-btn primario" id="ccGuardar" onclick="guardarCambioClave()">Cambiar contraseña</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast">
   <span class="t-icon" id="toastIcon"></span>
   <span class="t-msg"  id="toastMsg"></span>
@@ -2481,6 +2539,68 @@
     ls.classList.remove('exit');
 
     showToast('info', mensaje || 'Sesión cerrada correctamente.');
+  }
+
+  /* ═══════════════════════════════════════
+     CAMBIAR MI CONTRASEÑA
+  ═══════════════════════════════════════ */
+  function abrirCambioClave() {
+    ['ccActual', 'ccNueva', 'ccRepite'].forEach(id => {
+      const el = document.getElementById(id);
+      el.value = ''; el.type = 'password'; el.classList.remove('err');
+    });
+    document.getElementById('ccError').classList.remove('show');
+    document.getElementById('ccSub').textContent = `${currentUser?.nombre || 'Tu cuenta'} (${currentUser?.username || ''}). `
+      + 'Al guardarla se cierra la sesión y entras de nuevo con la contraseña nueva.';
+    document.getElementById('ccGuardar').disabled = false;
+    document.getElementById('ccModal').classList.remove('hidden');
+    closeSidebar();
+    document.getElementById('ccActual').focus();
+  }
+  function cerrarCambioClave() {
+    ['ccActual', 'ccNueva', 'ccRepite'].forEach(id => { document.getElementById(id).value = ''; });
+    document.getElementById('ccModal').classList.add('hidden');
+  }
+  document.addEventListener('keydown', e => {
+    if (document.getElementById('ccModal').classList.contains('hidden')) return;
+    if (e.key === 'Escape') cerrarCambioClave();
+    else if (e.key === 'Enter' && e.target.closest?.('#ccModal input')) guardarCambioClave();
+  });
+  function verClave(id, btn) {
+    const el = document.getElementById(id), ver = el.type === 'password';
+    el.type = ver ? 'text' : 'password';
+    btn.setAttribute('aria-label', ver ? 'Ocultar contraseña' : 'Mostrar contraseña');
+  }
+  function errorCambioClave(msg, ids = []) {
+    const box = document.getElementById('ccError');
+    box.textContent = msg; box.classList.add('show');
+    ids.forEach(id => document.getElementById(id).classList.add('err'));
+    if (ids[0]) document.getElementById(ids[0]).focus();
+  }
+  async function guardarCambioClave() {
+    const v = id => document.getElementById(id).value.trim();
+    ['ccActual', 'ccNueva', 'ccRepite'].forEach(id => document.getElementById(id).classList.remove('err'));
+    document.getElementById('ccError').classList.remove('show');
+    const actual = v('ccActual'), nueva = v('ccNueva');
+    if (!actual) return errorCambioClave('Escribe tu contraseña actual.', ['ccActual']);
+    if (nueva.length < 8) return errorCambioClave('La contraseña nueva debe tener mínimo 8 caracteres.', ['ccNueva']);
+    if (nueva !== v('ccRepite')) return errorCambioClave('Las dos contraseñas nuevas no coinciden.', ['ccRepite']);
+    if (nueva === actual) return errorCambioClave('La contraseña nueva debe ser distinta de la actual.', ['ccNueva']);
+    const btn = document.getElementById('ccGuardar');
+    btn.disabled = true;
+    try {
+      const res = await apiFetch(`${API_URL}/cuenta/contrasena`, { method: 'POST', body: JSON.stringify({ actual, nueva }) });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        btn.disabled = false;
+        return errorCambioClave(json.error || 'No se pudo cambiar la contraseña.', res.status === 401 ? ['ccActual'] : []);
+      }
+      cerrarCambioClave();
+      doLogout('Contraseña cambiada. Entra con la contraseña nueva.');
+    } catch (e) {
+      btn.disabled = false;
+      errorCambioClave('No se pudo conectar con el servidor. Intenta de nuevo.');
+    }
   }
 
   /* ═══════════════════════════════════════
