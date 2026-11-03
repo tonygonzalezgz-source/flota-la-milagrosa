@@ -14,7 +14,8 @@ Reglas:
   y, con él, los pasajeros de movilidad diaria: una sola fuente de verdad.
 - Una liquidación guardada NO se edita ni se borra. Solo el Administrador puede
   anularla (con motivo); queda en el historial y el bus vuelve a quedar por liquidar.
-- Recaudador liquida hoy y ayer (hora Bogotá). Administrador: cualquier día ya ocurrido.
+- Recaudador liquida los últimos 7 días (hora Bogotá; domingos y festivos se ponen al día
+  después). Administrador: cualquier día ya ocurrido.
 - Recaudador no cambia la registradora que trae el despacho: solo llena la que falta
   y la inicial sigue el consecutivo (ver _lecturas_del_despacho). El Administrador sí
   la corrige.
@@ -145,6 +146,12 @@ def _tipos_gasto(conn, solo_activos=True):
     return [dict(f) for f in filas]
 
 
+# Días hacia atrás que puede liquidar quien no es Administrador. Domingos y festivos no
+# se liquida: se ponen al día después (domingo + lunes festivo, puentes, Semana Santa).
+# Antes era solo hoy y ayer; ampliado por pedido del usuario 2026-11-03.
+DIAS_ATRAS_RECAUDADOR = 7
+
+
 def _puede_liquidar(fecha):
     """(True, None) o (False, motivo) según el rol y el día."""
     hoy = hoy_bogota()
@@ -152,10 +159,10 @@ def _puede_liquidar(fecha):
         return False, "No se puede liquidar un día que aún no ha llegado."
     if getattr(request, "jwt_user_rol", None) == "Administrador":
         return True, None
-    ayer = (date.fromisoformat(hoy) - timedelta(days=1)).isoformat()
-    if fecha < ayer:
-        return False, ("Este día ya está cerrado. Solo el administrador puede "
-                       "liquidar días anteriores.")
+    limite = (date.fromisoformat(hoy) - timedelta(days=DIAS_ATRAS_RECAUDADOR)).isoformat()
+    if fecha < limite:
+        return False, (f"Este día ya está cerrado: se pueden liquidar los últimos "
+                       f"{DIAS_ATRAS_RECAUDADOR} días. Solo el administrador puede liquidar días más antiguos.")
     return True, None
 
 
