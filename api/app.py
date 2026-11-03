@@ -1489,6 +1489,60 @@ def login():
 
 
 # ──────────────────────────────────────────
+#  Cambiar mi contraseña (cualquier rol, también el Administrador, que no sale en
+#  Catálogo). Pide la actual: un fallo cuenta como intento fallido de entrar, así
+#  que 5 seguidos bloquean la cuenta igual que en el login.
+# ──────────────────────────────────────────
+
+_CLAVE_MIN, _CLAVE_MAX = 8, 128
+
+
+@app.route("/api/cuenta/contrasena", methods=["POST"])
+@require_auth
+def cambiar_mi_contrasena():
+    if _en_demo():
+        return jsonify({"error": "La cuenta de demostración no puede cambiar la contraseña."}), 403
+    data   = request.get_json(silent=True) or {}
+    # Sin espacios en los extremos, igual que el login
+    actual = str(data.get("actual") or "").strip()
+    nueva  = str(data.get("nueva") or "").strip()
+    if not actual or not nueva:
+        return jsonify({"error": "Escribe la contraseña actual y la nueva."}), 400
+    if not _CLAVE_MIN <= len(nueva) <= _CLAVE_MAX:
+        return jsonify({"error": f"La contraseña nueva debe tener entre {_CLAVE_MIN} y {_CLAVE_MAX} caracteres."}), 400
+    if nueva == actual:
+        return jsonify({"error": "La contraseña nueva debe ser distinta de la actual."}), 400
+
+    db = get_db()
+    user = db.execute("SELECT * FROM usuarios WHERE id = ? AND activo = 1", (request.jwt_user_id,)).fetchone()
+    if not user:
+        db.close()
+        return jsonify({"error": "Tu sesión ya no es válida. Inicia sesión nuevamente."}), 401
+    username = user["username"]
+    if len(_fallos_recientes(db, username)) >= _INTENTOS_MAX:
+        db.close()
+        return jsonify({"error": f"Por seguridad, la cuenta está bloqueada por {_INTENTOS_MAX} intentos "
+                                 f"fallidos. Intenta de nuevo en {_BLOQUEO_MIN} min."}), 429
+
+    guardada = user["password"]
+    if guardada.startswith("pbkdf2:") or guardada.startswith("scrypt:"):
+        valida = check_password_hash(guardada, actual)
+    else:
+        valida = guardada == actual
+    if not valida:
+        _anotar_sesion(db, "fallido", username, user, "Contraseña actual incorrecta al intentar cambiarla")
+        db.close()
+        return jsonify({"error": "La contraseña actual no es correcta."}), 401
+
+    db.execute("UPDATE usuarios SET password = ? WHERE id = ?",
+               (generate_password_hash(nueva, method="pbkdf2:sha256"), user["id"]))
+    db.commit()
+    _anotar_sesion(db, "clave", username, user, "Cambió su contraseña")
+    db.close()
+    return jsonify({"ok": True})
+
+
+# ──────────────────────────────────────────
 #  Verificar sesión actual
 # ──────────────────────────────────────────
 
