@@ -55,6 +55,22 @@ void main() {
     expect(l.creada, DateTime.utc(2026, 10, 10, 3, 53));
   });
 
+  test('bus con sensores: sin registradora, los pasajeros salen de la movilidad', () {
+    final l = Liquidacion.fromJson({
+      ...json,
+      'registradora_inicio': null,
+      'registradora_fin': null,
+      'conductores': [
+        for (final c in json['conductores'] as List)
+          {...c as Map<String, dynamic>, 'registradora_inicio': null, 'registradora_fin': null},
+      ],
+    });
+    expect(l.registradoraInicio, isNull);
+    expect(l.conductores.first.registradoraFin, isNull);
+    expect(l.pasajeros, 200);
+    expect(l.conductores.map((c) => c.pasajeros), [100, 100]);
+  });
+
   test('faltante, sobrante o cuadrado según la diferencia', () {
     expect(estadoDiferencia(-5000), ('Faltante \$ 5.000', -1));
     expect(estadoDiferencia(100), ('Sobrante \$ 100', 1));

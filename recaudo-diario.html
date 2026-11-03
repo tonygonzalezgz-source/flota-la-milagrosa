@@ -517,6 +517,15 @@
     try { localStorage.setItem(PAPEL_KEY, papel); } catch (_) {}
   }
 
+  /* Sin sugerencias del navegador (palabras o montos escritos antes) en Recaudo
+     (pedido del usuario 2026-11-03): todos los campos, también los que se dibujan después. */
+  function sinSugerencias() {
+    document.querySelectorAll('input:not([autocomplete="off"]), textarea:not([autocomplete="off"])')
+      .forEach(el => el.setAttribute('autocomplete', 'off'));
+  }
+  new MutationObserver(sinSugerencias).observe(document.documentElement, { childList: true, subtree: true });
+  document.addEventListener('DOMContentLoaded', sinSugerencias);
+
   /* Todo lo que se escribe en Recaudo queda en mayúscula (pedido del usuario 2026-11-02).
      En captura, antes del oninput del campo, para que el formulario ya guarde la mayúscula.
      Los números (inputmode=numeric) y los campos con data-tal-cual no se tocan. */
@@ -596,6 +605,7 @@
     }
     if (b.estado === 'taller')   return ['off', 'Taller', 'notrabajo'];
     if (b.estado === 'descanso') return ['off', 'Descanso', 'notrabajo'];
+    if (conSensores(b) && !b.movilidad_pasajeros) return ['off', 'Falta movilidad', b.despacho_id ? 'pendientes' : 'sindespacho'];
     if (!b.despacho_id && !b.anulados.length) return ['off', 'Sin despacho', 'sindespacho'];
     return ['pend', b.anulados.length ? 'Por reliquidar' : 'Pendiente', 'pendientes'];
   }
@@ -722,7 +732,18 @@
      Cada conductor lleva sus propios gastos (relevo: hasta 3 conductores por bus). */
   function nuevoConductor(d = {}) {
     return { conductor_id: d.conductor_id ?? null, ruta_id: d.ruta_id ?? null, viajes: d.viajes ?? null,
-             registradora_fin: null, recaudado: null, observacion: '', gastos: {} };
+             registradora_fin: null, pasajeros: null, recaudado: null, observacion: '', gastos: {} };
+  }
+
+  /* Buses que cuentan pasajeros con sensores (sin registradora): los pasajeros son los que
+     registró la analista en movilidad ese día; nadie los digita en recaudo. Con relevo,
+     cada conductor lleva sus pasajeros y el último lo que falta del total. Una liquidación
+     guardada sin registradora también se muestra así. */
+  function conSensores(b) {
+    return b.recaudo ? b.recaudo.registradora_inicio == null : b.cuenta_pasajeros === 'sensores';
+  }
+  function paxDelDia(b) {
+    return b.recaudo ? b.recaudo.pasajeros : (b.movilidad_pasajeros || null);
   }
 
   function armarForm(b) {
@@ -732,7 +753,7 @@
         registradora_fin:    b.recaudo.registradora_fin,
         conductores: b.recaudo.conductores.map(c => ({
           conductor_id: c.conductor_id, ruta_id: c.ruta_id, viajes: c.viajes,
-          registradora_fin: c.registradora_fin, recaudado: c.recaudado, observacion: c.observacion || '',
+          registradora_fin: c.registradora_fin, pasajeros: c.pasajeros, recaudado: c.recaudado, observacion: c.observacion || '',
           gastos: gastosGuardados((b.recaudo.gastos || []).filter(g => g.orden_conductor === c.orden)),
         })),
       };
@@ -762,7 +783,7 @@
      del último día, hay un salto y lo corrige el despachador o el administrador.
      El servidor aplica la misma regla. */
   function bloqueoReg(b) {
-    if (!D.bloquea_registradora || b.recaudo) return null;
+    if (!D.bloquea_registradora || b.recaudo || conSensores(b)) return null;
     return {
       ini: (b.registradora_inicio ?? b.ultima_reg_fin) != null,
       iniOrigen: b.registradora_inicio != null ? 'del despacho' : 'última lectura',
@@ -825,6 +846,13 @@
       return;
     }
 
+    const sensores = conSensores(b);
+    if (sensores && !b.recaudo && !b.movilidad_pasajeros) {
+      card.innerHTML = head + `<div class="aviso">Este bus cuenta pasajeros con <b>sensores</b> (sin registradora) y la analista
+        todavía no ha registrado su movilidad del ${esc(fmtDia(fecha))}. Cuando la registre, vuelve a cargar y liquídalo.</div>`;
+      return;
+    }
+
     const bq = bloqueoReg(b);
     if (bq?.salto && D.editable) {
       card.innerHTML = head + `<div class="aviso">Salto en la registradora: el despacho arranca en <b>${fmtNum(b.registradora_inicio)}</b>,
@@ -857,10 +885,19 @@
         ${editable && n < 3 ? `<button class="cond-tab-add" onclick="agregarRelevo()">+ Agregar relevo</button>` : ''}
       </div>` : '';
     const ayudaRelevo = editable && n > 1
-      ? `<div class="relevo-ayuda">Relevo: cada conductor liquida su parte. Escribe la <b>registradora al relevo</b> (la lectura cuando entregó el bus);
-         el último conductor termina en la registradora final del bus. Reparte también los viajes y los gastos.</div>` : '';
-
-    card.innerHTML = head + avisoCerrada + notaOblig + `
+      ? (sensores
+        ? `<div class="relevo-ayuda">Relevo: cada conductor liquida su parte. Escribe los <b>pasajeros</b> de cada conductor;
+           el último se queda con lo que falta para el total de la movilidad. Reparte también los viajes y los gastos.</div>`
+        : `<div class="relevo-ayuda">Relevo: cada conductor liquida su parte. Escribe la <b>registradora al relevo</b> (la lectura cuando entregó el bus);
+           el último conductor termina en la registradora final del bus. Reparte también los viajes y los gastos.</div>`) : '';
+    const encabezado = sensores ? `
+      <div class="sec-lbl">Pasajeros del día · sensores</div>
+      <div class="campos">
+        <div class="campo"><label>Pas. movilizados <small class="del-desp">de movilidad</small></label><div class="calc" id="cPax">—</div></div>
+        <div class="campo"><label>Tarifa ${TIPO[b.grupo] ? TIPO[b.grupo].toLowerCase() : ''}</label><div class="calc">${fmtMoney(tarifaDe(b))}</div></div>
+        <div class="campo"><label>Producido${n > 1 ? ' del bus' : ''}</label><div class="calc grande" id="cProd">—</div></div>
+      </div>
+      <div class="nota" id="notaReg"></div>` : `
       <div class="sec-lbl">Registradora del día</div>
       <div class="campos">
         <div class="campo"><label>Reg. inicial${bq?.ini ? ` <small class="del-desp">${bq.iniOrigen}</small>` : req}</label>
@@ -873,7 +910,9 @@
         <div class="campo"><label>Tarifa ${TIPO[b.grupo] ? TIPO[b.grupo].toLowerCase() : ''}</label><div class="calc">${fmtMoney(tarifaDe(b))}</div></div>
         <div class="campo"><label>Producido${n > 1 ? ' del bus' : ''}</label><div class="calc grande" id="cProd">—</div></div>
       </div>
-      <div class="nota" id="notaReg"></div>
+      <div class="nota" id="notaReg"></div>`;
+
+    card.innerHTML = head + avisoCerrada + notaOblig + encabezado + `
 
       <div class="sec-lbl">${n > 1 ? 'Conductores (relevo)' : 'Conductor'}</div>
       ${pestanas}${ayudaRelevo}
@@ -897,7 +936,14 @@
     const ultimo = i === n - 1;
     const relevoDelDespacho = bq && i < bq.relevos;   // lo anotó el despachador: no se cambia ni se quita
     const rutasGrupo = D.rutas.filter(r => (r.activa && r.grupo === b.grupo) || r.id === c.ruta_id);
-    const tramo = n > 1 ? `<div class="tramo">
+    const tramo = n > 1 && conSensores(b) ? `<div class="tramo">
+        ${ultimo
+          ? `<div class="campo"><label>Pasajeros <small class="del-desp">lo que falta del total</small></label><div class="calc" id="cPaxC-${i}">—</div></div>`
+          : `<div class="campo"><label>Pasajeros de este conductor${req}</label>
+               <input id="fPaxRel-${i}" inputmode="numeric" value="${valEnt(c.pasajeros)}" ${ro}
+                      oninput="setCond(${i}, 'pasajeros', leerEntero(this.value))" /></div>`}
+        <div class="campo"><label>Producido</label><div class="calc" id="cProdC-${i}">—</div></div>
+      </div>` : n > 1 ? `<div class="tramo">
         <div class="campo"><label>Arranca en</label><div class="calc" id="cIni-${i}">—</div></div>
         ${ultimo
           ? `<div class="campo"><label>Termina en (reg. final)</label><div class="calc" id="cFin-${i}">—</div></div>`
@@ -1081,13 +1127,16 @@
     tab = form.conductores.length - 1;
     dirty = true;
     renderForm();
-    toast('Relevo agregado: escribe la registradora al relevo del conductor anterior y reparte los viajes');
+    toast(conSensores(bus(selId))
+      ? 'Relevo agregado: escribe los pasajeros del conductor anterior y reparte los viajes'
+      : 'Relevo agregado: escribe la registradora al relevo del conductor anterior y reparte los viajes');
   }
   function quitarRelevo(i) {
     if (i === 0 || i !== form.conductores.length - 1) return;
     if (!confirm(`¿Quitar el conductor ${i + 1} de esta liquidación?`)) return;
     form.conductores.splice(i, 1);
     form.conductores[i - 1].registradora_fin = null;   // el anterior vuelve a terminar en la final del bus
+    form.conductores[i - 1].pasajeros = null;          // (con sensores: se queda con lo que falta)
     tab = i - 1;
     dirty = true;
     renderForm();
@@ -1103,6 +1152,23 @@
   function calcularTramos(b) {
     if (b.recaudo) return b.recaudo.conductores;
     const tarifa = tarifaDe(b);
+    const entrega = (i, c, pasajeros, extra) => {
+      const producido = pasajeros != null && pasajeros >= 0 ? pasajeros * tarifa : null;
+      const total_gastos = gastosDe(i).reduce((t, g) => t + g.valor, 0);
+      const neto = producido != null ? aproximarMil(producido - total_gastos) : null;
+      return { ...extra, pasajeros, producido, total_gastos, neto, recaudado: c.recaudado,
+               diferencia: neto != null && c.recaudado != null ? c.recaudado - neto : null };
+    };
+    if (conSensores(b)) {
+      const total = paxDelDia(b);
+      let repartidos = 0;
+      return form.conductores.map((c, i) => {
+        const ultimo = i === form.conductores.length - 1;
+        const pasajeros = ultimo ? (total != null ? total - repartidos : null) : c.pasajeros;
+        if (!ultimo) repartidos += c.pasajeros || 0;
+        return entrega(i, c, pasajeros, { registradora_inicio: null, registradora_fin: null });
+      });
+    }
     let inicio = form.registradora_inicio;
     return form.conductores.map((c, i) => {
       const fin = i === form.conductores.length - 1 ? form.registradora_fin : c.registradora_fin;
@@ -1120,14 +1186,15 @@
   /* Pasajeros, producido, gastos y diferencia en vivo (el servidor los recalcula al guardar) */
   function recalcular() {
     const b = bus(selId);
-    if (!b || noTrabajo(b) || !document.getElementById('fRegIni')) return;
+    if (!b || noTrabajo(b) || !document.getElementById('cPax')) return;
     const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+    const sensores = conSensores(b);
     const ini = form.registradora_inicio, fin = form.registradora_fin;
-    const hayLecturas = ini != null && fin != null;
-    const valida = hayLecturas && fin >= ini;
-    const pax = valida ? fin - ini : null;
+    const hayLecturas = sensores || (ini != null && fin != null);
+    const valida = sensores || (hayLecturas && fin >= ini);
+    const pax = sensores ? paxDelDia(b) : (valida ? fin - ini : null);
 
-    document.getElementById('fRegFin').classList.toggle('err', hayLecturas && !valida);
+    document.getElementById('fRegFin')?.classList.toggle('err', hayLecturas && !valida);
     set('cPax', pax != null ? fmtNum(pax) : (hayLecturas ? 'Lectura inválida' : '—'));
     set('cProd', pax != null ? fmtMoney(pax * tarifaDe(b)) : '—');
 
@@ -1145,6 +1212,7 @@
       set(`notaGastos-${i}`, t.neto != null && t.neto < 0 ? 'Los gastos superan el producido: la empresa le quedaría debiendo al conductor.' : '');
       const rel = document.getElementById(`fRelevo-${i}`);
       if (rel) rel.classList.toggle('err', t.pasajeros != null && (t.pasajeros < 0 || (fin != null && t.registradora_fin > fin)));
+      if (sensores && i === tramos.length - 1 && t.pasajeros != null && t.pasajeros < 1) set(`cPaxC-${i}`, 'Repartiste de más');
       const cDif = document.getElementById(`cDif-${i}`);
       if (cDif) {
         if (t.diferencia != null) {
@@ -1178,7 +1246,11 @@
     // Aviso de corrección del despacho (una sola fuente de verdad)
     const nota = document.getElementById('notaReg');
     const bq = bloqueoReg(b);
-    if (hayLecturas && !valida) {
+    if (sensores) {
+      nota.className = 'nota';
+      nota.textContent = b.recaudo ? 'Bus con sensores: se liquidó con los pasajeros de la movilidad.'
+        : 'Bus con sensores (sin registradora): los pasajeros son los que registró la analista en movilidad y no se pueden cambiar aquí.';
+    } else if (hayLecturas && !valida) {
       nota.className = 'nota cambio';
       nota.textContent = 'La registradora final no puede ser menor que la inicial.';
     } else if (bq && D.editable) {
@@ -1300,17 +1372,26 @@
     const n = form.conductores.length;
     // Obligatorio todo menos los gastos: no se liquidan pasajeros sin viajes, ruta o conductor.
     const faltan = [];   // [id del campo, qué falta, pestaña o null]
-    if (ini == null) faltan.push(['fRegIni', 'registradora inicial', null]);
-    if (fin == null) faltan.push(['fRegFin', 'registradora final', null]);
-    else if (ini != null && fin < ini) faltan.push(['fRegFin', 'registradora final mayor que la inicial', null]);
-    else if (ini != null && fin === ini) faltan.push(['fRegFin', 'pasajeros (la registradora final es igual a la inicial)', null]);
+    const sensores = conSensores(b);
+    if (!sensores) {
+      if (ini == null) faltan.push(['fRegIni', 'registradora inicial', null]);
+      if (fin == null) faltan.push(['fRegFin', 'registradora final', null]);
+      else if (ini != null && fin < ini) faltan.push(['fRegFin', 'registradora final mayor que la inicial', null]);
+      else if (ini != null && fin === ini) faltan.push(['fRegFin', 'pasajeros (la registradora final es igual a la inicial)', null]);
+    }
     const tramos = calcularTramos(b);
     form.conductores.forEach((c, k) => {
       const cual = n > 1 ? ` del conductor ${k + 1}` : '';
       if (!c.conductor_id) faltan.push([`fCond-${k}`, 'conductor' + cual, k]);
       if (!c.ruta_id) faltan.push([`fRuta-${k}`, 'ruta' + cual, k]);
       if (!c.viajes) faltan.push([`fViajes-${k}`, 'viajes' + cual, k]);
-      if (k < n - 1) {
+      if (sensores && n > 1) {
+        // Relevo con sensores: cada conductor sus pasajeros; el último, lo que falta (al menos 1)
+        if (k < n - 1 && !(c.pasajeros >= 1)) faltan.push([`fPaxRel-${k}`, 'pasajeros' + cual, k]);
+        if (k === n - 1 && !(tramos[k].pasajeros >= 1)) {
+          faltan.push([`fPaxRel-${k - 1}`, `pasajeros repartidos (el total de la movilidad es ${fmtNum(paxDelDia(b))})`, k - 1]);
+        }
+      } else if (k < n - 1) {
         // Relevo: la lectura al entregar el bus va entre el inicio de su tramo y la final del bus
         const t = tramos[k];
         if (c.registradora_fin == null) faltan.push([`fRelevo-${k}`, 'registradora al relevo' + cual, k]);
@@ -1349,7 +1430,7 @@
     const nombre = k => esc(conductor(form.conductores[k].conductor_id)?.nombre || '');
     // Con relevo: el detalle de cada conductor y al final el total del bus
     const bloque = (t, k) => `
-      ${n > 1 ? `<div class="sub"><span>Conductor ${k + 1} · ${nombre(k)}</span><span>${fmtNum(t.registradora_inicio)} → ${fmtNum(t.registradora_fin)}</span></div>` : ''}
+      ${n > 1 ? `<div class="sub"><span>Conductor ${k + 1} · ${nombre(k)}</span><span>${sensores ? fmtNum(t.pasajeros) + ' pasajeros' : `${fmtNum(t.registradora_inicio)} → ${fmtNum(t.registradora_fin)}`}</span></div>` : ''}
       <div><span>Pasajeros × tarifa</span><span>${fmtNum(t.pasajeros)} × ${fmtMoney(tarifa)}</span></div>
       <div><span>Producido</span><span>${fmtMoney(t.producido)}</span></div>
       ${gastosDe(k).map(g => `<div><span>− ${esc(g.nombre)}${g.observacion ? ` <small style="color:var(--txt3)">(${esc(g.observacion)})</small>` : ''}</span><span>${fmtMoney(g.valor)}</span></div>`).join('')}
@@ -1361,10 +1442,11 @@
     document.getElementById('confResumen').innerHTML = `
       <div><span>Fecha de la tarjeta</span><span>${fmtDia(fecha)}</span></div>
       ${n === 1 ? `<div><span>Conductor</span><span>${nombre(0)}</span></div>` : ''}
-      <div><span>Registradora${n > 1 ? ' del bus' : ''}</span><span>${fmtNum(ini)} → ${fmtNum(fin)}</span></div>
+      ${sensores ? `<div><span>Pasajeros${n > 1 ? ' del bus' : ''}</span><span>${fmtNum(paxDelDia(b))} · de movilidad (sensores)</span></div>`
+        : `<div><span>Registradora${n > 1 ? ' del bus' : ''}</span><span>${fmtNum(ini)} → ${fmtNum(fin)}</span></div>`}
       ${lecturasDigitadas(b).length ? `<div><span>Digitado en recaudo (no venía del despacho)</span><span class="warn">registradora ${lecturasDigitadas(b).join(', ')}</span></div>` : ''}
       ${tramos.map(bloque).join('')}
-      ${n > 1 ? `<div class="sub"><span>Total del bus</span><span>${fmtNum(fin - ini)} pasajeros</span></div>
+      ${n > 1 ? `<div class="sub"><span>Total del bus</span><span>${fmtNum(sensores ? paxDelDia(b) : fin - ini)} pasajeros</span></div>
         <div><span>Producido</span><span>${fmtMoney(producido)}</span></div>
         <div><span>Gastos</span><span>${fmtMoney(totalGastos)}</span></div>
         <div><span>Por entregar</span><span>${fmtMoney(neto)}</span></div>
@@ -1377,11 +1459,15 @@
   async function confirmarGuardar() {
     const b = bus(selId);
     const n = form.conductores.length;
+    const sensores = conSensores(b);   // sin registradora: los pasajeros los pone el servidor (movilidad)
     const body = {
-      fecha, bus_id: b.id, registradora_inicio: form.registradora_inicio, registradora_fin: form.registradora_fin,
+      fecha, bus_id: b.id,
+      registradora_inicio: sensores ? null : form.registradora_inicio, registradora_fin: sensores ? null : form.registradora_fin,
       conductores: form.conductores.map((c, k) => ({
         conductor_id: c.conductor_id, ruta_id: c.ruta_id, viajes: c.viajes,
-        registradora_fin: k < n - 1 ? c.registradora_fin : null, recaudado: c.recaudado, observacion: c.observacion,
+        registradora_fin: !sensores && k < n - 1 ? c.registradora_fin : null,
+        pasajeros: sensores && k < n - 1 ? c.pasajeros : null,
+        recaudado: c.recaudado, observacion: c.observacion,
       })),
       gastos: gastosDelForm().map(g => ({ orden_conductor: g.orden_conductor, tipo_gasto_id: g.tipo_gasto_id,
                                           valor: g.valor, observacion: g.observacion })),
@@ -1447,7 +1533,6 @@
     const fila = (k, v, cls = '') => `<div class="t-fila ${cls}"><span>${k}</span><span>${v}</span></div>`;
     const total = r.conductores.length;
     const gastos = r.gastos.filter(g => g.orden_conductor === c.orden);
-    const dif = c.diferencia;
     const obs = [c.observacion, c.orden === 1 ? r.observacion : null].filter(Boolean).join(' · ');
     // Dos fechas: la de la tarjeta (el día que trabajó el bus, el que se eligió al liquidar)
     // y la del recaudo (cuando se liquidó, es decir, cuando el conductor entregó la plata).
@@ -1464,7 +1549,7 @@
       <div class="t-linea"></div>
       ${fila('Ruta', esc(c.ruta_nombre || '—'))}
       ${fila('Viajes', c.viajes ?? '—')}
-      ${fila('Registradora', `${c.registradora_inicio} → ${c.registradora_fin}`)}
+      ${c.registradora_inicio != null ? fila('Registradora', `${c.registradora_inicio} → ${c.registradora_fin}`) : ''}
       ${fila('Pasajeros', fmtNum(c.pasajeros))}
       ${fila('Tarifa', fmtMoney(r.tarifa))}
       ${fila('Producido', fmtMoney(c.producido), 'fuerte')}
@@ -1474,9 +1559,6 @@
       ${fila('Total gastos', fmtMoney(c.total_gastos), 'fuerte')}
       <div class="t-linea"></div>
       ${fila('Por entregar', fmtMoney(c.neto), 'fuerte')}
-      <div class="t-sec">RECAUDO</div>
-      ${fila('Recaudo', fmtMoney(c.recaudado), 'grande')}
-      ${fila(dif < 0 ? 'FALTANTE' : dif > 0 ? 'SOBRANTE' : 'CUADRADO', fmtMoney(Math.abs(dif)), 'fuerte')}
       <div class="t-sec">CONDUCTOR</div>
       <div>${esc(c.conductor_cedula || '')}</div><div class="fuerte">${esc((c.conductor_nombre || '').toUpperCase())}</div>
       ${obs ? `<div class="t-nota">Obs: ${esc(obs)}</div>` : ''}

@@ -1,4 +1,4 @@
-"""Tablas del módulo Recaudo — SCHEMA_VERSION 20.
+"""Tablas del módulo Recaudo — SCHEMA_VERSION 21.
 
 - `recaudo_tarifas`: valor del pasaje por grupo de vehículo (A buses, B micros).
 - `recaudo_tipos_gasto`: gastos que el conductor puede reportar (ACPM, Taller…).
@@ -174,8 +174,8 @@ def _tablas(serial, ts, ts_default, ref_empresa):
             empresa_id           INTEGER NOT NULL DEFAULT {EMPRESA_POR_DEFECTO}{ref_empresa},
             fecha                DATE    NOT NULL,
             bus_id               INTEGER NOT NULL REFERENCES buses(id),
-            registradora_inicio  INTEGER NOT NULL,
-            registradora_fin     INTEGER NOT NULL,
+            registradora_inicio  INTEGER,
+            registradora_fin     INTEGER,
             pasajeros            INTEGER NOT NULL,
             tarifa               INTEGER NOT NULL,{_TOTALES}
             observacion          TEXT,
@@ -196,8 +196,8 @@ def _tablas(serial, ts, ts_default, ref_empresa):
             conductor_id         INTEGER NOT NULL REFERENCES conductores(id),
             ruta_id              INTEGER REFERENCES rutas(id),
             viajes               INTEGER,
-            registradora_inicio  INTEGER NOT NULL,
-            registradora_fin     INTEGER NOT NULL,
+            registradora_inicio  INTEGER,
+            registradora_fin     INTEGER,
             pasajeros            INTEGER NOT NULL,{_TOTALES}
             observacion          TEXT,
             UNIQUE (recaudo_id, orden)
@@ -292,6 +292,8 @@ def _tablas(serial, ts, ts_default, ref_empresa):
 # tarjeta de propiedad en `buses` (tercero de las líneas de recaudo del archivo plano).
 # Tipos de gasto fijos (siempre a la vista) y que piden descripción — SCHEMA_VERSION 18.
 # Pagos diarios en el cierre de caja — SCHEMA_VERSION 20.
+# Buses que cuentan pasajeros con sensores (sin registradora): se liquidan con los
+# pasajeros de la movilidad y la registradora queda vacía — SCHEMA_VERSION 21.
 _COLUMNAS_PG = [
     "ALTER TABLE recaudos ADD COLUMN IF NOT EXISTS cierre_id INTEGER REFERENCES recaudo_cierres(id)",
     "ALTER TABLE buses ADD COLUMN IF NOT EXISTS tp_propietario_nombre TEXT",
@@ -302,6 +304,11 @@ _COLUMNAS_PG = [
     "ALTER TABLE recaudo_cierres ADD COLUMN IF NOT EXISTS ingresos INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE recaudo_cierres ADD COLUMN IF NOT EXISTS egresos INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE recaudo_cierres ADD COLUMN IF NOT EXISTS pago_ids TEXT NOT NULL DEFAULT '[]'",
+    "ALTER TABLE buses ADD COLUMN IF NOT EXISTS cuenta_pasajeros TEXT NOT NULL DEFAULT 'registradora'",
+    "ALTER TABLE recaudos ALTER COLUMN registradora_inicio DROP NOT NULL",
+    "ALTER TABLE recaudos ALTER COLUMN registradora_fin DROP NOT NULL",
+    "ALTER TABLE recaudo_conductores ALTER COLUMN registradora_inicio DROP NOT NULL",
+    "ALTER TABLE recaudo_conductores ALTER COLUMN registradora_fin DROP NOT NULL",
 ]
 _COLUMNAS_SQLITE = [
     "ALTER TABLE recaudos ADD COLUMN cierre_id INTEGER REFERENCES recaudo_cierres(id)",
@@ -313,6 +320,7 @@ _COLUMNAS_SQLITE = [
     "ALTER TABLE recaudo_cierres ADD COLUMN ingresos INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE recaudo_cierres ADD COLUMN egresos INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE recaudo_cierres ADD COLUMN pago_ids TEXT NOT NULL DEFAULT '[]'",
+    "ALTER TABLE buses ADD COLUMN cuenta_pasajeros TEXT NOT NULL DEFAULT 'registradora'",
 ]
 _INDICES = ["CREATE INDEX IF NOT EXISTS idx_recaudos_caja ON recaudos(usuario_id, cierre_id)"]
 
