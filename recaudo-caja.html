@@ -465,11 +465,13 @@
     }
   }
 
-  /* "Vehículo 12 · TSK929 — NOMBRE" de un pago diario */
+  /* "Vehículo 12 · TSK929 — NOMBRE" de un pago diario; en los pagos a nombre del
+     propietario, también quién pagó ("— Pagó: CONDUCTOR"). */
   function quienPago(p) {
     const partes = [];
     if (p.bus_numero != null) partes.push(`Vehículo ${p.bus_numero}${p.bus_placa ? ' · ' + p.bus_placa : ''}`);
     if (p.tercero_nombre) partes.push(p.tercero_nombre);
+    if (p.pagador_nombre) partes.push('Pagó: ' + p.pagador_nombre);
     return partes.join(' — ');
   }
 

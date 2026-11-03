@@ -190,7 +190,7 @@ PG_SCHEMA    = os.path.join(os.path.dirname(__file__), "supabase_schema.sql")
 # Versión del esquema. IMPORTANTE: incrementar en 1 cada vez que se agregue
 # una migración (ALTER/CREATE) a migrate_db(); si no se incrementa, la
 # migración nueva NO corre en las BD ya versionadas.
-SCHEMA_VERSION = 21   # 21: buses con sensores (pasajeros de la movilidad en el recaudo)
+SCHEMA_VERSION = 22   # 22: quién paga en los pagos diarios a nombre del propietario
 
 ROLE_VIEWS = {
     "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho", "historial-despacho", "gastos", "tecnologia", "chequeo", "eds", "lavada", "mapa", "relojes", "mb-mapa", "mb-reportes", "mb-rutas", "mb-equipos", "recaudo-diario", "recaudo-pagos", "recaudo-caja", "auditoria"],
