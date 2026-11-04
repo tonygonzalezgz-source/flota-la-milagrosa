@@ -3771,6 +3771,31 @@ def get_movilidad():
     return jsonify([dict(r) for r in rows])
 
 
+@app.route("/api/movilidad/recaudo-sensores", methods=["GET"])
+@require_role("Administrador", "Analista")
+def get_movilidad_recaudo_sensores():
+    """Pasajeros con que se liquidó ese día cada bus con sensores (sin registradora): el
+    recaudador los digita la misma noche y la analista carga los de los sensores al día
+    siguiente. Movilidad diaria muestra la diferencia (pedido del usuario 2026-11-03)."""
+    fecha = request.args.get("fecha") or date.today().isoformat()
+    try:
+        fecha = date.fromisoformat(fecha).isoformat()
+    except ValueError:
+        return jsonify({"error": "Fecha inválida (use AAAA-MM-DD)"}), 400
+    db = get_db()
+    try:
+        filas = db.execute(
+            """SELECT r.id AS recaudo_id, r.bus_id, r.pasajeros, r.tarifa
+                 FROM recaudos r
+                WHERE r.fecha = ? AND r.anulado_at IS NULL AND r.registradora_inicio IS NULL""",
+            (fecha,),
+        ).fetchall()
+    except Exception:
+        filas = []   # sin el módulo de recaudo todavía
+    db.close()
+    return jsonify([dict(f) for f in filas])
+
+
 @app.route("/api/movilidad/rango", methods=["GET"])
 @require_role(*ROLES_MOVILIDAD_LECTURA)
 def get_movilidad_rango():
