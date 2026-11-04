@@ -1145,6 +1145,10 @@
   /* Lo que entrega el conductor, a la mil más cercana: desde $500 sube y por debajo baja
      (326.900 → 327.000; 326.400 → 326.000). Igual que el servidor y que ROUND(x; -3) de Excel. */
   function aproximarMil(n) { return Math.sign(n) * Math.floor((Math.abs(n) + 500) / 1000) * 1000; }
+  /* Gastos mayores que el producido (neto negativo): el conductor no tiene nada por entregar
+     y la empresa le queda debiendo la diferencia (no es un sobrante). Igual en el servidor. */
+  function porEntregar(neto)   { return neto == null ? null : Math.max(neto, 0); }
+  function debeConductor(neto) { return neto == null ? 0 : Math.max(-neto, 0); }
 
   /* Tramo de cada conductor: el 1 arranca en la lectura inicial del bus, cada relevo
      arranca donde terminó el anterior y el último termina en la lectura final.
@@ -1157,7 +1161,7 @@
       const total_gastos = gastosDe(i).reduce((t, g) => t + g.valor, 0);
       const neto = producido != null ? aproximarMil(producido - total_gastos) : null;
       return { ...extra, pasajeros, producido, total_gastos, neto, recaudado: c.recaudado,
-               diferencia: neto != null && c.recaudado != null ? c.recaudado - neto : null };
+               diferencia: neto != null && c.recaudado != null ? c.recaudado - porEntregar(neto) : null };
     };
     if (conSensores(b)) {
       const total = paxDelDia(b);
@@ -1177,7 +1181,7 @@
       const total_gastos = gastosDe(i).reduce((t, g) => t + g.valor, 0);
       const neto = producido != null ? aproximarMil(producido - total_gastos) : null;
       const t = { registradora_inicio: inicio, registradora_fin: fin, pasajeros, producido, total_gastos, neto,
-                  recaudado: c.recaudado, diferencia: neto != null && c.recaudado != null ? c.recaudado - neto : null };
+                  recaudado: c.recaudado, diferencia: neto != null && c.recaudado != null ? c.recaudado - porEntregar(neto) : null };
       inicio = fin;
       return t;
     });
@@ -1208,8 +1212,9 @@
       set(`cProdE-${i}`, t.producido != null ? fmtMoney(t.producido) : '—');
       set(`cGastos-${i}`, fmtMoney(t.total_gastos));
       set(`cGastosE-${i}`, fmtMoney(t.total_gastos));
-      set(`cNeto-${i}`, t.neto != null ? fmtMoney(t.neto) : '—');
-      set(`notaGastos-${i}`, t.neto != null && t.neto < 0 ? 'Los gastos superan el producido: la empresa le quedaría debiendo al conductor.' : '');
+      set(`cNeto-${i}`, t.neto != null ? fmtMoney(porEntregar(t.neto)) : '—');
+      set(`notaGastos-${i}`, debeConductor(t.neto)
+        ? `Los gastos superan el producido: no tiene nada por entregar y la empresa le debe ${fmtMoney(debeConductor(t.neto))} al conductor.` : '');
       const rel = document.getElementById(`fRelevo-${i}`);
       if (rel) rel.classList.toggle('err', t.pasajeros != null && (t.pasajeros < 0 || (fin != null && t.registradora_fin > fin)));
       if (sensores && i === tramos.length - 1 && t.pasajeros != null && t.pasajeros < 1) set(`cPaxC-${i}`, 'Repartiste de más');
@@ -1231,10 +1236,11 @@
       const clsDif = v => v == null ? '' : v < 0 ? 'bad' : v > 0 ? 'warn' : 'ok';
       const fila = (nombre, t, cls = '') => `<tr class="${cls}"><td>${nombre}</td>
           <td>${t.pasajeros != null && t.pasajeros >= 0 ? fmtNum(t.pasajeros) : '—'}</td><td>${m(t.producido)}</td>
-          <td>${m(t.total_gastos)}</td><td>${m(t.neto)}</td><td>${m(t.recaudado)}</td>
+          <td>${m(t.total_gastos)}</td><td>${m(porEntregar(t.neto))}</td><td>${m(t.recaudado)}</td>
           <td class="${clsDif(t.diferencia)}">${t.diferencia != null ? textoDif(t.diferencia) : '—'}</td></tr>`;
       const total = { pasajeros: suma('pasajeros'), producido: suma('producido'), total_gastos: suma('total_gastos'),
-                      neto: suma('neto'), recaudado: suma('recaudado'), diferencia: suma('diferencia') };
+                      neto: tramos.every(t => t.neto != null) ? tramos.reduce((s, t) => s + porEntregar(t.neto), 0) : null,
+                      recaudado: suma('recaudado'), diferencia: suma('diferencia') };
       res.innerHTML = `<div class="sec-lbl">Resumen del bus</div><div class="resumen-wrap"><table class="resumen-bus">
           <thead><tr><th>Conductor</th><th>Pasajeros</th><th>Producido</th><th>Gastos</th><th>Por entregar</th><th>Entregó</th><th>Resultado</th></tr></thead>
           <tbody>${tramos.map((t, i) => fila(`${i + 1} · ${esc(conductor(form.conductores[i].conductor_id)?.nombre || 'Sin conductor')}`, t)).join('')}
@@ -1430,8 +1436,9 @@
 
     const tarifa = tarifaDe(b);
     const suma = k => tramos.reduce((t, x) => t + x[k], 0);
-    const producido = suma('producido'), totalGastos = suma('total_gastos'), neto = suma('neto');
-    const rec = suma('recaudado'), dif = rec - neto;
+    const producido = suma('producido'), totalGastos = suma('total_gastos');
+    const neto = tramos.reduce((s, t) => s + porEntregar(t.neto), 0);
+    const rec = suma('recaudado'), dif = suma('diferencia');
     const clsDif = d => d < 0 ? 'bad' : d > 0 ? 'warn' : 'ok';
     const nombre = k => esc(conductor(form.conductores[k].conductor_id)?.nombre || '');
     // Con relevo: el detalle de cada conductor y al final el total del bus
@@ -1441,7 +1448,8 @@
       <div><span>Producido</span><span>${fmtMoney(t.producido)}</span></div>
       ${gastosDe(k).map(g => `<div><span>− ${esc(g.nombre)}${g.observacion ? ` <small style="color:var(--txt3)">(${esc(g.observacion)})</small>` : ''}</span><span>${fmtMoney(g.valor)}</span></div>`).join('')}
       <div><span>Total gastos</span><span>${fmtMoney(t.total_gastos)}</span></div>
-      <div><span>Por entregar</span><span>${fmtMoney(t.neto)}</span></div>
+      <div><span>Por entregar</span><span>${fmtMoney(porEntregar(t.neto))}</span></div>
+      ${debeConductor(t.neto) ? `<div><span>La empresa le debe al conductor</span><span class="warn">${fmtMoney(debeConductor(t.neto))}</span></div>` : ''}
       <div><span>Recaudo entregado</span><span>${fmtMoney(t.recaudado)}</span></div>
       <div><span>Diferencia</span><span class="${clsDif(t.diferencia)}">${fmtMoney(t.diferencia)} · ${textoDif(t.diferencia)}</span></div>`;
     document.getElementById('confTitulo').textContent = `Confirmar liquidación — ${TIPO[b.grupo] || 'Bus'} ${b.numero}`;
@@ -1564,7 +1572,8 @@
           (g.observacion ? `<div class="t-nota">${esc(g.observacion)}</div>` : '')).join('') : '<div class="t-centro">Sin gastos</div>'}
       ${fila('Total gastos', fmtMoney(c.total_gastos), 'fuerte')}
       <div class="t-linea"></div>
-      ${fila('Por entregar', fmtMoney(c.neto), 'fuerte')}
+      ${fila('Por entregar', fmtMoney(porEntregar(c.neto)), 'fuerte')}
+      ${debeConductor(c.neto) ? fila('Empresa le debe', fmtMoney(debeConductor(c.neto)), 'fuerte') : ''}
       <div class="t-sec">CONDUCTOR</div>
       <div>${esc(c.conductor_cedula || '')}</div><div class="fuerte">${esc((c.conductor_nombre || '').toUpperCase())}</div>
       ${obs ? `<div class="t-nota">Obs: ${esc(obs)}</div>` : ''}
@@ -1812,6 +1821,8 @@
       ...tipos.map((t, i) => ({ k: 'g' + i, t, w: 11, f: DINERO, s: true })),
       { k: 'gastos', t: 'Total gastos', w: 12, f: DINERO, s: true },
       { k: 'neto', t: 'Por entregar', w: 13, f: DINERO, s: true },
+      // Solo si algún conductor tuvo más gastos que producido (la empresa le quedó debiendo).
+      ...(inf.filas.some(f => f.neto < 0) ? [{ k: 'debe', t: 'Empresa le debe', w: 13, f: DINERO, s: true }] : []),
       { k: 'recaudo', t: 'Recaudo', w: 13, f: DINERO, s: true },
       { k: 'dif', t: 'Diferencia', w: 18, f: DIF, s: true },
       { k: 'obs', t: 'Observación', w: 34, wrap: true },
@@ -1847,8 +1858,11 @@
           prod: { formula: `${L('pax')}${r}*${L('tarifa')}${r}`, result: f.producido },
           gastos: tipos.length ? { formula: `SUM(${L('g0')}${r}:${L('g' + (tipos.length - 1))}${r})`, result: f.total_gastos } : 0,
           // Aproximado a la mil; las liquidaciones de antes de la aproximación quedan con su valor exacto.
+          // Por entregar nunca es negativo: si los gastos superan el producido, la empresa le debe.
           neto: f.neto === aproximarMil(f.producido - f.total_gastos)
-            ? { formula: `ROUND(${L('prod')}${r}-${L('gastos')}${r},-3)`, result: f.neto } : f.neto,
+            ? { formula: `MAX(ROUND(${L('prod')}${r}-${L('gastos')}${r},-3),0)`, result: porEntregar(f.neto) } : porEntregar(f.neto),
+          debe: f.neto === aproximarMil(f.producido - f.total_gastos)
+            ? { formula: `MAX(-ROUND(${L('prod')}${r}-${L('gastos')}${r},-3),0)`, result: debeConductor(f.neto) } : debeConductor(f.neto),
           recaudo: f.recaudado,
           dif: { formula: `${L('recaudo')}${r}-${L('neto')}${r}`, result: f.diferencia },
           obs: f.observacion || '',
@@ -1881,6 +1895,7 @@
      '• Fecha de la tarjeta = día que trabajó el bus (el que se elige en Recaudo diario al liquidar).',
      '• Producido = pasajeros × tarifa.   • Diferencia = recaudo − por entregar (negativa = faltante).',
      '• Por entregar = producido − total gastos, aproximado a la mil más cercana: desde $500 sube y por debajo baja (con relevo, cada conductor por aparte).',
+     '• Si los gastos superan el producido, por entregar queda en $0 y la diferencia sale en "Empresa le debe" (no es sobrante).',
      '• Observación = lo que anotó el recaudador al liquidar (por ejemplo, por qué sobró o faltó plata).',
      '• Con relevo, cada conductor sale en su propio renglón (Cond. N° 1, 2, 3) con su tramo de registradora.',
      '• El total general suma todos los vehículos del informe. El total de cada vehículo está en la hoja "Resumen por vehículo".',
