@@ -72,6 +72,13 @@ class TramoRecaudo {
         recaudado: asInt(j['recaudado']) ?? 0,
         diferencia: asInt(j['diferencia']) ?? 0,
       );
+
+  /// Lo que debía entregar: nada si los gastos superaron el producido.
+  int get porEntregar => neto > 0 ? neto : 0;
+
+  /// Lo que la empresa le quedó debiendo (gastos mayores que el producido;
+  /// el servidor guarda ese neto en negativo y no lo cuenta como sobrante).
+  int get debeEmpresa => neto < 0 ? -neto : 0;
 }
 
 class Liquidacion {
@@ -86,11 +93,12 @@ class Liquidacion {
   final int producido;
   final int totalGastos;
 
-  /// Por entregar: producido − gastos.
+  /// Por entregar del bus (nunca negativo; lo que se le debe a un conductor va en
+  /// [debeEmpresa]).
   final int neto;
   final int recaudado;
 
-  /// recaudado − neto: negativo es faltante, positivo sobrante.
+  /// recaudado − por entregar: negativo es faltante, positivo sobrante.
   final int diferencia;
   final String atendio;
   final DateTime? creada;
@@ -151,6 +159,9 @@ class Liquidacion {
   }
 
   List<GastoRecaudo> gastosDe(int orden) => gastos.where((g) => g.ordenConductor == orden).toList();
+
+  /// Lo que la empresa les quedó debiendo a los conductores ese día.
+  int get debeEmpresa => conductores.fold(0, (s, c) => s + c.debeEmpresa);
 }
 
 /// Recaudo de un conductor en un día (fila de /api/recaudo/propietario/diario).

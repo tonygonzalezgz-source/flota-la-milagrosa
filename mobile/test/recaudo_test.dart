@@ -71,6 +71,26 @@ void main() {
     expect(l.conductores.map((c) => c.pasajeros), [100, 100]);
   });
 
+  test('gastos mayores que el producido: nada por entregar y la empresa le debe', () {
+    final l = Liquidacion.fromJson({
+      ...json,
+      'neto': 150000,
+      'recaudado': 145000,
+      'diferencia': -5000,
+      'conductores': [
+        (json['conductores'] as List).first,
+        {
+          ...(json['conductores'] as List).last as Map<String, dynamic>,
+          'total_gastos': 353000, 'neto': -48000, 'recaudado': 0, 'diferencia': 0,
+        },
+      ],
+    });
+    expect(l.conductores.last.porEntregar, 0);
+    expect(l.conductores.last.debeEmpresa, 48000);
+    expect(l.conductores.first.debeEmpresa, 0);
+    expect(l.debeEmpresa, 48000);
+  });
+
   test('faltante, sobrante o cuadrado según la diferencia', () {
     expect(estadoDiferencia(-5000), ('Faltante \$ 5.000', -1));
     expect(estadoDiferencia(100), ('Sobrante \$ 100', 1));
