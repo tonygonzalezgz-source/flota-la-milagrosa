@@ -1814,6 +1814,7 @@
       { k: 'neto', t: 'Por entregar', w: 13, f: DINERO, s: true },
       { k: 'recaudo', t: 'Recaudo', w: 13, f: DINERO, s: true },
       { k: 'dif', t: 'Diferencia', w: 18, f: DIF, s: true },
+      { k: 'obs', t: 'Observación', w: 34, wrap: true },
       { k: 'det', t: 'Detalle de los gastos', w: 34, wrap: true },
     ];
     const ci = {};
@@ -1850,6 +1851,7 @@
             ? { formula: `ROUND(${L('prod')}${r}-${L('gastos')}${r},-3)`, result: f.neto } : f.neto,
           recaudo: f.recaudado,
           dif: { formula: `${L('recaudo')}${r}-${L('neto')}${r}`, result: f.diferencia },
+          obs: f.observacion || '',
           det: f.gastos.filter(x => x.observacion).map(x => `${x.tipo}: ${x.observacion}`).join(' · '),
         };
         tipos.forEach((t, i) => { v['g' + i] = g[t] || 0; });
@@ -1879,6 +1881,7 @@
      '• Fecha de la tarjeta = día que trabajó el bus (el que se elige en Recaudo diario al liquidar).',
      '• Producido = pasajeros × tarifa.   • Diferencia = recaudo − por entregar (negativa = faltante).',
      '• Por entregar = producido − total gastos, aproximado a la mil más cercana: desde $500 sube y por debajo baja (con relevo, cada conductor por aparte).',
+     '• Observación = lo que anotó el recaudador al liquidar (por ejemplo, por qué sobró o faltó plata).',
      '• Con relevo, cada conductor sale en su propio renglón (Cond. N° 1, 2, 3) con su tramo de registradora.',
      '• El total general suma todos los vehículos del informe. El total de cada vehículo está en la hoja "Resumen por vehículo".',
      '• Solo salen las columnas de los gastos que tuvieron valor en el periodo.',

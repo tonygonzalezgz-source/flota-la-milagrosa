@@ -75,6 +75,7 @@ def informe():
                    u.nombre AS usuario_nombre,
                    rc.orden, rc.viajes, rc.registradora_inicio, rc.registradora_fin, rc.pasajeros,
                    rc.producido, rc.total_gastos, rc.neto, rc.recaudado, rc.diferencia,
+                   rc.observacion AS obs_conductor, r.observacion AS obs_recaudo,
                    c.nombre AS conductor_nombre, c.cedula AS conductor_cedula,
                    ru.nombre AS ruta_nombre
               FROM recaudos r
@@ -121,6 +122,11 @@ def informe():
         f["bus_numero"] = str(f["bus_numero"])
         f["conductores"] = conductores[f["recaudo_id"]]
         f["gastos"] = por_conductor.get((f["recaudo_id"], f["orden"]), [])
+        # Observación del conductor (por qué sobró o faltó); la general de la liquidación
+        # va con el conductor 1, como en la tirilla.
+        obs = [f.pop("obs_conductor"), f.pop("obs_recaudo") if f["orden"] == 1 else None]
+        f.pop("obs_recaudo", None)
+        f["observacion"] = " · ".join(o for o in obs if o)
     filas.sort(key=lambda f: (_orden_bus(f["bus_numero"]), f["fecha"], f["created_at"] or "",
                               f["recaudo_id"], f["orden"]))
 
