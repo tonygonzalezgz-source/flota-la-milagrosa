@@ -1,4 +1,4 @@
-"""Tablas del módulo Recaudo — SCHEMA_VERSION 22.
+"""Tablas del módulo Recaudo — SCHEMA_VERSION 23.
 
 - `recaudo_tarifas`: valor del pasaje por grupo de vehículo (A buses, B micros).
 - `recaudo_tipos_gasto`: gastos que el conductor puede reportar (ACPM, Taller…).
@@ -341,6 +341,21 @@ _COLUMNAS_SQLITE = [
 ]
 _INDICES = ["CREATE INDEX IF NOT EXISTS idx_recaudos_caja ON recaudos(usuario_id, cierre_id)"]
 
+# Gastos mayores que el producido (neto del conductor negativo): la empresa le queda
+# debiendo y la diferencia se cuenta contra $0, no como sobrante; el neto del bus es solo
+# lo que hay por entregar — SCHEMA_VERSION 23. Corrige las liquidaciones ya guardadas
+# (idempotente: después de la primera vez no cambia nada).
+_CORRECCIONES = [
+    """UPDATE recaudo_conductores SET diferencia = recaudado
+        WHERE neto < 0 AND diferencia <> recaudado""",
+    """UPDATE recaudos
+          SET neto = (SELECT SUM(CASE WHEN rc.neto > 0 THEN rc.neto ELSE 0 END)
+                        FROM recaudo_conductores rc WHERE rc.recaudo_id = recaudos.id),
+              diferencia = (SELECT SUM(rc.diferencia)
+                              FROM recaudo_conductores rc WHERE rc.recaudo_id = recaudos.id)
+        WHERE id IN (SELECT recaudo_id FROM recaudo_conductores WHERE neto < 0)""",
+]
+
 _PG = _tablas("SERIAL PRIMARY KEY", "TIMESTAMPTZ", "NOT NULL DEFAULT now()", " REFERENCES empresas(id)")
 _SQLITE = _tablas("INTEGER PRIMARY KEY AUTOINCREMENT", "TEXT", "DEFAULT CURRENT_TIMESTAMP", "")
 
@@ -362,14 +377,14 @@ def migrar(db):
                 db.execute(sql)
             except Exception:
                 pass   # la columna ya existe
-        for sql in _INDICES:
+        for sql in _INDICES + _CORRECCIONES:
             db.execute(sql)
         db.execute(_SEMILLA_TIPOS)
         _ajustar_tipos(db)
         db.commit()
         return
 
-    for sql in _PG + _COLUMNAS_PG + _INDICES + [_SEMILLA_TIPOS]:
+    for sql in _PG + _COLUMNAS_PG + _INDICES + _CORRECCIONES + [_SEMILLA_TIPOS]:
         try:
             db.execute(sql)
             db.commit()

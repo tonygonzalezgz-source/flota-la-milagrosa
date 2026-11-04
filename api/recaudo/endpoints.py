@@ -8,6 +8,10 @@ Reglas:
                  mil más cercana: desde $500 sube, por debajo baja (326.900 → 327.000;
                  326.400 → 326.000). Con relevo, cada conductor por aparte; el del bus es la suma.
     diferencia = recaudado − neto        (negativa = faltante, positiva = sobrante)
+    Si los gastos superan el producido, el neto del conductor queda negativo: la empresa
+    le debe esa plata (queda debiendo, no sale de la caja). Entonces no tiene nada por
+    entregar y la diferencia se cuenta contra $0 (pedido del usuario 2026-11-03: antes
+    salía como "sobrante"). El neto del bus es solo lo que hay por entregar.
 - Pasajeros por conductor = su tramo de registradora (el conductor 1 va de la
   lectura inicial del bus a la del relevo, el último termina en la final).
 - La registradora del recaudo corrige también el despacho del mismo (bus, fecha)
@@ -120,6 +124,16 @@ def _fila(r):
 
 def _miles(n):
     return f"{n:,}".replace(",", ".")
+
+
+def por_entregar(neto):
+    """Lo que el conductor debe entregar: nada si los gastos superan el producido."""
+    return max(neto, 0)
+
+
+def debe_conductor(neto):
+    """Lo que la empresa le queda debiendo al conductor (gastos mayores que el producido)."""
+    return max(-neto, 0)
 
 
 def _resultado(diferencia):
@@ -475,7 +489,7 @@ def _armar_tramos(conn, conductores_in, reg_inicio, reg_fin, tarifa, gastos, pax
             "conductor_cedula": conductor.get("cedula"), "ruta_id": ruta_id, "viajes": viajes,
             "registradora_inicio": inicio, "registradora_fin": fin, "pasajeros": pasajeros,
             "producido": producido, "total_gastos": total_gastos, "neto": neto,
-            "recaudado": recaudado, "diferencia": recaudado - neto,
+            "recaudado": recaudado, "diferencia": recaudado - por_entregar(neto),
             "observacion": _texto(c.get("observacion")),
         })
         inicio = fin
@@ -640,9 +654,12 @@ def liquidar():
     pasajeros = pax_total if sensores else reg_fin - reg_inicio
     producido = sum(t["producido"] for t in tramos)
     total_gastos = sum(g["valor"] for g in gastos)
-    neto = sum(t["neto"] for t in tramos)   # cada conductor ya viene aproximado
+    # Cada conductor ya viene aproximado; el del bus es solo lo que hay por entregar
+    # (lo que la empresa le debe a un conductor no se descuenta de lo que entrega otro).
+    neto = sum(por_entregar(t["neto"]) for t in tramos)
     recaudado = sum(t["recaudado"] for t in tramos)
-    diferencia = recaudado - neto
+    diferencia = sum(t["diferencia"] for t in tramos)
+    debe = sum(debe_conductor(t["neto"]) for t in tramos)
     uid = getattr(request, "jwt_user_id", None)
 
     try:
@@ -722,6 +739,10 @@ def liquidar():
             + (f" ({detalle_gastos})" if gastos else "")
             + f"; por entregar {auditoria.pesos(neto)}; recaudado {auditoria.pesos(recaudado)}; "
               f"{_resultado(diferencia)}."
+            + (" La empresa le debe " + ", ".join(
+                   f"{auditoria.pesos(debe_conductor(t['neto']))} a {t['conductor_nombre']}"
+                   for t in tramos if debe_conductor(t["neto"])) + " (los gastos superan el producido)."
+               if debe else "")
         )
         if len(tramos) > 1:
             descripcion += " Relevo: " + "; ".join(
@@ -754,7 +775,7 @@ def liquidar():
              "pasajeros": pasajeros, "tarifa": tarifa, "producido": producido,
              "gastos": [f"{g['tipo_nombre']} {auditoria.pesos(g['valor'])}" for g in gastos],
              "total_gastos": total_gastos, "neto": neto, "recaudado": recaudado,
-             "diferencia": diferencia,
+             "diferencia": diferencia, "debe_al_conductor": debe or None,
              "despacho_antes": list(correccion) if correccion else None,
              "digitadas_en_recaudo": digitadas or None,
              "salto_registradora": ({"ultima_final": salto[0], "fecha": salto[1]}

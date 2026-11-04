@@ -1533,7 +1533,7 @@
               <div class="liq-fila"><span>Pasajeros × tarifa</span><span>${c.pasajeros.toLocaleString('es-CO')} × ${liqPesos(l.tarifa)}</span></div>
               <div class="liq-fila fuerte"><span>Producido</span><span>${liqPesos(c.producido)}</span></div>
               ${gastos.length ? gastos.map(filaGasto).join('') : '<div class="liq-fila gasto"><span>Sin gastos</span><span>$0</span></div>'}
-              <div class="liq-fila"><span>Por entregar</span><span>${liqPesos(c.neto)}</span></div>
+              <div class="liq-fila"><span>Por entregar</span><span>${liqPesos(Math.max(c.neto, 0))}</span></div>
               <div class="liq-fila fuerte"><span>Entregó</span><span>${liqPesos(c.recaudado)}</span></div>
               ${filaDif(c.diferencia, cc)}
             </div>`;
