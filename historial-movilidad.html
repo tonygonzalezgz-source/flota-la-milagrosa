@@ -367,6 +367,12 @@
     }
     .nov-input:focus  { border-color: var(--accent); background: #ffffff; }
     .nov-input.touched { border-color: var(--yellow); }
+    /* Bus con sensores ya liquidado: pasajeros liquidados frente a los de los sensores */
+    .dif-recaudo { width: 180px; margin-top: 4px; font-size: 11px; line-height: 1.35; color: var(--txt2); white-space: normal; }
+    .dif-recaudo b { font-weight: 700; }
+    .dif-recaudo.menos { color: var(--red); }
+    .dif-recaudo.mas   { color: #b45309; }
+    .dif-recaudo.ok    { color: #15803d; }
 
     /* Estado badge */
     .estado-badge {
@@ -1043,6 +1049,7 @@
   let allConductores = [];
   let allPropietarios = [];
   let records        = {};   // bus_id → record
+  let recaudoSensores = {};  // bus_id → {pasajeros, tarifa} liquidados en recaudo (buses con sensores)
   let despachoMap    = {};   // bus_id → {estado, conductor_id, ruta_id, viajes_realizados, registradora_inicio, registradora_fin} del despacho de la fecha
   let grupoFiltro    = 'todos';
 
@@ -1374,9 +1381,13 @@
 
     const auto = opts.silencioso ? { headers: { 'X-Refresco-Auto': '1' } } : {};
     const seq  = seqGuardado;
-    const [res, despRes] = await Promise.all([
+    /* Buses con sensores: lo que se liquidó en recaudo, para mostrar la diferencia con
+       los pasajeros de los sensores. Si falla o el rol no lo ve, la vista sigue igual. */
+    const verRecaudo = ['Administrador', 'Analista'].includes(currentUser?.rol || currentUser?.role);
+    const [res, despRes, recRes] = await Promise.all([
       apiFetch(`${API}/movilidad?fecha=${fecha}`, auto),
       apiFetch(`${API}/despacho?fecha=${fecha}`, auto),
+      verRecaudo ? apiFetch(`${API}/movilidad/recaudo-sensores?fecha=${fecha}`, auto).catch(() => null) : null,
     ]);
     const data = await leerRespuesta(res);
     if (!Array.isArray(data)) throw new Error('Respuesta inválida del servidor');
@@ -1408,6 +1419,11 @@
 
     records = {};
     data.forEach(r => { records[r.bus_id] = r; });
+    recaudoSensores = {};
+    try {
+      const rec = recRes && recRes.ok ? await recRes.json() : [];
+      (Array.isArray(rec) ? rec : []).forEach(r => { recaudoSensores[r.bus_id] = r; });
+    } catch (_) { /* sin la comparación */ }
 
     /* Snapshot para el próximo ciclo (incluye buses ya cargados en records). */
     prevUpdated = {};
@@ -1615,7 +1631,7 @@
       <td data-label="Ruta">${rutaCell}</td>
       <td data-label="Novedades"><input  class="nov-input"   id="n-${b.id}"    type="text"
                   value="${escHtml(base.n)}" placeholder="Sin novedades"
-                  oninput="markDirty(${b.id}, this)" /></td>
+                  oninput="markDirty(${b.id}, this)" />${difRecaudoHtml(b.id, base.p)}</td>
       <td data-label="Estado"><span class="estado-badge ${est}" id="est-${b.id}" title="${ESTADO_TITLE[est] || ''}" onclick="descartarFila(${b.id})">${ESTADO_LABEL[est]}</span></td>
       <td class="cell-acciones"><button class="btn-row-save" id="brs-${b.id}" onclick="saveRow(${b.id})">Guardar</button></td>
     </tr>`;
@@ -1638,6 +1654,7 @@
       el.value = pend[campo];
       marcarCampoTocado(el);
     });
+    if ('p' in pend) pintarDifRecaudo(busId);
   }
 
   /* Vuelve a pintar una fila con lo que hay en records/despachoMap (p.ej.
@@ -1668,6 +1685,33 @@
     }
   }
 
+  /* Bus con sensores ya liquidado: el recaudador digitó los pasajeros que reportó el
+     conductor y aquí se comparan con los de los sensores que carga la analista.
+     Positivo = el conductor liquidó menos pasajeros de los que contaron los sensores. */
+  function difRecaudoHtml(busId, paxSensores) {
+    const r = recaudoSensores[busId];
+    if (!r) return '';
+    const liq = Number(r.pasajeros) || 0;
+    const sens = paxSensores === '' || paxSensores == null ? null : Number(paxSensores);
+    const fmt = n => Number(n).toLocaleString('es-CO');
+    const pesos = n => '$' + Number(n).toLocaleString('es-CO');
+    let cls = '', txt;
+    if (sens == null || !(sens > 0)) {
+      txt = `Recaudo: liquidó <b>${fmt(liq)}</b> pax. Falta el dato de los sensores.`;
+    } else {
+      const dif = sens - liq;
+      if (!dif) { cls = 'ok'; txt = `Recaudo: liquidó <b>${fmt(liq)}</b> pax · sensores ${fmt(sens)}. Cuadra.`; }
+      else if (dif > 0) { cls = 'menos'; txt = `Recaudo: liquidó <b>${fmt(liq)}</b> pax · sensores ${fmt(sens)} → <b>${fmt(dif)} pax de menos (${pesos(dif * r.tarifa)})</b>`; }
+      else { cls = 'mas'; txt = `Recaudo: liquidó <b>${fmt(liq)}</b> pax · sensores ${fmt(sens)} → <b>${fmt(-dif)} pax de más (${pesos(-dif * r.tarifa)})</b>`; }
+    }
+    return `<div class="dif-recaudo ${cls}" id="dr-${busId}">${txt}</div>`;
+  }
+  function pintarDifRecaudo(busId) {
+    const el = document.getElementById(`dr-${busId}`);
+    const p = document.getElementById(`p-${busId}`);
+    if (el && p) el.outerHTML = difRecaudoHtml(busId, p.value);
+  }
+
   /* ── MARCAR MODIFICADO ──
      Guarda el valor del campo en el borrador (pendientes + localStorage). */
   function markDirty(busId, el) {
@@ -1686,6 +1730,7 @@
       respaldarBus(fecha, busId);
       marcarCampoTocado(el);
     }
+    if (el && el.id === `p-${busId}`) pintarDifRecaudo(busId);
     pintarEstado(busId);
     actualizarBarraPendientes();
   }

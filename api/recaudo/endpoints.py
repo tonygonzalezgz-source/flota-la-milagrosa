@@ -18,6 +18,8 @@ Reglas:
   y, con él, los pasajeros de movilidad diaria: una sola fuente de verdad.
 - Una liquidación guardada NO se edita ni se borra. Solo el Administrador puede
   anularla (con motivo); queda en el historial y el bus vuelve a quedar por liquidar.
+- Buses con sensores (sin registradora): el recaudador digita los pasajeros del día; la
+  movilidad sigue siendo la de la analista y Movilidad diaria muestra la diferencia.
 - Recaudador liquida los últimos 7 días (hora Bogotá; domingos y festivos se ponen al día
   después). Administrador: cualquier día ya ocurrido.
 - Recaudador no cambia la registradora que trae el despacho: solo llena la que falta
@@ -426,8 +428,8 @@ def _armar_gastos(conn, gastos_in, n_conductores):
 def _armar_tramos(conn, conductores_in, reg_inicio, reg_fin, tarifa, gastos, pax_total=None):
     """Valida los conductores y calcula el tramo de registradora y los totales de cada uno.
     Obligatorios por conductor: conductor, ruta, viajes (>= 1), pasajeros (>= 1) y recaudo.
-    Los gastos son opcionales. Bus con sensores (`pax_total`, de la movilidad): sin
-    registradora; con relevo, cada conductor lleva sus pasajeros y el último lo que falta."""
+    Los gastos son opcionales. Bus con sensores (`pax_total`, los que digitó el recaudador):
+    sin registradora; con relevo, cada conductor lleva sus pasajeros y el último lo que falta."""
     tramos, vistos, inicio, repartidos = [], set(), reg_inicio, 0
     for i, c in enumerate(conductores_in):
         n = i + 1
@@ -461,7 +463,7 @@ def _armar_tramos(conn, conductores_in, reg_inicio, reg_fin, tarifa, gastos, pax
                 pasajeros = pax_total - repartidos
                 if pasajeros < 1:
                     raise _Rechazo(f"Los pasajeros repartidos ({_miles(repartidos)}) no dejan pasajeros al "
-                                   f"conductor {n}: la movilidad del día tiene {_miles(pax_total)}")
+                                   f"conductor {n}: el total del bus es {_miles(pax_total)}")
             else:
                 pasajeros = _entero(c.get("pasajeros"), f"Los pasajeros del conductor {n}")
                 if pasajeros < 1:
@@ -601,17 +603,16 @@ def liquidar():
             raise _Rechazo("El vehículo no existe", 404)
         bus = dict(bus)
 
-        # Bus con sensores: los pasajeros son los que registró la analista en movilidad
-        # (nadie los digita en recaudo); sin movilidad todavía, se espera.
+        # Bus con sensores: el recaudador digita los pasajeros que reporta el conductor (los
+        # de los sensores llegan al día siguiente). La movilidad sigue siendo la de la
+        # analista y de ahí sale la diferencia (pedido del usuario 2026-11-03).
         sensores = (bus.get("cuenta_pasajeros") or "registradora") == "sensores"
         pax_total = None
         if sensores:
             reg_inicio = reg_fin = None
-            pax_total = _pasajeros_movilidad(conn, bus_id, fecha)
-            if not pax_total:
-                raise _Rechazo(f"Falta la movilidad del bus {bus['numero']} del {fecha}: cuenta pasajeros con "
-                               "sensores y la analista aún no los registra. Cuando estén, vuelve a cargar "
-                               "y liquida.", 409)
+            pax_total = _entero(data.get("pasajeros"), "Los pasajeros del día")
+            if pax_total < 1:
+                raise _Rechazo("Los pasajeros del día deben ser al menos 1")
         else:
             reg_inicio = _entero(data.get("registradora_inicio"), "La registradora inicial")
             reg_fin = _entero(data.get("registradora_fin"), "La registradora final")
@@ -727,7 +728,7 @@ def liquidar():
                 (bus_id, fecha, primero["conductor_id"], primero["ruta_id"], viajes_total,
                  reg_inicio, reg_fin, uid),
             )
-        if not sensores:   # con sensores la movilidad es la fuente: no se reescribe
+        if not sensores:   # con sensores la movilidad es la de la analista: no se reescribe
             sync_pax_movilidad(conn, fecha, {bus_id: pasajeros})
 
         nombres = ", ".join(t["conductor_nombre"] for t in tramos)
@@ -760,7 +761,10 @@ def liquidar():
         elif not despacho:
             descripcion += " El bus no tenía despacho: se creó con estos datos."
         if sensores:
-            descripcion += " Pasajeros de la movilidad (el bus cuenta con sensores, sin registradora)."
+            pax_mov = _pasajeros_movilidad(conn, bus_id, fecha)
+            descripcion += (" Bus con sensores (sin registradora): pasajeros digitados en recaudo; "
+                            + (f"la movilidad tiene {_miles(pax_mov)}." if pax_mov
+                               else "la movilidad aún no los tiene."))
         if salto:
             marcas = reg_inicio - salto[0]
             descripcion += (f" Salto en la registradora: cerró en {_miles(salto[0])} el {salto[1]} y "
