@@ -342,7 +342,11 @@
       card.innerHTML = titulo + `<div class="vacio">No hay liquidaciones ni pagos diarios pendientes por cerrar. La caja está al día.</div>`;
       return;
     }
-    const filas = [...liqs].sort((a, b) => a.created_at.localeCompare(b.created_at)).map(l => `<tr>
+    // Por número de bus de menor a mayor (pedido del usuario 2026-11-03, solo en esta tabla);
+    // el mismo bus, por día de la tarjeta y hora de liquidación.
+    const porBus = (a, b) => String(a.bus_numero).localeCompare(String(b.bus_numero), 'es', { numeric: true })
+      || String(a.fecha).localeCompare(String(b.fecha)) || (a.created_at || '').localeCompare(b.created_at || '');
+    const filas = [...liqs].sort(porBus).map(l => `<tr>
         <td data-label="Liquidada">${fmtHora(l.created_at)}</td>
         <td data-label="Día">${fmtDia(l.fecha)}</td>
         <td data-label="Bus"><span><b>${l.bus_numero}</b> <span class="sub">${esc(l.bus_placa || '')}</span></span></td>
