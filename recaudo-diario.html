@@ -781,8 +781,6 @@
 
   /* Quien no es admin no cambia la registradora que trae el despacho: solo llena la que
      falta (como en un punto de venta, quien recibe la plata no anota cuánta debe llegar).
-     La inicial sigue el consecutivo: si el despacho arranca en otra lectura que la final
-     del último día, hay un salto y lo corrige el despachador o el administrador.
      El servidor aplica la misma regla. */
   function bloqueoReg(b) {
     if (!D.bloquea_registradora || b.recaudo || conSensores(b)) return null;
@@ -791,8 +789,14 @@
       iniOrigen: b.registradora_inicio != null ? 'del despacho' : 'última lectura',
       fin: b.registradora_fin != null,
       relevos: (b.relevos || []).length,
-      salto: b.registradora_inicio != null && b.ultima_reg_fin != null && b.registradora_inicio !== b.ultima_reg_fin,
     };
+  }
+  /* Salto: la inicial no sigue la final del último día con lectura (marcaron la
+     registradora con el bus en taller o descanso). Se liquida igual desde la inicial
+     del día; el salto queda en el historial. */
+  function saltoReg(b, ini) {
+    if (conSensores(b) || ini == null || b.ultima_reg_fin == null || ini === b.ultima_reg_fin) return null;
+    return { ultima: b.ultima_reg_fin, fecha: b.ultima_reg_fecha, marcas: ini - b.ultima_reg_fin };
   }
   /* Lecturas que se digitan en recaudo porque el despacho no las traía (van al historial). */
   function lecturasDigitadas(b) {
@@ -856,13 +860,6 @@
     }
 
     const bq = bloqueoReg(b);
-    if (bq?.salto && D.editable) {
-      card.innerHTML = head + `<div class="aviso">Salto en la registradora: el despacho arranca en <b>${fmtNum(b.registradora_inicio)}</b>,
-        pero la última lectura final (del ${esc(b.ultima_reg_fecha || '')}) fue <b>${fmtNum(b.ultima_reg_fin)}</b>.
-        No se puede liquidar hasta que el despachador o el administrador lo revisen y corrijan.</div>`;
-      return;
-    }
-
     const cerrada = !!b.recaudo;   // una liquidación guardada no se modifica
     const editable = !cerrada && D.editable;
     const ro = editable ? '' : 'disabled';
@@ -1256,6 +1253,12 @@
     } else if (hayLecturas && !valida) {
       nota.className = 'nota cambio';
       nota.textContent = 'La registradora final no puede ser menor que la inicial.';
+    } else if (!b.recaudo && D.editable && saltoReg(b, ini)) {
+      const sr = saltoReg(b, ini);
+      nota.className = 'nota cambio';
+      nota.textContent = `Salto en la registradora: el ${fmtDia(sr.fecha)} cerró en ${fmtNum(sr.ultima)} y el ${fmtDia(fecha)} arrancó en ${fmtNum(ini)} `
+        + `(${fmtNum(Math.abs(sr.marcas))} marcas ${sr.marcas > 0 ? 'de más' : 'de menos'}, p. ej. con el bus en taller o descanso). `
+        + 'Se puede liquidar: se cobra desde la inicial del día y el salto queda en el historial.';
     } else if (bq && D.editable) {
       const faltan = [!bq.ini && 'inicial', !bq.fin && 'final'].filter(Boolean).join(' y ');
       nota.className = faltan ? 'nota cambio' : 'nota';

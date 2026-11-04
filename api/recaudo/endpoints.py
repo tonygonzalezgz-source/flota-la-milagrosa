@@ -17,8 +17,9 @@ Reglas:
 - Recaudador liquida los últimos 7 días (hora Bogotá; domingos y festivos se ponen al día
   después). Administrador: cualquier día ya ocurrido.
 - Recaudador no cambia la registradora que trae el despacho: solo llena la que falta
-  y la inicial sigue el consecutivo (ver _lecturas_del_despacho). El Administrador sí
-  la corrige.
+  (ver _lecturas_del_despacho). El Administrador sí la corrige.
+- Si la inicial no sigue el consecutivo (marcaron la registradora con el bus en taller o
+  descanso), se liquida igual desde la inicial del día y el salto queda en el historial.
 - El propietario ve las liquidaciones vigentes de SUS buses (filtro por el token).
 - Todo cambio queda en el historial de modificaciones (auditoría).
 """
@@ -500,17 +501,15 @@ def _lecturas_del_despacho(conn, bus_id, fecha, despacho, reg_inicio, reg_fin, c
     """Quien no es Administrador no cambia la registradora: manda la que anotó el
     despachador (pedido del usuario 2026-10-29; como en un punto de venta, quien recibe
     la plata no anota los datos que dicen cuánta debe llegar). Solo llena la que falta.
-    La inicial sigue el consecutivo: es la del despacho o, si no la trae, la final del
-    último día con lectura; si el despacho trae otra, hay un salto y lo revisa el
-    despachador o el administrador. Devuelve las lecturas que digitó en recaudo."""
+    La inicial es la del despacho o, si no la trae, la final del último día con lectura.
+    Si el despacho arranca en otra (salto: marcaron la registradora mientras el bus estaba
+    en taller o descanso), se liquida desde la del despacho y el salto queda en el
+    historial (pedido del usuario 2026-11-03; ver _salto_registradora).
+    Devuelve las lecturas que digitó en recaudo."""
     corregir = "Si está mal, pide al despachador o al administrador que la corrija antes de liquidar."
     ultima, ultima_fecha = _ultima_lectura(conn, bus_id, fecha)
     desp_inicio = despacho["registradora_inicio"] if despacho else None
     desp_fin = despacho["registradora_fin"] if despacho else None
-    if desp_inicio is not None and ultima is not None and desp_inicio != ultima:
-        raise _Rechazo(f"Salto en la registradora: el despacho empieza en {_miles(desp_inicio)}, pero la "
-                       f"última lectura final (del {ultima_fecha}) fue {_miles(ultima)}. Pide al "
-                       "despachador o al administrador que la revise antes de liquidar.", 409)
 
     digitadas = []
     inicio = desp_inicio if desp_inicio is not None else ultima
@@ -543,6 +542,16 @@ def _lecturas_del_despacho(conn, bus_id, fecha, despacho, reg_inicio, reg_fin, c
     if len(conductores_in) - 1 > len(anotados):
         digitadas.append("relevo")
     return digitadas
+
+
+def _salto_registradora(conn, bus_id, fecha, reg_inicio):
+    """Si la lectura inicial no sigue el consecutivo (la final del último día con
+    lectura), devuelve (última final, su fecha). Pasa cuando marcan la registradora con
+    el bus en taller o descanso: esas marcas no se liquidan, pero quedan anotadas."""
+    ultima, ultima_fecha = _ultima_lectura(conn, bus_id, fecha)
+    if ultima is None or reg_inicio is None or ultima == reg_inicio:
+        return None
+    return ultima, ultima_fecha
 
 
 def _pasajeros_movilidad(conn, bus_id, fecha):
@@ -621,6 +630,7 @@ def liquidar():
         es_admin = _es_admin()
         digitadas = [] if es_admin or sensores else _lecturas_del_despacho(
             conn, bus_id, fecha, despacho, reg_inicio, reg_fin, conductores_in)
+        salto = None if sensores else _salto_registradora(conn, bus_id, fecha, reg_inicio)
         gastos = _armar_gastos(conn, data.get("gastos"), len(conductores_in))
         tramos = _armar_tramos(conn, conductores_in, reg_inicio, reg_fin, tarifa, gastos, pax_total)
     except _Rechazo as e:
@@ -730,6 +740,11 @@ def liquidar():
             descripcion += " El bus no tenía despacho: se creó con estos datos."
         if sensores:
             descripcion += " Pasajeros de la movilidad (el bus cuenta con sensores, sin registradora)."
+        if salto:
+            marcas = reg_inicio - salto[0]
+            descripcion += (f" Salto en la registradora: cerró en {_miles(salto[0])} el {salto[1]} y "
+                            f"arrancó en {_miles(reg_inicio)} "
+                            f"({_miles(abs(marcas))} marcas {'sin liquidar' if marcas > 0 else 'de menos'}).")
         if digitadas:
             descripcion += (" Registradora digitada en recaudo (el despacho no la traía): "
                             + ", ".join(digitadas) + ".")
@@ -742,6 +757,8 @@ def liquidar():
              "diferencia": diferencia,
              "despacho_antes": list(correccion) if correccion else None,
              "digitadas_en_recaudo": digitadas or None,
+             "salto_registradora": ({"ultima_final": salto[0], "fecha": salto[1]}
+                                    if salto else None),
              "conductores": [{k: t[k] for k in ("conductor_nombre", "registradora_inicio",
                                                 "registradora_fin", "pasajeros", "producido",
                                                 "total_gastos", "recaudado", "diferencia")}
