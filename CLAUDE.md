@@ -79,7 +79,8 @@ misma API; los permisos salen de `ROLE_VIEWS` → `allowedViews`.
   endpoints usa cada pantalla para ver y para modificar). Al agregar un endpoint
   que use una pantalla, anotarlo en `VISTA_API` o esas cuentas recibirán 403; al
   agregar una vista, sumarla a `GRUPOS` y a `PLANTILLAS`. Las pantallas esconden
-  lo que guarda con `soloLectura`. Lo solo-admin nunca se delega.
+  lo que guarda con `soloLectura`. Lo solo-admin solo se delega si un módulo lo
+  nombra en `VISTA_API` (Catálogo); cuentas de acceso (`/api/admin/`) y auditoría, nunca.
 
 ## Pendientes e ideas
 

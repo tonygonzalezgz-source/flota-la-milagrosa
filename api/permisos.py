@@ -122,6 +122,21 @@ VISTA_API = {
         MODIFICAR: _api("POST /api/recaudo/pagos", "POST /api/recaudo/pagos/<int:pago_id>/reimpresion",
                         "POST /api/recaudo/terceros"),
     },
+    # Catálogo sin las cuentas de acceso: crear o editar usuarios, sus permisos y sus
+    # buses o rutas (/api/admin/...) es SOLO del Administrador (pedido del usuario 2026-11-05).
+    "catalogo": {
+        VER: _api(*BUSES, "GET /api/propietarios", "GET /api/conductores",
+                  "GET /api/recaudo/conceptos", "GET /api/recaudo/terceros"),
+        MODIFICAR: _api("POST /api/buses", "PUT /api/buses/<int:bus_id>", "DELETE /api/buses/<int:bus_id>",
+                        "PUT /api/tarifas/<int:tarifa_id>",
+                        "POST /api/rutas", "PUT /api/rutas/<int:ruta_id>", "DELETE /api/rutas/<int:ruta_id>",
+                        "POST /api/conductores", "PUT /api/conductores/<int:cid>",
+                        "DELETE /api/conductores/<int:cid>",
+                        "POST /api/puestos", "PUT /api/puestos/<int:pid>", "DELETE /api/puestos/<int:pid>",
+                        "POST /api/recaudo/conceptos", "PUT /api/recaudo/conceptos/<int:concepto_id>",
+                        "PUT /api/recaudo/config-contable",
+                        "POST /api/recaudo/terceros", "PUT /api/recaudo/terceros/<int:tercero_id>"),
+    },
     "recaudo-caja": {
         VER: _api("GET /api/recaudo/caja", "GET /api/recaudo/cierres", "GET /api/recaudo/cierres/<int:cierre_id>"),
         MODIFICAR: _api("POST /api/recaudo/caja/cerrar"),
@@ -163,16 +178,24 @@ GRUPOS = (
         ("propietario", "Mis Buses", "Un propietario solo ve sus buses; los demás ven toda la flota"),
         ("gastos", "Gastos y Facturas", "Modificar: subir y borrar gastos"),
     )),
+    ("Administración", (
+        ("catalogo", "Catálogo", "Modificar: buses, tarifas, rutas, conductores, puestos y recaudo. "
+                                 "Las cuentas de acceso son solo del administrador"),
+    )),
 )
 
-# Nunca se delegan: con ellos se crean cuentas, se ve la auditoría o se tocan los
-# equipos y trazados del monitoreo.
+# Nunca se delegan: la auditoría y los equipos y trazados del monitoreo. Las cuentas
+# de acceso (dentro de Catálogo) tampoco: ver NUNCA_DELEGABLE.
 SOLO_ADMIN = (
-    ("catalogo", "Catálogo"),
+    ("cuentas", "Cuentas de acceso (crear y editar usuarios)"),
     ("auditoria", "Historial de modificaciones"),
     ("mb-rutas", "Rutas Geográficas"),
     ("mb-equipos", "Equipos GPS"),
 )
+
+# Endpoints que ninguna cuenta personalizada usa, aunque un módulo marcado los
+# nombrara por error: cuentas de acceso y auditoría.
+NUNCA_DELEGABLE = ("/api/admin/", "/api/auditoria")
 
 ORDEN = tuple(v for _, vistas in GRUPOS for v, _, _ in vistas)
 DELEGABLES = frozenset(ORDEN)
@@ -261,6 +284,8 @@ def vistas(permisos):
 
 def api_permitida(permisos, metodo, regla):
     """None si una vista marcada permite el endpoint; si no, el motivo del 403."""
+    if regla.startswith(NUNCA_DELEGABLE):
+        return "No autorizado para esta acción"
     if metodo == "HEAD":
         metodo = "GET"
     clave = (metodo, regla)

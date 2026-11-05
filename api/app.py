@@ -209,8 +209,9 @@ def require_role(*roles):
     """Exige token válido (require_auth) y que el rol esté entre los permitidos.
 
     Una cuenta con permisos marcados en Catálogo no pasa por el rol sino por sus
-    módulos (permisos.api_permitida); lo que es solo del Administrador sigue
-    cerrado para ella. Las cuentas sin permisos propios siguen igual que siempre."""
+    módulos (permisos.api_permitida): solo entra a lo que esos módulos nombran, y
+    nunca a las cuentas de acceso ni a la auditoría. Las cuentas sin permisos
+    propios siguen igual que siempre."""
     def wrapper(f):
         @require_auth
         @wraps(f)
@@ -222,10 +223,9 @@ def require_role(*roles):
                 if not activo or rol_bd != rol:
                     return jsonify({"error": "Tu sesión ya no es válida. Inicia sesión nuevamente."}), 401
                 if perms:
-                    if tuple(roles) == ("Administrador",):
-                        motivo = "No autorizado para esta acción"
-                    else:
-                        motivo = permisos.api_permitida(perms, request.method, request.url_rule.rule)
+                    # Lo solo del Administrador pasa únicamente si un módulo marcado lo nombra
+                    # en api/permisos.py (p. ej. Catálogo); cuentas y auditoría, nunca.
+                    motivo = permisos.api_permitida(perms, request.method, request.url_rule.rule)
                     if motivo:
                         return jsonify({"error": motivo}), 403
                     return f(*args, **kwargs)
