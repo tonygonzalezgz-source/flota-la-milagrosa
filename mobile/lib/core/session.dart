@@ -14,6 +14,11 @@ class Usuario {
   final String iniciales;
   final String? color;
   final List<String> allowedViews;
+
+  /// Módulos que la cuenta solo puede consultar (Catálogo › Usuarios y
+  /// permisos en la web): la pantalla esconde lo que guarda o borra. El
+  /// servidor igual lo rechaza.
+  final List<String> soloLectura;
   final List<int> busIds;
   final bool tratamientoAceptado;
 
@@ -25,12 +30,16 @@ class Usuario {
     required this.iniciales,
     this.color,
     required this.allowedViews,
+    this.soloLectura = const [],
     required this.busIds,
     required this.tratamientoAceptado,
   });
 
   bool get esAdmin => rol == 'Administrador';
   bool get esPropietario => rol == 'Propietario';
+
+  /// true si en ese módulo la cuenta solo ve (no guarda ni borra).
+  bool soloVer(String vista) => soloLectura.contains(vista);
 
   /// El aviso de la Ley 1581 solo se pide a los propietarios (igual que la web).
   bool get debeAceptarTratamiento => esPropietario && !tratamientoAceptado;
@@ -43,6 +52,7 @@ class Usuario {
         iniciales: (j['iniciales'] ?? '') as String,
         color: j['color'] as String?,
         allowedViews: ((j['allowedViews'] ?? const []) as List).cast<String>(),
+        soloLectura: ((j['soloLectura'] ?? const []) as List).cast<String>(),
         busIds: ((j['bus_ids'] ?? const []) as List).cast<int>(),
         tratamientoAceptado: j['tratamiento_aceptado'] == true,
       );
@@ -55,11 +65,13 @@ class Usuario {
         'iniciales': iniciales,
         'color': color,
         'allowedViews': allowedViews,
+        'soloLectura': soloLectura,
         'bus_ids': busIds,
         'tratamiento_aceptado': tratamientoAceptado,
       };
 
-  Usuario copyWith({bool? tratamientoAceptado, List<String>? allowedViews}) => Usuario(
+  Usuario copyWith({bool? tratamientoAceptado, List<String>? allowedViews, List<String>? soloLectura}) =>
+      Usuario(
         id: id,
         username: username,
         nombre: nombre,
@@ -67,6 +79,7 @@ class Usuario {
         iniciales: iniciales,
         color: color,
         allowedViews: allowedViews ?? this.allowedViews,
+        soloLectura: soloLectura ?? this.soloLectura,
         busIds: busIds,
         tratamientoAceptado: tratamientoAceptado ?? this.tratamientoAceptado,
       );

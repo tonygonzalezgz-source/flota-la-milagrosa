@@ -55,6 +55,10 @@ class _DespachoScreenState extends ConsumerState<DespachoScreen> {
   List<Map<String, dynamic>> _conductores = [];
   String _filtro = '';
 
+  /// Permiso "solo ver" en Despacho (Catálogo › Usuarios y permisos): se consulta
+  /// el día sin editar buses ni copiar el día anterior.
+  bool get _soloVer => ref.read(sessionProvider).value?.soloVer('despacho') ?? false;
+
   @override
   void initState() {
     super.initState();
@@ -166,7 +170,7 @@ class _DespachoScreenState extends ConsumerState<DespachoScreen> {
       appBar: AppBar(
         title: const Text('Despacho'),
         actions: [
-          if (hayVacios)
+          if (hayVacios && !_soloVer)
             IconButton(
               tooltip: 'Copiar día anterior',
               icon: const Icon(Icons.content_copy),
@@ -183,6 +187,10 @@ class _DespachoScreenState extends ConsumerState<DespachoScreen> {
           child: ListView(padding: const EdgeInsets.all(16), children: [
             Text(Fechas.larga(_hoy), style: const TextStyle(color: AppColors.muted)),
             const SizedBox(height: 10),
+            if (_soloVer) ...[
+              const AvisoSoloVer('Solo consulta: ves el despacho del día, pero no lo puedes cambiar.'),
+              const SizedBox(height: 10),
+            ],
             Row(children: [
               Expanded(child: Indicador('Trabajando', '${c['trabajando']}', AppColors.green)),
               const SizedBox(width: 10),
@@ -222,7 +230,7 @@ class _DespachoScreenState extends ConsumerState<DespachoScreen> {
       child: Card(
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: () => _editar(b),
+          onTap: _soloVer ? null : () => _editar(b),
           child: Padding(
             padding: const EdgeInsets.all(14),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -267,16 +275,22 @@ class _DespachoScreenState extends ConsumerState<DespachoScreen> {
                     avatar: Icon(
                         asBool(b['tiene_alistamiento']) ? Icons.check : Icons.warning_amber_rounded,
                         size: 16),
-                    label: Text(asBool(b['tiene_alistamiento']) ? 'Alistamiento' : 'Alistar'),
+                    label: Text(asBool(b['tiene_alistamiento'])
+                        ? 'Alistamiento'
+                        : (_soloVer ? 'Sin alistamiento' : 'Alistar')),
                     backgroundColor: (asBool(b['tiene_alistamiento']) ? AppColors.green : AppColors.yellow)
                         .withValues(alpha: .15),
-                    onPressed: () async {
-                      final ok = await abrirAlistamiento(context,
-                          busId: asInt(b['id'])!,
-                          titulo: 'Bus ${b['numero']}',
-                          conductorId: asInt(b['conductor_id']));
-                      if (ok) setState(() => b['tiene_alistamiento'] = 1);
-                    },
+                    // En "solo ver" se consulta el alistamiento que ya existe
+                    onPressed: _soloVer && !asBool(b['tiene_alistamiento'])
+                        ? null
+                        : () async {
+                            final ok = await abrirAlistamiento(context,
+                                busId: asInt(b['id'])!,
+                                titulo: 'Bus ${b['numero']}',
+                                conductorId: asInt(b['conductor_id']),
+                                soloVer: _soloVer);
+                            if (ok) setState(() => b['tiene_alistamiento'] = 1);
+                          },
                   ),
                 ]),
               ],

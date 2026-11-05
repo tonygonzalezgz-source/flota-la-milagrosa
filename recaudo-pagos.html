@@ -67,6 +67,8 @@
     .ayuda { font-size:12px; color:var(--txt2); margin-top:6px; line-height:1.5; }
     .ayuda.aviso { color:#b45309; font-weight:600; }
     .link { border:none; background:none; color:var(--primary); font:inherit; font-size:12.5px; font-weight:700; cursor:pointer; padding:0; }
+    .reabierto { background:#fffbeb; border:1px solid #fcd34d; color:#92400e; border-radius:10px; padding:10px 12px;
+      font-size:12.5px; line-height:1.5; margin-bottom:12px; }
     .bloqueado { background:#f6f6fa; border:1px dashed var(--border2); border-radius:10px; padding:14px; font-size:13px; color:var(--txt2); line-height:1.6; }
 
     .pill { display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:3px 9px;
@@ -516,16 +518,18 @@
       </tbody></table></div>`;
   }
 
-  /* ── Formulario (solo el día de hoy: la fecha del pago la pone el servidor) ── */
+  /* ── Formulario: hoy (la fecha la pone el servidor) o un día pasado cuya caja el
+     administrador reabrió: ahí entra el pago corregido, porque esa plata entró ese día. ── */
   function renderForm() {
     if (SOLO_VER) {
       $('formCard').innerHTML = `<div class="card-title"><span>Registrar pago</span></div>
         <div class="bloqueado">Tu permiso en este módulo es «solo ver»: puedes consultar los pagos, pero no registrarlos.</div>`;
       return;
     }
-    if (fecha !== D.hoy) {
+    if (fecha !== D.hoy && !D.dia_reabierto) {
       $('formCard').innerHTML = `<div class="card-title"><span>Registrar pago</span></div>
-        <div class="bloqueado">Los pagos se registran con la fecha de hoy. Este día solo se puede consultar.<br>
+        <div class="bloqueado">Los pagos se registran con la fecha de hoy. Este día solo se puede consultar
+          (solo se registra en un día pasado si el administrador reabre la caja de ese día).<br>
           <button class="link" onclick="cambiarFecha('${D.hoy}')">Ir a hoy →</button></div>`;
       return;
     }
@@ -537,6 +541,8 @@
     const opciones = s => D.conceptos.filter(c => c.signo === s)
       .map(c => `<option value="${c.id}">${esc(c.nombre)}</option>`).join('');
     $('formCard').innerHTML = `<div class="card-title"><span>Registrar pago</span></div>
+      ${fecha !== D.hoy ? `<div class="reabierto">Este día está reabierto (caja N° ${String(D.dia_reabierto.id).padStart(6, '0')}):
+        el pago entra a la caja del <b>${esc(fmtDia(fecha))}</b>, el día en que entró la plata.</div>` : ''}
       <div class="campo"><label for="fConcepto">Concepto<span class="req">*</span></label>
         <select id="fConcepto" onchange="cambiarConcepto()">
           <option value="">— Elige el concepto —</option>
@@ -740,7 +746,8 @@
       toast(faltaDocumento(t), true);
       return;
     }
-    pendiente = { concepto_id: c.id, valor, observacion: obs, ...(b ? { bus_id: b.id } : {}), ...(t ? { pagador: t.clave } : {}) };
+    pendiente = { concepto_id: c.id, valor, observacion: obs, ...(b ? { bus_id: b.id } : {}), ...(t ? { pagador: t.clave } : {}),
+                  ...(fecha !== D.hoy ? { fecha } : {}) };   // día reabierto
     $('confTitulo').textContent = entra(c) ? 'Confirmar entrada a caja' : 'Confirmar salida de caja';
     $('confResumen').innerHTML = `
       <div><span>Concepto</span><span>${esc(c.nombre)}</span></div>
@@ -749,7 +756,8 @@
       ${b && c.tercero === 'PROPIETARIO' ? `<div><span>Propietario</span><span>${esc(b.tp_propietario_nombre || 'Sin documento en la tarjeta')}</span></div>` : ''}
       ${t ? `<div><span>${entra(c) ? 'Paga' : 'Se le paga a'}</span><span>${esc(t.nombre)}<br><small style="font-weight:600">${esc(t.tipo_documento)} ${esc(docConDv(t.documento, t.dv))}</small></span></div>` : ''}
       <div><span>Valor</span><span style="font-size:17px">${fmtMoney(valor)}</span></div>
-      ${obs ? `<div><span>Observación</span><span>${esc(obs)}</span></div>` : ''}`;
+      ${obs ? `<div><span>Observación</span><span>${esc(obs)}</span></div>` : ''}
+      ${pendiente.fecha ? `<div><span>Caja del día</span><span>${esc(fmtDia(pendiente.fecha))} (reabierta)</span></div>` : ''}`;
     $('btnConfirmar').disabled = false;
     abrirModal('modalConfirmar');
   }

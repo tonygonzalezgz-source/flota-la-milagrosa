@@ -159,3 +159,25 @@ Future<bool> confirmar(BuildContext context, String titulo, String mensaje,
   );
   return r ?? false;
 }
+
+/// Aviso de módulo en "solo ver" (la cuenta lo tiene así en Catálogo › Usuarios
+/// y permisos de la web): la pantalla esconde lo que guarda o borra.
+class AvisoSoloVer extends StatelessWidget {
+  final String texto;
+  const AvisoSoloVer(this.texto, {super.key});
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.blue.withValues(alpha: .08),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(children: [
+          const Icon(Icons.visibility_outlined, size: 18, color: AppColors.blue),
+          const SizedBox(width: 8),
+          Expanded(child: Text(texto, style: const TextStyle(fontSize: 13))),
+        ]),
+      );
+}

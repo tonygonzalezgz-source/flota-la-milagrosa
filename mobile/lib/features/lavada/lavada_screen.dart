@@ -33,7 +33,8 @@ class _LavadaScreenState extends ConsumerState<LavadaScreen> {
   Widget build(BuildContext context) {
     final api = ref.read(apiClientProvider);
     final user = ref.watch(sessionProvider).value;
-    final soloLectura = user?.esPropietario ?? false;
+    // El propietario solo consulta, igual que quien tiene el módulo en "solo ver"
+    final soloLectura = (user?.esPropietario ?? false) || (user?.soloVer('lavada') ?? false);
 
     final historial = Column(children: [
       Padding(

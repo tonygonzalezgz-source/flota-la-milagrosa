@@ -115,13 +115,67 @@ def _fecha_iso(v):
     return v if v is None or isinstance(v, str) else v.isoformat()
 
 
+def _dia_bogota(v):
+    """Marca de tiempo de la BD → día 'AAAA-MM-DD' en hora Bogotá (UTC-5 todo el año)."""
+    if v is None:
+        return None
+    if isinstance(v, str):
+        try:
+            v = datetime.fromisoformat(v.strip().replace(" ", "T").replace("Z", "+00:00"))
+        except ValueError:
+            return v[:10]
+    if v.tzinfo is None:
+        v = v.replace(tzinfo=timezone.utc)
+    return (v.astimezone(timezone.utc) - timedelta(hours=5)).date().isoformat()
+
+
 def _fila(r):
     d = dict(r)
     d["fecha"] = _fecha_iso(d.get("fecha"))
+    # Día de la caja: el día en que se recibió la plata (las de la base demo no lo traen)
+    d["caja_fecha"] = _fecha_iso(d.get("caja_fecha")) or _dia_bogota(d.get("created_at"))
     for k in ("created_at", "anulado_at"):
         if k in d:
             d[k] = _hora_utc(d[k])
     return d
+
+
+def dia_de_caja(conn, usuario_id, bus_id, fecha):
+    """Día de la caja en que entra una liquidación nueva: hoy, el día en que se recibe la
+    plata (pedido del usuario 2026-11-05: no el día de la tarjeta). Si reemplaza a una
+    anulada del mismo recaudador (mismo bus y día de tarjeta) cuyo día de caja sigue abierto
+    —reabierto para corregirlo, o aún sin cerrar—, entra a ese día: esa plata se recibió
+    entonces, y así el día reabierto se vuelve a cerrar con la corrección."""
+    hoy = hoy_bogota()
+    fila = conn.execute(
+        """SELECT caja_fecha, created_at FROM recaudos
+            WHERE bus_id = ? AND fecha = ? AND usuario_id = ? AND anulado_at IS NOT NULL
+         ORDER BY id DESC LIMIT 1""",
+        (bus_id, fecha, usuario_id),
+    ).fetchone()
+    if not fila:
+        return hoy
+    f = dict(fila)
+    dia = _fecha_iso(f["caja_fecha"]) or _dia_bogota(f["created_at"])
+    if not dia or dia >= hoy:
+        return hoy
+    ultimo = conn.execute(
+        "SELECT reabierto_at FROM recaudo_cierres WHERE usuario_id = ? AND fecha = ? ORDER BY id DESC LIMIT 1",
+        (usuario_id, dia),
+    ).fetchone()
+    if ultimo is not None:
+        return dia if dict(ultimo)["reabierto_at"] else hoy
+    # Ese día nunca se cerró: sigue abierto solo si todavía tiene movimientos sin cerrar.
+    pendiente = conn.execute(
+        """SELECT 1 FROM recaudos WHERE usuario_id = ? AND caja_fecha = ?
+              AND anulado_at IS NULL AND cierre_id IS NULL LIMIT 1""",
+        (usuario_id, dia),
+    ).fetchone() or conn.execute(
+        """SELECT 1 FROM recaudo_pagos WHERE usuario_id = ? AND fecha = ?
+              AND anulado_at IS NULL AND cierre_id IS NULL LIMIT 1""",
+        (usuario_id, dia),
+    ).fetchone()
+    return dia if pendiente else hoy
 
 
 def _miles(n):
@@ -664,15 +718,16 @@ def liquidar():
     uid = getattr(request, "jwt_user_id", None)
 
     try:
+        caja_fecha = dia_de_caja(conn, uid, bus_id, fecha)
         cur = conn.execute(
             """INSERT INTO recaudos
                    (empresa_id, fecha, bus_id, registradora_inicio, registradora_fin, pasajeros,
                     tarifa, producido, total_gastos, neto, recaudado, diferencia, observacion,
-                    usuario_id)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    usuario_id, caja_fecha)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (EMPRESA_POR_DEFECTO, fecha, bus_id, reg_inicio, reg_fin, pasajeros, tarifa,
              producido, total_gastos, neto, recaudado, diferencia,
-             _texto(data.get("observacion")), uid),
+             _texto(data.get("observacion")), uid, caja_fecha),
         )
         recaudo_id = cur.lastrowid
         for t in tramos:

@@ -137,15 +137,28 @@
       .btns { justify-content:flex-start; }
       .modal-bg { align-items:flex-start; padding-top:72px; overflow:auto; }
     }
+    /* Días de trabajo por cerrar (cada uno tiene su cierre) */
+    .dias { display:flex; gap:8px; flex-wrap:wrap; margin:2px 0 14px; }
+    .dia-chip { border:1.5px solid var(--border2); background:var(--white); border-radius:10px; padding:8px 12px;
+      text-align:left; cursor:pointer; font:inherit; color:var(--txt); display:flex; flex-direction:column; gap:3px; }
+    .dia-chip b { font-size:13.5px; }
+    /* Solo la primera letra en mayúscula ("lun, 3 nov" → "Lun, 3 nov") */
+    .cap { display:inline-block; }
+    .dia-chip b::first-letter, .cap::first-letter { text-transform:uppercase; }
+    .dia-chip small { font-size:11.5px; color:var(--txt3); }
+    .dia-chip.on { border-color:var(--primary); background:rgba(99,102,241,.08); }
+    .saldo-acum { font-size:12.5px; font-weight:700; }
+    .aviso.warn { background:#fffbeb; border-color:#fcd34d; color:#92400e; }
     .nota-solo-ver { margin-top: 14px; padding: 10px 12px; border-radius: 8px; background: #f3f4f6; color: #555; font-size: 13px; }
 </style>
 </head>
 <body>
   <div class="page-header">
     <div class="page-title">Cierre de caja</div>
-    <div class="page-sub">Cada recaudador cierra lo que recibió desde su último cierre: lo recaudado de los buses más las entradas y menos las
-      salidas de los pagos diarios. Escribe el efectivo que entregas a la transportadora: el sistema lo compara con lo que debe haber en caja.
-      Al cerrar, esos movimientos quedan bloqueados; solo el administrador puede reabrir una caja.</div>
+    <div class="page-sub">Cada día de trabajo tiene su cierre: lo que el recaudador recibió ese día (lo recaudado de los buses más las entradas y
+      menos las salidas de los pagos diarios), sin importar de qué día es la tarjeta. Escribe el efectivo que entregas a la transportadora: el
+      sistema lo compara con lo que debe haber y lleva el saldo acumulado de faltantes y sobrantes. Al cerrar, esos movimientos quedan
+      bloqueados; solo el administrador puede reabrir un día.</div>
   </div>
 
   <div class="cajas" id="cajasAbiertas" hidden></div>
@@ -155,8 +168,8 @@
   <div class="card">
     <div class="card-title"><span>Cierres anteriores</span></div>
     <div class="filtros">
-      <div class="campo"><label>Desde</label><input type="date" id="fDesde" /></div>
-      <div class="campo"><label>Hasta</label><input type="date" id="fHasta" /></div>
+      <div class="campo"><label>Día de trabajo desde</label><input type="date" id="fDesde" /></div>
+      <div class="campo"><label>hasta</label><input type="date" id="fHasta" /></div>
       <div class="campo" id="campoRecaudador" hidden><label>Recaudador</label>
         <select id="fRecaudador" onchange="renderCierres()"><option value="">Todos</option></select></div>
       <button class="btn" onclick="cargarCierres()">Buscar</button>
@@ -170,7 +183,7 @@
     <div class="page-sub" style="margin:-4px 0 12px">Un comprobante por día con los cierres de todos los recaudadores, en el formato que importa el programa contable.
       Las cuentas salen de Catálogo › Conceptos de recaudo; el NIT, del propietario según la tarjeta de propiedad (Catálogo › Buses) o del tercero (Catálogo › Terceros).</div>
     <div class="filtros">
-      <div class="campo"><label>Día del cierre</label><input type="date" id="fPlano" /></div>
+      <div class="campo"><label>Día de trabajo</label><input type="date" id="fPlano" /></div>
       <button class="btn" onclick="revisarPlano()">Revisar</button>
     </div>
     <div id="resPlano"></div>
@@ -180,7 +193,7 @@
   <div class="modal-bg hidden" id="modalCerrar">
     <div class="modal">
       <h3 id="cerrarTitulo">Cerrar caja</h3>
-      <div class="modal-sub">Revisa los valores. <b>Al cerrar, estas liquidaciones y pagos quedan bloqueados</b> y no se pueden anular; solo el administrador puede reabrir la caja.</div>
+      <div class="modal-sub">Revisa los valores. <b>Al cerrar, estas liquidaciones y pagos quedan bloqueados</b> y no se pueden anular; solo el administrador puede reabrir el día.</div>
       <div class="resumen" id="cerrarResumen"></div>
       <div class="modal-actions">
         <button class="btn" onclick="cerrarModal('modalCerrar')">Revisar</button>
@@ -258,6 +271,20 @@
     return new Date(iso + 'T12:00:00Z').toLocaleDateString('es-CO', { timeZone: 'UTC', day: 'numeric', month: 'short' });
   }
   const numCierre = id => 'N° ' + String(id).padStart(6, '0');
+  const nPagos = n => `${n} ${n === 1 ? 'pago diario' : 'pagos diarios'}`;
+  /* "lun, 3 nov" y "lunes, 3 de noviembre de 2026" de un día AAAA-MM-DD */
+  function fmtDiaLargo(iso) {
+    return new Date(iso + 'T12:00:00Z').toLocaleDateString('es-CO', { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' });
+  }
+  function fmtDiaCompleto(iso) {
+    return new Date(iso + 'T12:00:00Z').toLocaleDateString('es-CO', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  }
+  /* Saldo acumulado de caja (faltantes y sobrantes arrastrados) */
+  function textoSaldo(s) {
+    if (s < 0) return 'Faltante ' + fmtMoney(-s);
+    if (s > 0) return 'Sobrante ' + fmtMoney(s);
+    return 'A paz y salvo';
+  }
   function textoDif(d, deCaja = false) {
     if (d < 0) return 'Faltante ' + fmtMoney(-d);
     if (d > 0) return 'Sobrante ' + fmtMoney(d);
@@ -268,6 +295,7 @@
   /* ── Estado ── */
   let caja = null;          // respuesta de /api/recaudo/caja
   let usuarioCaja = null;   // de quién es la caja que se ve (el admin puede cambiarla)
+  let diaSel = null;        // día de trabajo de la caja abierta que se está viendo
   let cierres = [];
   let cierreAReabrir = null;
 
@@ -330,28 +358,50 @@
     cont.innerHTML = `<span class="cajas-lbl">Cajas abiertas</span>` + lista.map(c => `
       <button class="caja-chip ${c.usuario_id === caja.usuario.id ? 'on' : ''}" onclick="verCajaDe(${c.usuario_id})">
         ${esc(c.usuario_id === yo ? 'Mi caja' : c.nombre || 'Usuario #' + c.usuario_id)}
-        <small>${c.liquidaciones} liq.${c.pagos ? ` · ${c.pagos} pagos` : ''} · ${fmtMoney(c.esperado ?? c.recaudado)}</small></button>`).join('');
+        <small>${c.dias > 1 ? `${c.dias} días · ` : ''}${c.liquidaciones} liq.${c.pagos ? ` · ${c.pagos} ${c.pagos === 1 ? 'pago' : 'pagos'}` : ''} · ${fmtMoney(c.esperado ?? c.recaudado)}</small></button>`).join('');
   }
-  function verCajaDe(uid) { usuarioCaja = uid === CU.id ? null : uid; cargarCaja(); }
+  function verCajaDe(uid) { usuarioCaja = uid === CU.id ? null : uid; diaSel = null; cargarCaja(); }
+  function diaActual() { return (caja?.dias || []).find(d => d.fecha === diaSel) || null; }
+  function verDia(fecha) { diaSel = fecha; renderCaja(); }
 
+  /* Caja abierta separada por día de trabajo (el día en que se recibió la plata): cada día se
+     cierra aparte, y arriba se ve el saldo acumulado de faltantes y sobrantes de los días cerrados. */
   function renderCaja() {
     const card = document.getElementById('cardCaja');
-    const t = caja.totales, liqs = caja.liquidaciones, pagos = caja.pagos || [];
     const propia = caja.usuario.id === CU.id;
-    const desde = [...liqs, ...pagos].map(x => x.created_at).filter(Boolean).sort()[0];
+    const dias = caja.dias || [];
+    const acum = caja.acumulado || 0;
     const titulo = `<div class="card-title"><span>Caja abierta ${propia ? '' : 'de'} <b>${propia ? '' : esc(caja.usuario.nombre || '')}</b></span>
-      <span>${desde ? `desde ${fmtHora(desde)}` : ''}</span></div>`;
-    if (!liqs.length && !pagos.length) {
+      <span class="saldo-acum c-${clsDif(acum)}" title="Suma de las diferencias de caja de los días ya cerrados">Saldo acumulado: ${textoSaldo(acum)}</span></div>`;
+    if (!dias.length) {
       card.innerHTML = titulo + `<div class="vacio">No hay liquidaciones ni pagos diarios pendientes por cerrar. La caja está al día.</div>`;
       return;
     }
+    if (!dias.some(d => d.fecha === diaSel)) diaSel = dias[0].fecha;   // el más viejo primero
+    const dia = diaActual();
+    const t = dia.totales, liqs = dia.liquidaciones, pagos = dia.pagos || [];
+    const hoy = hoyBogota();
+    const chips = `<div class="dias">${dias.map(x => `
+      <button class="dia-chip ${x.fecha === diaSel ? 'on' : ''}" onclick="verDia('${x.fecha}')">
+        <b>${fmtDiaLargo(x.fecha)}${x.fecha === hoy ? ' · hoy' : ''}</b>
+        <small>${x.totales.liquidaciones} liq.${x.totales.pagos ? ` · ${x.totales.pagos} ${x.totales.pagos === 1 ? 'pago' : 'pagos'}` : ''} · debe haber ${fmtMoney(x.totales.esperado)}</small>
+        ${x.reabierto ? `<span class="pill warn">Reabierto · ${numCierre(x.reabierto.id)}</span>`
+          : x.cerrado_antes ? '<span class="pill off">2.º cierre del día</span>' : ''}
+      </button>`).join('')}</div>`;
+    const avisos = [
+      dias.length > 1 ? `<div class="aviso">Hay ${dias.length} días sin cerrar. Cada día de trabajo se cierra aparte: elige el día arriba.</div>` : '',
+      dia.reabierto ? `<div class="aviso warn">Este día se reabrió (caja ${numCierre(dia.reabierto.id)})${dia.reabierto.motivo_reapertura ? ': ' + esc(dia.reabierto.motivo_reapertura) : ''}.
+        Ciérralo de nuevo aquí: el efectivo y la planilla del cierre anterior ya están escritos; cámbialos si hace falta.
+        Un pago diario corregido se registra en Pagos diarios con la fecha de este día.</div>` : '',
+      dia.cerrado_antes ? `<div class="aviso">Este día ya tiene un cierre. Lo que se recibió después se cierra aparte, como segundo cierre del mismo día.</div>` : '',
+    ].join('');
     // Por número de bus de menor a mayor (pedido del usuario 2026-11-03, solo en esta tabla);
     // el mismo bus, por día de la tarjeta y hora de liquidación.
     const porBus = (a, b) => String(a.bus_numero).localeCompare(String(b.bus_numero), 'es', { numeric: true })
       || String(a.fecha).localeCompare(String(b.fecha)) || (a.created_at || '').localeCompare(b.created_at || '');
     const filas = [...liqs].sort(porBus).map(l => `<tr>
         <td data-label="Liquidada">${fmtHora(l.created_at)}</td>
-        <td data-label="Día">${fmtDia(l.fecha)}</td>
+        <td data-label="Tarjeta">${fmtDia(l.fecha)}</td>
         <td data-label="Bus"><span><b>${l.bus_numero}</b> <span class="sub">${esc(l.bus_placa || '')}</span></span></td>
         <td data-label="Conductor">${l.conductores.map(c => esc(c.conductor_nombre)).join(', ')}</td>
         <td data-label="Producido" class="num">${fmtMoney(l.producido)}</td>
@@ -367,7 +417,7 @@
         <td data-label="Entrada" class="num c-ok">${p.signo === 2 ? fmtMoney(p.valor) : ''}</td>
         <td data-label="Salida" class="num c-bad">${p.signo === 1 ? fmtMoney(p.valor) : ''}</td>
       </tr>`).join('');
-    card.innerHTML = titulo + `
+    card.innerHTML = titulo + chips + avisos + `
       ${!propia ? `<div class="aviso">Estás viendo la caja de ${esc(caja.usuario.nombre || '')}. Si la cierras, el cierre queda a su nombre y el historial registra que lo hiciste tú.</div>` : ''}
       <div class="kpis">
         <div class="kpi"><div class="kpi-label">Liquidaciones</div><div class="kpi-val">${t.liquidaciones}</div><div class="kpi-sub">${fmtNum(t.pasajeros)} pasajeros</div></div>
@@ -381,7 +431,7 @@
       </div>
       ${t.esperado < 0 ? `<div class="aviso">Las salidas superan lo recibido: en la caja deberían faltar ${fmtMoney(-t.esperado)} que se pagaron con plata de otro lado.</div>` : ''}
       ${liqs.length ? `<div class="tabla-wrap"><table class="resp">
-        <thead><tr><th>Liquidada</th><th>Día</th><th>Bus</th><th>Conductor</th><th class="num">Producido</th><th class="num">Gastos</th><th class="num">Recaudado</th><th class="num">Resultado</th></tr></thead>
+        <thead><tr><th>Liquidada</th><th>Tarjeta</th><th>Bus</th><th>Conductor</th><th class="num">Producido</th><th class="num">Gastos</th><th class="num">Recaudado</th><th class="num">Resultado</th></tr></thead>
         <tbody>${filas}
           <tr class="total"><td data-label="">Total</td><td></td><td></td><td></td>
             <td data-label="Producido" class="num">${fmtMoney(t.producido)}</td><td data-label="Gastos" class="num">${fmtMoney(t.total_gastos)}</td>
@@ -397,26 +447,35 @@
         </tbody></table></div>` : ''}
       <div class="cierre-form"${SOLO_VER ? ' style="display:none"' : ''}>
         <div class="campo"><label>Efectivo entregado a la transportadora<span class="req">*</span></label>
-          <input id="fEfectivo" inputmode="numeric" placeholder="$0" oninput="formatearDinero(this); recalcularCaja()" /></div>
-        <div class="campo"><label>Diferencia de caja</label><div class="calc" id="cDifCaja">—</div></div>
+          <input id="fEfectivo" inputmode="numeric" placeholder="$0" oninput="formatearDinero(this); recalcularCaja()"
+            value="${dia.reabierto ? fmtNum(dia.reabierto.efectivo) : ''}" /></div>
+        <div class="campo"><label>Diferencia del día</label><div class="calc" id="cDifCaja">—</div></div>
+        <div class="campo"><label>Viene de días anteriores</label>
+          <div class="calc ${clsDif(dia.acumulado_antes)}">${textoSaldo(dia.acumulado_antes)}</div></div>
+        <div class="campo"><label>Saldo acumulado que sigue</label><div class="calc" id="cAcum">—</div></div>
         <div class="campo"><label>N° planilla / precinto <span class="sub">(opcional)</span></label>
-          <input id="fPlanilla" maxlength="80" placeholder="De la transportadora" /></div>
+          <input id="fPlanilla" maxlength="80" placeholder="De la transportadora" value="${esc(dia.reabierto?.planilla || '')}" /></div>
         <div class="campo ancho"><label>Observación <span class="sub">(opcional)</span></label>
           <input id="fObs" maxlength="500" placeholder="Opcional" /></div>
       </div>
       ${SOLO_VER
         ? '<div class="nota-solo-ver">Tu permiso en este módulo es «solo ver»: puedes consultar la caja, pero no cerrarla.</div>'
-        : '<div class="acciones"><button class="btn-primary" onclick="cerrarCaja()">Cerrar caja</button></div>'}`;
+        : `<div class="acciones"><button class="btn-primary" onclick="cerrarCaja()">Cerrar el día ${esc(fmtDiaLargo(dia.fecha))}</button></div>`}`;
+    if (dia.reabierto && !SOLO_VER) recalcularCaja();
   }
 
+  /* Diferencia del día (efectivo − debe haber) y el saldo acumulado que queda con ella */
   function recalcularCaja() {
-    const el = document.getElementById('cDifCaja');
+    const dia = diaActual();
+    const el = document.getElementById('cDifCaja'), ac = document.getElementById('cAcum');
     const ef = leerEntero(document.getElementById('fEfectivo').value);
     document.getElementById('fEfectivo').classList.remove('err');
-    if (ef == null) { el.className = 'calc'; el.textContent = '—'; return; }
-    const d = ef - caja.totales.esperado;
+    if (ef == null || !dia) { el.className = ac.className = 'calc'; el.textContent = ac.textContent = '—'; return; }
+    const d = ef - dia.totales.esperado, sigue = dia.acumulado_antes + d;
     el.className = 'calc ' + clsDif(d);
     el.textContent = `${fmtMoney(d)} · ${textoDif(d, true)}`;
+    ac.className = 'calc ' + clsDif(sigue);
+    ac.textContent = textoSaldo(sigue);
   }
 
   function cerrarCaja() {
@@ -426,20 +485,26 @@
       document.getElementById('fEfectivo').focus();
       return toast('Falta llenar: el efectivo entregado', true);
     }
-    const t = caja.totales, d = ef - t.esperado;
+    const dia = diaActual();
+    const t = dia.totales, d = ef - t.esperado, sigue = dia.acumulado_antes + d;
     const planilla = document.getElementById('fPlanilla').value.trim();
-    document.getElementById('cerrarTitulo').textContent = `Cerrar caja${caja.usuario.id === CU.id ? '' : ' de ' + (caja.usuario.nombre || '')}`;
+    document.getElementById('cerrarTitulo').textContent =
+      `Cerrar el día ${fmtDiaLargo(dia.fecha)}${caja.usuario.id === CU.id ? '' : ' de ' + (caja.usuario.nombre || '')}`;
     document.getElementById('cerrarResumen').innerHTML = `
+      <div><span>Día de trabajo</span><span class="cap">${fmtDiaCompleto(dia.fecha)}</span></div>
+      ${dia.reabierto ? `<div><span>Reemplaza la caja reabierta</span><span>${numCierre(dia.reabierto.id)}</span></div>` : ''}
       <div><span>Liquidaciones</span><span>${t.liquidaciones}</span></div>
       ${t.liquidaciones ? `<div><span>Producido</span><span>${fmtMoney(t.producido)}</span></div>
       <div><span>Gastos</span><span>${fmtMoney(t.total_gastos)}</span></div>` : ''}
       ${t.pagos ? `<div><span>Recaudado de los buses</span><span>${fmtMoney(t.recaudado)}</span></div>
-      <div><span>Otras entradas (${t.pagos} pagos diarios)</span><span>${fmtMoney(t.ingresos)}</span></div>
+      <div><span>Otras entradas (${nPagos(t.pagos)})</span><span>${fmtMoney(t.ingresos)}</span></div>
       <div><span>Salidas</span><span>${fmtMoney(t.egresos)}</span></div>
       <div><span>Debe haber en caja</span><span>${fmtMoney(t.esperado)}</span></div>`
         : `<div><span>Recaudado (debe haber en caja)</span><span>${fmtMoney(t.recaudado)}</span></div>`}
       <div><span>Efectivo entregado</span><span>${fmtMoney(ef)}</span></div>
-      <div><span>Diferencia de caja</span><span class="c-${clsDif(d)}">${fmtMoney(d)} · ${textoDif(d, true)}</span></div>
+      <div><span>Diferencia del día</span><span class="c-${clsDif(d)}">${fmtMoney(d)} · ${textoDif(d, true)}</span></div>
+      <div><span>Viene de días anteriores</span><span class="c-${clsDif(dia.acumulado_antes)}">${textoSaldo(dia.acumulado_antes)}</span></div>
+      <div><span>Saldo acumulado que sigue</span><span class="c-${clsDif(sigue)}">${textoSaldo(sigue)}</span></div>
       ${planilla ? `<div><span>Planilla / precinto</span><span>${esc(planilla)}</span></div>` : ''}`;
     document.getElementById('btnConfirmarCierre').disabled = false;
     abrirModal('modalCerrar');
@@ -448,21 +513,24 @@
   async function confirmarCierre() {
     const btn = document.getElementById('btnConfirmarCierre');
     btn.disabled = true;
+    const dia = diaActual();
     const body = {
+      fecha: dia.fecha,
       efectivo: leerEntero(document.getElementById('fEfectivo').value),
       planilla: document.getElementById('fPlanilla').value.trim(),
       observacion: document.getElementById('fObs').value.trim(),
-      esperado: caja.totales.esperado,   // si entró o se anuló algo mientras tanto, el servidor avisa
+      esperado: dia.totales.esperado,   // si entró o se anuló algo mientras tanto, el servidor avisa
       ...(usuarioCaja ? { usuario_id: usuarioCaja } : {}),
     };
     try {
       const r = await apiFetch('/api/recaudo/caja/cerrar', { method: 'POST', body: JSON.stringify(body) });
       cerrarModal('modalCerrar');
       const c = r.cierre;
-      document.getElementById('hechoTitulo').textContent = `Caja cerrada · ${numCierre(c.id)}`;
-      document.getElementById('hechoSub').innerHTML = `${c.liquidaciones} ${c.liquidaciones === 1 ? 'liquidación' : 'liquidaciones'}${c.pagos ? ` y ${c.pagos} pagos diarios` : ''} ·
+      document.getElementById('hechoTitulo').textContent = `Día ${fmtDiaLargo(c.fecha)} cerrado · ${numCierre(c.id)}`;
+      document.getElementById('hechoSub').innerHTML = `${c.liquidaciones} ${c.liquidaciones === 1 ? 'liquidación' : 'liquidaciones'}${c.pagos ? ` y ${nPagos(c.pagos)}` : ''} ·
         debe haber ${fmtMoney(c.esperado)} · efectivo ${fmtMoney(c.efectivo)} ·
-        <b class="c-${clsDif(c.diferencia_caja)}">${textoDif(c.diferencia_caja, true)}</b>.<br>Descarga el reporte para entregarlo con el dinero.`;
+        <b class="c-${clsDif(c.diferencia_caja)}">${textoDif(c.diferencia_caja, true)}</b> ·
+        saldo acumulado: <b class="c-${clsDif(c.acumulado)}">${textoSaldo(c.acumulado)}</b>.<br>Descarga el reporte para entregarlo con el dinero.`;
       document.getElementById('hechoPdf').onclick = () => exportar(c.id, 'pdf');
       document.getElementById('hechoExcel').onclick = () => exportar(c.id, 'excel');
       abrirModal('modalHecho');
@@ -506,11 +574,13 @@
     const filtro = document.getElementById('fRecaudador').value;
     const lista = cierres.filter(c => !filtro || String(c.usuario_id) === filtro);
     const cont = document.getElementById('listaCierres');
-    if (!lista.length) { cont.innerHTML = `<div class="vacio">No hay cierres en esas fechas.</div>`; return; }
+    if (!lista.length) { cont.innerHTML = `<div class="vacio">No hay cierres de esos días de trabajo.</div>`; return; }
     cont.innerHTML = `<div class="tabla-wrap"><table class="resp">
-      <thead><tr><th>Cierre</th><th>Cerrado</th>${ES_ADMIN ? '<th>Recaudador</th>' : ''}<th class="num">Liquidaciones</th>
-        <th class="num">Recaudado</th><th class="num">Pagos diarios</th><th class="num">Debe haber</th><th class="num">Efectivo</th><th class="num">Diferencia de caja</th><th>Estado</th><th></th></tr></thead>
+      <thead><tr><th>Día de trabajo</th><th>Cierre</th><th>Cerrado</th>${ES_ADMIN ? '<th>Recaudador</th>' : ''}<th class="num">Liquidaciones</th>
+        <th class="num">Recaudado</th><th class="num">Pagos diarios</th><th class="num">Debe haber</th><th class="num">Efectivo</th>
+        <th class="num">Diferencia del día</th><th class="num">Saldo acumulado</th><th>Estado</th><th></th></tr></thead>
       <tbody>${lista.map(c => `<tr>
+        <td data-label="Día de trabajo"><b class="cap">${c.fecha ? fmtDiaLargo(c.fecha) : '—'}</b></td>
         <td data-label="Cierre"><div><b>${numCierre(c.id)}</b>${c.planilla ? `<div class="sub">Planilla ${esc(c.planilla)}</div>` : ''}</div></td>
         <td data-label="Cerrado"><div>${fmtHora(c.cerrado_at)}${c.cerrado_por && c.cerrado_por !== c.usuario_id ? `<div class="sub">por ${esc(c.cerrado_por_nombre || '')}</div>` : ''}</div></td>
         ${ES_ADMIN ? `<td data-label="Recaudador">${esc(c.usuario_nombre || '')}</td>` : ''}
@@ -519,7 +589,10 @@
         <td data-label="Pagos diarios" class="num">${c.pagos ? `<span class="c-ok">+${fmtMoney(c.ingresos)}</span> <span class="c-bad">−${fmtMoney(c.egresos)}</span>` : '<span class="sub">—</span>'}</td>
         <td data-label="Debe haber" class="num">${fmtMoney(c.esperado)}</td>
         <td data-label="Efectivo" class="num">${fmtMoney(c.efectivo)}</td>
-        <td data-label="Diferencia de caja" class="num"><span class="c-${clsDif(c.diferencia_caja)}">${textoDif(c.diferencia_caja, true)}</span></td>
+        <td data-label="Diferencia del día" class="num"><span class="c-${clsDif(c.diferencia_caja)}">${textoDif(c.diferencia_caja, true)}</span></td>
+        <td data-label="Saldo acumulado" class="num">${c.acumulado == null
+          ? '<span class="sub" title="Un cierre reabierto no cuenta en el acumulado">no cuenta</span>'
+          : `<span class="c-${clsDif(c.acumulado)}">${textoSaldo(c.acumulado)}</span>`}</td>
         <td data-label="Estado"><div>${c.reabierto_at
           ? `<span class="pill off" title="${esc(c.motivo_reapertura || '')}">Reabierto</span><div class="sub">${fmtHora(c.reabierto_at)}${c.reabierto_por_nombre ? ' · ' + esc(c.reabierto_por_nombre) : ''}</div>`
           : '<span class="pill on">Cerrado</span>'}</div></td>
@@ -535,9 +608,10 @@
   function abrirReabrir(id) {
     const c = cierres.find(x => x.id === id);
     cierreAReabrir = id;
-    document.getElementById('reabrirSub').innerHTML = `${numCierre(id)} de ${esc(c.usuario_nombre || '')} · ${c.liquidaciones} liquidaciones${c.pagos ? ` y ${c.pagos} pagos diarios` : ''} ·
-      debe haber ${fmtMoney(c.esperado)}.<br>El cierre queda en el historial como reabierto y sus liquidaciones y pagos vuelven a la caja abierta
-      del recaudador (ahí se pueden anular y luego cerrar de nuevo).`;
+    document.getElementById('reabrirSub').innerHTML = `${numCierre(id)} del día ${c.fecha ? fmtDiaLargo(c.fecha) : ''} de ${esc(c.usuario_nombre || '')} ·
+      ${c.liquidaciones} liquidaciones${c.pagos ? ` y ${nPagos(c.pagos)}` : ''} · debe haber ${fmtMoney(c.esperado)}.<br>El cierre queda en el
+      historial como reabierto y sus liquidaciones y pagos vuelven a la caja abierta del recaudador, en ese mismo día: ahí se pueden anular,
+      volver a liquidar (o registrar el pago diario correcto en Pagos diarios, con la fecha de ese día) y cerrar de nuevo el día.`;
     document.getElementById('reabrirMotivo').value = '';
     document.getElementById('btnReabrir').disabled = false;
     abrirModal('modalReabrir');
@@ -599,6 +673,7 @@
     return {
       titulo: `Cierre de caja ${numCierre(c.id)}`,
       lineas: [
+        c.fecha ? `Día de trabajo: ${fmtDiaCompleto(c.fecha)}` : '',
         `Recaudador: ${c.usuario_nombre || ''}${c.cerrado_por && c.cerrado_por !== c.usuario_id ? ` (cerrada por ${c.cerrado_por_nombre || ''})` : ''}`,
         `Cerrado: ${fmtHora(c.cerrado_at)}${c.desde_at ? ` · ${conPagos ? 'Movimientos' : 'Liquidaciones'} desde ${fmtHora(c.desde_at)} hasta ${fmtHora(c.hasta_at)}` : ''}`,
         c.planilla ? `Planilla / precinto de la transportadora: ${c.planilla}` : '',
@@ -610,13 +685,14 @@
         ['Por entregar', fmtMoney(c.neto)],
         ...(conPagos
           ? [['Recaudado de los buses', fmtMoney(c.recaudado)],
-             [`Otras entradas (${c.pagos} pagos diarios)`, fmtMoney(c.ingresos)], ['Salidas (pagos diarios)', fmtMoney(c.egresos)],
+             [`Otras entradas (${nPagos(c.pagos)})`, fmtMoney(c.ingresos)], ['Salidas (pagos diarios)', fmtMoney(c.egresos)],
              ['Debe haber en caja', fmtMoney(c.esperado)]]
           : [['Recaudado (debe haber en caja)', fmtMoney(c.recaudado)]]),
         ['Faltantes / sobrantes de conductores', textoDif(c.diferencia_conductores)],
-        ['Efectivo entregado', fmtMoney(c.efectivo)], ['Diferencia de caja', textoDif(c.diferencia_caja, true)],
+        ['Efectivo entregado', fmtMoney(c.efectivo)], ['Diferencia de caja del día', textoDif(c.diferencia_caja, true)],
+        ['Saldo acumulado (faltantes y sobrantes)', c.acumulado == null ? 'No cuenta (cierre reabierto)' : textoSaldo(c.acumulado)],
       ],
-      cabecera: ['Liquidada', 'Día', 'Bus', 'Conductor(es)', 'Pasajeros', 'Producido', 'Gastos', 'Recaudado', 'Resultado'],
+      cabecera: ['Liquidada', 'Tarjeta', 'Bus', 'Conductor(es)', 'Pasajeros', 'Producido', 'Gastos', 'Recaudado', 'Resultado'],
       filas: liqs.map(l => [fmtHora(l.created_at), l.fecha, `${l.bus_numero} ${l.bus_placa || ''}`.trim(),
         l.conductores.map(x => x.conductor_nombre).join(', '), fmtNum(l.pasajeros), fmtMoney(l.producido),
         fmtMoney(l.total_gastos), fmtMoney(l.recaudado), textoDif(l.diferencia)]),
@@ -719,7 +795,7 @@
     }
     ws.mergeCells('B1:I1');
     Object.assign(ws.getCell('B1'), { value: d.titulo.toUpperCase(), font: { bold: true, size: 15, color: { argb: AZUL } }, alignment: { horizontal: 'right', vertical: 'middle' } });
-    d.lineas.slice(0, 3).forEach((l, i) => {
+    d.lineas.slice(0, 4).forEach((l, i) => {   // filas 2 a 5 (la 6 empieza el resumen)
       ws.mergeCells(`B${i + 2}:I${i + 2}`);
       Object.assign(ws.getCell(`B${i + 2}`), { value: l, font: { size: 10, color: { argb: l.startsWith('REABIERTO') ? 'FFB91C1C' : 'FF555566' } }, alignment: { horizontal: 'right', vertical: 'middle' } });
     });
@@ -770,7 +846,7 @@
       plano = await apiFetch(`/api/recaudo/plano?fecha=${fecha}`);
     } catch (e) { cont.innerHTML = `<div class="vacio">${esc(e.message)}</div>`; return; }
     if (!plano.filas.length) {
-      cont.innerHTML = `<div class="vacio">No hay cierres de caja ese día (o los que hubo están reabiertos).</div>`;
+      cont.innerHTML = `<div class="vacio">No hay cierres de caja de ese día de trabajo (o los que hubo están reabiertos).</div>`;
       return;
     }
     const partes = [`${plano.lineas_recaudo} de recaudo`, plano.lineas_pagos ? `${plano.lineas_pagos} de pagos` : '',

@@ -69,6 +69,24 @@ void main() {
       expect(u('Propietario', true).debeAceptarTratamiento, isFalse);
       expect(u('Despachador', false).debeAceptarTratamiento, isFalse);
     });
+
+    test('módulos en "solo ver" (permisos por usuario)', () {
+      final u = Usuario.fromJson({
+        'id': 7, 'username': 'x', 'nombre': 'X', 'rol': 'Recaudador', 'iniciales': 'X',
+        'allowedViews': ['despacho', 'chequeo', 'recaudo-diario'],
+        'soloLectura': ['despacho', 'chequeo'], 'bus_ids': [],
+      });
+      expect(u.soloVer('despacho'), isTrue);
+      expect(u.soloVer('recaudo-diario'), isFalse);
+      // Se conserva al guardar la sesión en el celular
+      expect(Usuario.fromJson(u.toJson()).soloLectura, ['despacho', 'chequeo']);
+      // Una sesión guardada antes de este cambio no trae la clave: nada es "solo ver"
+      final viejo = Usuario.fromJson({
+        'id': 1, 'username': 'y', 'nombre': 'Y', 'rol': 'Despachador', 'iniciales': 'Y',
+        'allowedViews': ['despacho'], 'bus_ids': [],
+      });
+      expect(viejo.soloVer('despacho'), isFalse);
+    });
   });
 
   test('alistamiento tiene los 30 ítems oficiales', () {

@@ -14,20 +14,19 @@ Archivo plano (un comprobante por día, con los cierres de todos los recaudadore
 """
 import json
 import re
-from datetime import date, datetime, timedelta, timezone
+from datetime import date
 
 from flask import jsonify, request
 
 import auditoria
 
 from . import bp
-from .comun import EMPRESA_POR_DEFECTO, ROLES_RECAUDO, db, es_pg, rol
+from .comun import EMPRESA_POR_DEFECTO, ROLES_RECAUDO, db, rol
 from .endpoints import _cargar, _entero, _Rechazo, _texto
 from .pagos import cargar_pagos
 
 ADMIN = ("Administrador",)
 _RE_FECHA = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-_BOGOTA = timedelta(hours=5)
 _LARGO_DESCRIPCION = 50   # DESCRIPCION de las líneas de pagos (ajustable con la contadora)
 TERCEROS = {"PROPIETARIO": "Propietario del vehículo", "PAGADOR": "Pagador",
             "NINGUNO": "Ninguno", "FIJO": "NIT fijo"}
@@ -232,11 +231,6 @@ def editar_config_contable():
 #  Archivo plano del día (comprobante contable)
 # ──────────────────────────────────────────
 
-def _limite_utc(fecha_iso, dias_extra=0):
-    d = date.fromisoformat(fecha_iso) + timedelta(days=dias_extra)
-    dt = datetime(d.year, d.month, d.day, tzinfo=timezone.utc) + _BOGOTA
-    return dt if es_pg() else dt.strftime("%Y-%m-%dT%H:%M:%SZ")
-
 
 def _nit(concepto, documento_propietario=None):
     if concepto["tercero"] == "FIJO":
@@ -249,7 +243,7 @@ def _nit(concepto, documento_propietario=None):
 @bp.route("/api/recaudo/plano", methods=["GET"])
 @rol(*ADMIN)
 def archivo_plano():
-    """?fecha=AAAA-MM-DD (día del cierre, hora Bogotá). Junta los cierres de ese día
+    """?fecha=AAAA-MM-DD (día de trabajo de los cierres). Junta los cierres de ese día
     (no reabiertos) de todos los recaudadores en un solo comprobante."""
     fecha = request.args.get("fecha") or ""
     if not _RE_FECHA.match(fecha):
@@ -258,8 +252,8 @@ def archivo_plano():
     cierres = [dict(f) for f in conn.execute(
         """SELECT id, usuario_nombre, liquidacion_ids, pago_ids, recaudado, ingresos, egresos
              FROM recaudo_cierres
-            WHERE cerrado_at >= ? AND cerrado_at < ? AND reabierto_at IS NULL ORDER BY id""",
-        (_limite_utc(fecha), _limite_utc(fecha, 1)),
+            WHERE fecha = ? AND reabierto_at IS NULL ORDER BY id""",
+        (fecha,),
     ).fetchall()]
     conceptos = _conceptos(conn)
     config = _config(conn)

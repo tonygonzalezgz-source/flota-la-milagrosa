@@ -33,7 +33,8 @@ class _TecnologiaScreenState extends ConsumerState<TecnologiaScreen> {
     final api = ref.read(apiClientProvider);
     final user = ref.watch(sessionProvider).value;
     final rol = user?.rol ?? '';
-    final escribe = _rolesEscritura.contains(rol);
+    // Registra y borra su rol, salvo que tenga el módulo en "solo ver" (Catálogo › Usuarios y permisos)
+    final escribe = _rolesEscritura.contains(rol) && !(user?.soloVer('tecnologia') ?? false);
 
     final selectorArea = Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),

@@ -26,6 +26,10 @@ class _ChequeoScreenState extends ConsumerState<ChequeoScreen> {
   List<Map<String, dynamic>> _historial = [];
   int? _puestoId;
 
+  /// Permiso "solo ver" en Chequeo (Catálogo › Usuarios y permisos, o el del
+  /// recaudador): solo el historial; marcar llegada/salida no le corresponde.
+  bool get _soloVer => ref.read(sessionProvider).value?.soloVer('chequeo') ?? false;
+
   @override
   void initState() {
     super.initState();
@@ -40,11 +44,12 @@ class _ChequeoScreenState extends ConsumerState<ChequeoScreen> {
     final api = ref.read(apiClientProvider);
     try {
       final r = await Future.wait([
-        api.get('/chequeo/hoy'),
+        // El chequeo propio de hoy solo lo pide quien marca (el servidor no se lo da a "solo ver")
+        _soloVer ? Future<dynamic>.value() : api.get('/chequeo/hoy'),
         api.get('/puestos'),
         api.get('/chequeo/historial'),
       ]);
-      _hoy = r[0] as Map<String, dynamic>;
+      _hoy = r[0] as Map<String, dynamic>?;
       _puestos = asLista(r[1]).where((p) => asBool(p['activo'])).toList();
       _historial = asLista(r[2]);
       final asignado = _hoy?['puesto'] as Map<String, dynamic>?;
@@ -91,7 +96,10 @@ class _ChequeoScreenState extends ConsumerState<ChequeoScreen> {
         builder: () => RefreshIndicator(
           onRefresh: _cargar,
           child: ListView(padding: const EdgeInsets.all(16), children: [
-            _tarjetaHoy(),
+            if (_soloVer)
+              const AvisoSoloVer('Solo consulta: ves el historial de chequeos, pero no marcas llegada ni salida.')
+            else
+              _tarjetaHoy(),
             const TituloSeccion('Historial'),
             if (_historial.isEmpty) const VacioView('Sin registros en el periodo.'),
             for (final h in _historial) _filaHistorial(h),
