@@ -13,7 +13,9 @@
   lo que debe entregar cada día; se calcula al vuelo, así reabrir y volver a cerrar
   un día corrige el acumulado de los días siguientes.
 - Un día reabierto vuelve a la caja abierta con su mismo día y se vuelve a cerrar ahí
-  (con el efectivo y la planilla del cierre anterior ya escritos). La liquidación que
+  (con el efectivo y la planilla del cierre anterior ya escritos), CON EL MISMO NÚMERO de
+  caja: es la misma caja corregida, no una nueva (pedido del usuario 2026-11-05). Lo que
+  tenía antes queda en el historial de modificaciones. La liquidación que
   reemplaza a una anulada de ese día entra a ese día (endpoints.dia_de_caja).
 - No hay consignaciones ni conteo de billetes: el recaudador escribe el efectivo que
   entrega a la transportadora de valores y el sistema calcula la diferencia de caja:
@@ -35,7 +37,7 @@ import auditoria
 
 from . import bp
 from .comun import EMPRESA_POR_DEFECTO, ROLES_RECAUDO, db, es_pg, rol
-from .endpoints import _ahora, _cargar, _dia_bogota, _entero, _fecha_iso, _hora_utc, _Rechazo, _texto
+from .endpoints import _ahora, _cargar, _entero, _fecha_iso, _hora_utc, _Rechazo, _texto
 from .pagos import cargar_pagos, totales_pagos
 
 ADMIN = ("Administrador",)
@@ -62,13 +64,57 @@ def _pendientes(conn, usuario_id):
     return liqs, pagos
 
 
-def _por_dia(liqs, pagos):
-    """{día de trabajo: (liquidaciones, pagos)} de lo pendiente, del día más viejo al más nuevo."""
+def _dias_pendientes(conn, usuario_id):
+    """Lo pendiente del recaudador por día de trabajo: {día: (liquidaciones, pagos)}.
+
+    Regla general: el día en que se recibió la plata. Excepción, un cierre reabierto:
+    todo lo que tenía vuelve JUNTO a su día, aunque se hubiera recibido en varios días
+    (los cierres de antes del 2026-11-05 juntaban varios días), y la liquidación que
+    reemplaza a una anulada de ese cierre (mismo bus y día de tarjeta) también entra
+    ahí mientras el día siga reabierto, aunque se haya liquidado hoy. Así el día se
+    vuelve a cerrar completo, contra el efectivo que ya se había entregado."""
+    liqs, pagos = _pendientes(conn, usuario_id)
+    reabiertos = [dict(f) for f in conn.execute(
+        """SELECT id, fecha, liquidacion_ids, pago_ids FROM recaudo_cierres
+            WHERE usuario_id = ? AND reabierto_at IS NOT NULL ORDER BY id""",
+        (usuario_id,),
+    ).fetchall()]
+    dia_liq, dia_pago = {}, {}
+    if reabiertos:
+        for c in reabiertos:   # de más viejo a más nuevo: manda el último cierre que lo tuvo
+            dia = _fecha_iso(c["fecha"])
+            for i in json.loads(c["liquidacion_ids"] or "[]"):
+                dia_liq[i] = dia
+            for i in json.loads(c["pago_ids"] or "[]"):
+                dia_pago[i] = dia
+        # Reabiertos que aún no se vuelven a cerrar: son el último cierre de su día
+        ultimo = {_fecha_iso(dict(f)["fecha"]): dict(f)["id"] for f in conn.execute(
+            "SELECT fecha, MAX(id) AS id FROM recaudo_cierres WHERE usuario_id = ? GROUP BY fecha",
+            (usuario_id,),
+        ).fetchall()}
+        en_abiertos = {i: _fecha_iso(c["fecha"]) for c in reabiertos
+                       if ultimo.get(_fecha_iso(c["fecha"])) == c["id"]
+                       for i in json.loads(c["liquidacion_ids"] or "[]")}
+        sueltas = [l for l in liqs if l["id"] not in dia_liq]
+        if sueltas and en_abiertos:
+            ids = list(en_abiertos)
+            reemplazadas = {}
+            for f in conn.execute(
+                f"""SELECT id, bus_id, fecha FROM recaudos
+                     WHERE anulado_at IS NOT NULL AND id IN ({','.join('?' * len(ids))})""",
+                ids,
+            ).fetchall():
+                f = dict(f)
+                reemplazadas[(f["bus_id"], _fecha_iso(f["fecha"]))] = en_abiertos[f["id"]]
+            for l in sueltas:
+                dia = reemplazadas.get((l["bus_id"], l["fecha"]))
+                if dia:
+                    dia_liq[l["id"]] = dia
     dias = {}
     for l in liqs:
-        dias.setdefault(l["caja_fecha"], ([], []))[0].append(l)
+        dias.setdefault(dia_liq.get(l["id"], l["caja_fecha"]), ([], []))[0].append(l)
     for p in pagos:
-        dias.setdefault(p["fecha"], ([], []))[1].append(p)
+        dias.setdefault(dia_pago.get(p["id"], p["fecha"]), ([], []))[1].append(p)
     return dict(sorted(dias.items()))
 
 
@@ -192,9 +238,11 @@ def caja_abierta():
     except _Rechazo as e:
         return jsonify({"error": str(e)}), e.status
     conn = db()
-    liqs, pagos = _pendientes(conn, usuario_id)
+    por_dia = _dias_pendientes(conn, usuario_id)
+    liqs = [l for ls, _ in por_dia.values() for l in ls]
+    pagos = [p for _, ps in por_dia.values() for p in ps]
     dias = []
-    for fecha, (ls, ps) in _por_dia(liqs, pagos).items():
+    for fecha, (ls, ps) in por_dia.items():
         ultimo = _ultimo_cierre_del_dia(conn, usuario_id, fecha)
         reabierto = None
         if ultimo and ultimo["reabierto_at"]:
@@ -231,25 +279,19 @@ def caja_abierta():
             caja = cajas.setdefault(f["usuario_id"], {"usuario_id": f["usuario_id"], "nombre": f["nombre"],
                                                      "rol": f["rol"], "liquidaciones": 0, "recaudado": 0})
             caja.update(pagos=int(f["pagos"] or 0), ingresos=int(f["ingresos"] or 0), egresos=int(f["egresos"] or 0))
-        # Cuántos días de trabajo tiene sin cerrar cada uno
-        dias_abiertos = {}
-        for f in conn.execute(
-            """SELECT usuario_id, caja_fecha, created_at FROM recaudos
-                WHERE anulado_at IS NULL AND cierre_id IS NULL"""
-        ).fetchall():
-            f = dict(f)
-            dias_abiertos.setdefault(f["usuario_id"], set()).add(
-                _fecha_iso(f["caja_fecha"]) or _dia_bogota(f["created_at"]))
-        for f in conn.execute(
-            "SELECT usuario_id, fecha FROM recaudo_pagos WHERE anulado_at IS NULL AND cierre_id IS NULL"
-        ).fetchall():
-            f = dict(f)
-            dias_abiertos.setdefault(f["usuario_id"], set()).add(_fecha_iso(f["fecha"]))
+        # Cuántos días de trabajo tiene sin cerrar cada uno y cuántos son reabiertos
+        # (el administrador los ve marcados para volver a cerrarlos)
         for caja in cajas.values():
             for k in ("pagos", "ingresos", "egresos"):
                 caja.setdefault(k, 0)
             caja["esperado"] = caja["recaudado"] + caja["ingresos"] - caja["egresos"]
-            caja["dias"] = len(dias_abiertos.get(caja["usuario_id"], ()))
+            dias_caja = list(_dias_pendientes(conn, caja["usuario_id"])) if caja["usuario_id"] else []
+            caja["dias"] = len(dias_caja)
+            caja["reabiertos"] = 0
+            for d in dias_caja:
+                ultimo = _ultimo_cierre_del_dia(conn, caja["usuario_id"], d)
+                if ultimo and ultimo["reabierto_at"]:
+                    caja["reabiertos"] += 1
         salida["cajas_abiertas"] = sorted(cajas.values(), key=lambda c: (c["nombre"] or "").lower())
     conn.close()
     return jsonify(salida)
@@ -271,7 +313,7 @@ def cerrar_caja():
     observacion = _texto(data.get("observacion"), 500)
 
     conn = db()
-    por_dia = _por_dia(*_pendientes(conn, usuario_id))
+    por_dia = _dias_pendientes(conn, usuario_id)
     if not por_dia:
         conn.close()
         return jsonify({"error": "No hay liquidaciones ni pagos pendientes por cerrar en esta caja"}), 400
@@ -302,27 +344,42 @@ def cerrar_caja():
     diferencia_caja = efectivo - t["esperado"]
     a_bd = lambda iso: (datetime.fromisoformat(iso.replace("Z", "+00:00")) if es_pg() else iso) if iso else None  # noqa: E731
 
+    valores = (yo, _ahora(), a_bd(creados[0] if creados else None), a_bd(creados[-1] if creados else None),
+               t["liquidaciones"], t["pasajeros"], t["producido"], t["total_gastos"], t["neto"],
+               t["recaudado"], t["diferencia_conductores"], efectivo, diferencia_caja, planilla,
+               observacion, json.dumps(ids), t["pagos"], t["ingresos"], t["egresos"], json.dumps(pago_ids))
     try:
-        cur = conn.execute(
-            """INSERT INTO recaudo_cierres
-                   (empresa_id, usuario_id, usuario_nombre, cerrado_por, cerrado_at, desde_at, hasta_at,
-                    liquidaciones, pasajeros, producido, total_gastos, neto, recaudado,
-                    diferencia_conductores, efectivo, diferencia_caja, planilla, observacion, liquidacion_ids,
-                    pagos, ingresos, egresos, pago_ids, fecha)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (EMPRESA_POR_DEFECTO, usuario_id, nombre, yo, _ahora(),
-             a_bd(creados[0] if creados else None), a_bd(creados[-1] if creados else None),
-             t["liquidaciones"], t["pasajeros"], t["producido"], t["total_gastos"], t["neto"],
-             t["recaudado"], t["diferencia_conductores"], efectivo, diferencia_caja, planilla,
-             observacion, json.dumps(ids), t["pagos"], t["ingresos"], t["egresos"], json.dumps(pago_ids),
-             fecha),
-        )
-        cierre_id = cur.lastrowid
+        if reabierto:
+            # Es la MISMA caja: se vuelve a cerrar con su número (pedido del usuario 2026-11-05).
+            # Lo que tenía antes queda en el historial de modificaciones (al reabrir y aquí);
+            # `motivo_reapertura` y `reabierto_por` quedan como nota de la última corrección.
+            cierre_id = reabierto["id"]
+            conn.execute(
+                """UPDATE recaudo_cierres
+                      SET cerrado_por = ?, cerrado_at = ?, desde_at = ?, hasta_at = ?, liquidaciones = ?,
+                          pasajeros = ?, producido = ?, total_gastos = ?, neto = ?, recaudado = ?,
+                          diferencia_conductores = ?, efectivo = ?, diferencia_caja = ?, planilla = ?,
+                          observacion = ?, liquidacion_ids = ?, pagos = ?, ingresos = ?, egresos = ?,
+                          pago_ids = ?, reabierto_at = NULL
+                    WHERE id = ?""",
+                valores + (cierre_id,),
+            )
+        else:
+            cur = conn.execute(
+                """INSERT INTO recaudo_cierres
+                       (empresa_id, usuario_id, usuario_nombre, cerrado_por, cerrado_at, desde_at, hasta_at,
+                        liquidaciones, pasajeros, producido, total_gastos, neto, recaudado,
+                        diferencia_conductores, efectivo, diferencia_caja, planilla, observacion, liquidacion_ids,
+                        pagos, ingresos, egresos, pago_ids, fecha)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (EMPRESA_POR_DEFECTO, usuario_id, nombre) + valores + (fecha,),
+            )
+            cierre_id = cur.lastrowid
         if ids:
             marcas = ",".join("?" * len(ids))
             conn.execute(
-                f"UPDATE recaudos SET cierre_id = ? WHERE id IN ({marcas}) AND cierre_id IS NULL",
-                [cierre_id] + ids,
+                f"UPDATE recaudos SET cierre_id = ?, caja_fecha = ? WHERE id IN ({marcas}) AND cierre_id IS NULL",
+                [cierre_id, fecha] + ids,
             )
         if pago_ids:
             marcas = ",".join("?" * len(pago_ids))
@@ -332,11 +389,13 @@ def cerrar_caja():
                 [cierre_id] + pago_ids,
             )
         por_otro = " (cerrada por el administrador)" if yo != usuario_id else ""
-        de_nuevo = f", que reemplaza la caja reabierta N° {reabierto['id']}" if reabierto else ""
+        antes = (f" (antes: debe haber {auditoria.pesos(reabierto['esperado'])}, efectivo "
+                 f"{auditoria.pesos(reabierto['efectivo'])}, {_resultado_caja(reabierto['diferencia_caja'])})"
+                 if reabierto else "")
         auditoria.registrar(
             conn, "recaudo", "cierre", cierre_id, "cerrar",
-            (f"Cerró la caja N° {cierre_id} del día {_dia_txt(fecha)} de "
-             f"{nombre or 'usuario #' + str(usuario_id)}{por_otro}{de_nuevo}: "
+            (f"{'Volvió a cerrar' if reabierto else 'Cerró'} la caja N° {cierre_id} del día {_dia_txt(fecha)} de "
+             f"{nombre or 'usuario #' + str(usuario_id)}{por_otro}{antes}: "
              f"{_contenido(t)}; debe haber {auditoria.pesos(t['esperado'])}, "
              f"efectivo entregado {auditoria.pesos(efectivo)}, {_resultado_caja(diferencia_caja)}."
              + (f" Planilla/precinto: {planilla}." if planilla else "")),
@@ -344,7 +403,9 @@ def cerrar_caja():
              "pagos": t["pagos"], "ingresos": t["ingresos"], "egresos": t["egresos"],
              "esperado": t["esperado"], "efectivo": efectivo, "diferencia_caja": diferencia_caja,
              "planilla": planilla, "observacion": observacion,
-             "reemplaza_cierre": reabierto["id"] if reabierto else None},
+             "vuelve_a_cerrar": bool(reabierto),
+             "antes": ({k: reabierto[k] for k in ("liquidaciones", "recaudado", "esperado", "efectivo",
+                                                   "diferencia_caja", "planilla")} if reabierto else None)},
         )
         conn.commit()
     except Exception as e:
@@ -397,8 +458,20 @@ def listar_cierres():
     ).fetchall()
     cierres = [_fila_cierre(f) for f in filas]
     acumulados = _acumulados(conn, cierres)
+    # Un reabierto está "por cerrar" mientras siga siendo el último cierre de su día
+    ultimos = {}
+    usuarios = sorted({c["usuario_id"] for c in cierres if c["reabierto_at"] and c.get("usuario_id") is not None})
+    if usuarios:
+        for f in conn.execute(
+            f"""SELECT usuario_id, fecha, MAX(id) AS id FROM recaudo_cierres
+                 WHERE usuario_id IN ({','.join('?' * len(usuarios))}) GROUP BY usuario_id, fecha""",
+            usuarios,
+        ).fetchall():
+            f = dict(f)
+            ultimos[(f["usuario_id"], _fecha_iso(f["fecha"]))] = f["id"]
     for c in cierres:
         c["acumulado"] = acumulados.get(c["id"])   # None en los reabiertos: no cuentan
+        c["por_cerrar"] = bool(c["reabierto_at"]) and ultimos.get((c["usuario_id"], c["fecha"])) == c["id"]
     conn.close()
     return jsonify({"desde": desde, "hasta": hasta, "cierres": cierres})
 
