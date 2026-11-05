@@ -58,10 +58,12 @@ Map<String, String> parseNovedades(dynamic raw) {
 }
 
 /// Abre el formulario de alistamiento de hoy para un bus. Devuelve true si se guardó.
+/// Con `soloVer` (permiso "solo ver") se consulta sin poder cambiarlo ni guardarlo.
 Future<bool> abrirAlistamiento(BuildContext context,
-    {required int busId, required String titulo, int? conductorId}) async {
+    {required int busId, required String titulo, int? conductorId, bool soloVer = false}) async {
   final r = await Navigator.of(context).push<bool>(MaterialPageRoute(
-    builder: (_) => AlistamientoForm(busId: busId, titulo: titulo, conductorId: conductorId),
+    builder: (_) =>
+        AlistamientoForm(busId: busId, titulo: titulo, conductorId: conductorId, soloVer: soloVer),
   ));
   return r ?? false;
 }
@@ -70,7 +72,9 @@ class AlistamientoForm extends ConsumerStatefulWidget {
   final int busId;
   final String titulo;
   final int? conductorId;
-  const AlistamientoForm({super.key, required this.busId, required this.titulo, this.conductorId});
+  final bool soloVer;
+  const AlistamientoForm(
+      {super.key, required this.busId, required this.titulo, this.conductorId, this.soloVer = false});
 
   @override
   ConsumerState<AlistamientoForm> createState() => _AlistamientoFormState();
@@ -183,6 +187,10 @@ class _AlistamientoFormState extends ConsumerState<AlistamientoForm> {
         builder: () => ListView(padding: const EdgeInsets.fromLTRB(16, 16, 16, 100), children: [
           Text(Fechas.larga(_hoy), style: const TextStyle(color: AppColors.muted)),
           const SizedBox(height: 12),
+          if (widget.soloVer) ...[
+            const AvisoSoloVer('Solo consulta: ves el alistamiento de hoy, pero no lo puedes cambiar.'),
+            const SizedBox(height: 12),
+          ],
           DropdownButtonFormField<String>(
             initialValue: _lugar,
             isExpanded: true,
@@ -190,7 +198,7 @@ class _AlistamientoFormState extends ConsumerState<AlistamientoForm> {
             items: [
               for (final l in lugaresAlistamiento) DropdownMenuItem(value: l, child: Text(l)),
             ],
-            onChanged: (v) => setState(() => _lugar = v),
+            onChanged: widget.soloVer ? null : (v) => setState(() => _lugar = v),
           ),
           const SizedBox(height: 8),
           for (var i = 0; i < itemsAlistamiento.length; i++) _item(i),
@@ -206,7 +214,7 @@ class _AlistamientoFormState extends ConsumerState<AlistamientoForm> {
           ),
         ]),
       ),
-      bottomNavigationBar: _cargando || _error != null
+      bottomNavigationBar: _cargando || _error != null || widget.soloVer
           ? null
           : SafeArea(
               child: Padding(
@@ -253,12 +261,15 @@ class _AlistamientoFormState extends ConsumerState<AlistamientoForm> {
                   };
                 }),
               ),
-              onSelectionChanged: (s) => setState(() => _valores[campo] = s.isEmpty ? null : s.first),
+              onSelectionChanged: widget.soloVer
+                  ? null
+                  : (s) => setState(() => _valores[campo] = s.isEmpty ? null : s.first),
             ),
             if (v == 'otros') ...[
               const SizedBox(height: 8),
               TextField(
                 controller: _novedades[campo],
+                readOnly: widget.soloVer,
                 decoration: const InputDecoration(hintText: 'Describe la novedad…'),
               ),
             ],

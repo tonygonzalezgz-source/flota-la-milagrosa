@@ -43,22 +43,11 @@ class _EdsScreenState extends ConsumerState<EdsScreen> {
   @override
   Widget build(BuildContext context) {
     final api = ref.read(apiClientProvider);
-    final esAdmin = ref.watch(sessionProvider).value?.esAdmin ?? false;
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Operador EDS'),
-          bottom: const TabBar(
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.white60,
-            indicatorColor: Colors.white,
-            tabs: [Tab(text: 'Registrar'), Tab(text: 'Historial')],
-          ),
-        ),
-        body: TabBarView(children: [
-          _FormEds(onGuardado: () => _historial.currentState?.recargar()),
-          Column(children: [
+    final user = ref.watch(sessionProvider).value;
+    final esAdmin = user?.esAdmin ?? false;
+    // Permiso "solo ver" (Catálogo › Usuarios y permisos): solo el historial
+    final soloVer = user?.soloVer('eds') ?? false;
+    final historial = Column(children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
               child: SegmentedButton<bool>(
@@ -98,7 +87,26 @@ class _EdsScreenState extends ConsumerState<EdsScreen> {
                 borrar: esAdmin ? (r) => api.delete('/eds/${r['id']}') : null,
               ),
             ),
-          ]),
+          ]);
+
+    if (soloVer) {
+      return Scaffold(appBar: AppBar(title: const Text('Operador EDS')), body: historial);
+    }
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Operador EDS'),
+          bottom: const TabBar(
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white60,
+            indicatorColor: Colors.white,
+            tabs: [Tab(text: 'Registrar'), Tab(text: 'Historial')],
+          ),
+        ),
+        body: TabBarView(children: [
+          _FormEds(onGuardado: () => _historial.currentState?.recargar()),
+          historial,
         ]),
       ),
     );

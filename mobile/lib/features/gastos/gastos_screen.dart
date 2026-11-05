@@ -31,21 +31,9 @@ class _GastosScreenState extends ConsumerState<GastosScreen> {
   @override
   Widget build(BuildContext context) {
     final api = ref.read(apiClientProvider);
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Gastos y Facturas'),
-          bottom: const TabBar(
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.white60,
-            indicatorColor: Colors.white,
-            tabs: [Tab(text: 'Registrar'), Tab(text: 'Historial')],
-          ),
-        ),
-        body: TabBarView(children: [
-          _FormGasto(onGuardado: () => _historial.currentState?.recargar()),
-          HistorialRegistros(
+    // Permiso "solo ver" (Catálogo › Usuarios y permisos): historial sin registrar ni borrar
+    final soloVer = ref.watch(sessionProvider).value?.soloVer('gastos') ?? false;
+    final historial = HistorialRegistros(
             key: _historial,
             cargar: (desde, hasta) async =>
                 asLista(await api.get('/gastos', query: {'desde': desde, 'hasta': hasta})),
@@ -72,8 +60,27 @@ class _GastosScreenState extends ConsumerState<GastosScreen> {
               }
               return [if (d['comprobante_base64'] != null) d['comprobante_base64'] as String];
             },
-            borrar: (g) => api.delete('/gastos/${g['id']}'),
+            borrar: soloVer ? null : (g) => api.delete('/gastos/${g['id']}'),
+          );
+
+    if (soloVer) {
+      return Scaffold(appBar: AppBar(title: const Text('Gastos y Facturas')), body: historial);
+    }
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Gastos y Facturas'),
+          bottom: const TabBar(
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white60,
+            indicatorColor: Colors.white,
+            tabs: [Tab(text: 'Registrar'), Tab(text: 'Historial')],
           ),
+        ),
+        body: TabBarView(children: [
+          _FormGasto(onGuardado: () => _historial.currentState?.recargar()),
+          historial,
         ]),
       ),
     );

@@ -24,6 +24,9 @@ class _AlistamientoScreenState extends ConsumerState<AlistamientoScreen> {
   List<Map<String, dynamic>> _buses = [];
   String _filtro = '';
 
+  /// Permiso "solo ver" en Alistamiento (Catálogo › Usuarios y permisos).
+  bool get _soloVer => ref.read(sessionProvider).value?.soloVer('alistamiento') ?? false;
+
   @override
   void initState() {
     super.initState();
@@ -64,6 +67,10 @@ class _AlistamientoScreenState extends ConsumerState<AlistamientoScreen> {
           child: ListView(padding: const EdgeInsets.all(16), children: [
             Text(Fechas.larga(_hoy), style: const TextStyle(color: AppColors.muted)),
             const SizedBox(height: 10),
+            if (_soloVer) ...[
+              const AvisoSoloVer('Solo consulta: ves los alistamientos de hoy, pero no los puedes registrar.'),
+              const SizedBox(height: 10),
+            ],
             Row(children: [
               Expanded(child: Indicador('Pendientes', '${trabajan.length - listos}', AppColors.yellow)),
               const SizedBox(width: 10),
@@ -103,12 +110,19 @@ class _AlistamientoScreenState extends ConsumerState<AlistamientoScreen> {
                 color: ok ? AppColors.green : AppColors.yellow),
           ),
           title: Text(titulo, style: const TextStyle(fontWeight: FontWeight.w700)),
-          trailing: Etiqueta(ok ? '✓ Ver' : '⚠ Registrar', ok ? AppColors.green : AppColors.yellow),
-          onTap: () async {
-            final guardado = await abrirAlistamiento(context,
-                busId: asInt(b['id'])!, titulo: titulo, conductorId: asInt(b['conductor_id']));
-            if (guardado) setState(() => b['tiene_alistamiento'] = 1);
-          },
+          trailing: Etiqueta(ok ? '✓ Ver' : (_soloVer ? 'Pendiente' : '⚠ Registrar'),
+              ok ? AppColors.green : AppColors.yellow),
+          // En "solo ver" se consulta el que ya existe; sin alistamiento no hay nada que abrir.
+          onTap: _soloVer && !ok
+              ? null
+              : () async {
+                  final guardado = await abrirAlistamiento(context,
+                      busId: asInt(b['id'])!,
+                      titulo: titulo,
+                      conductorId: asInt(b['conductor_id']),
+                      soloVer: _soloVer);
+                  if (guardado) setState(() => b['tiene_alistamiento'] = 1);
+                },
         ),
       ),
     );
