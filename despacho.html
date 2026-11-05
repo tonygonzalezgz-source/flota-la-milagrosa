@@ -1302,12 +1302,22 @@
 
   /* ─── Relevo de conductor ───
      El conductor 1 es el del despacho (sale con el bus). Cada relevo anota quién
-     recibe el bus, su ruta, la lectura de la registradora al recibirlo (la misma
-     con la que entrega el anterior: el torniquete lleva consecutivo) y sus viajes.
+     recibe el bus, su ruta y sus viajes. La ventana pide la REG final de cada
+     conductor: esa misma lectura es la REG inicio del siguiente (el torniquete lleva
+     consecutivo) y la del último es la REG fin del bus (pedido del usuario 2026-11-04).
+     Por dentro se guarda igual: la final del conductor k = `registradora` del relevo k+1.
      Recaudo precarga estos datos al liquidar. */
   const MAX_RELEVOS = 2;   // 3 conductores por bus en el día
   let relevoBusId = null;
-  let relevoForm  = null;  // { viajes1, relevos: [{conductor_id, ruta_id, registradora, viajes}] }
+  let relevoForm  = null;  // { viajes1, regFin, relevos: [{conductor_id, ruta_id, registradora, viajes}] }
+
+  /* REG inicio y REG final del conductor k (0 = el que sale con el bus). */
+  function regInicioConductor(b, k) {
+    return k === 0 ? b.registradora_inicio : relevoForm.relevos[k - 1].registradora;
+  }
+  function regFinalConductor(k) {
+    return k < relevoForm.relevos.length ? relevoForm.relevos[k].registradora : relevoForm.regFin;
+  }
 
   function abrirRelevo(busId) {
     const b = buses.find(x => x.id === busId);
@@ -1319,8 +1329,8 @@
     const viajesRel = rel.reduce((t, r) => t + (r.viajes || 0), 0);
     const v1 = b.viajes_realizados == null ? null : b.viajes_realizados - viajesRel;
     relevoBusId = busId;
-    relevoForm = { viajes1: v1 != null && v1 >= 0 ? v1 : null, relevos: rel };
-    if (!rel.length) relevoForm.relevos.push(nuevoRelevo(b));
+    relevoForm = { viajes1: v1 != null && v1 >= 0 ? v1 : null, regFin: b.registradora_fin ?? null, relevos: rel };
+    if (!rel.length) agregarLecturaRelevo(b);
     document.getElementById('relevoSub').textContent =
       `${b.grupo === 'B' ? 'Micro' : 'Bus'} ${b.numero}${b.placa ? ' · ' + b.placa : ''} · ${formatoFecha(HOY)}`;
     document.getElementById('relevoOverlay').classList.remove('hidden');
@@ -1349,16 +1359,34 @@
       .filter(c => c.id !== b.conductor_id)
       .map(c => `<option value="${c.id}" ${sel === c.id ? 'selected' : ''}>${escapeHtml(c.nombre)}</option>`).join('');
     const val = v => v == null ? '' : v;
+    const total = relevoForm.relevos.length + 1;
+
+    /* REG inicio (viene sola: la del bus o la final del anterior) y REG final de
+       cada conductor. La del último es la REG fin del bus: se puede dejar para
+       el final del día. */
+    const lecturasHtml = k => {
+      const ultimo = k === total - 1;
+      const ini = regInicioConductor(b, k);
+      const etq = ultimo && total > 1 ? `REG final del conductor ${k + 1} <small>(REG fin del bus)</small>`
+                : ultimo ? 'REG fin del bus' : `REG final del conductor ${k + 1} <b>*</b>`;
+      return `<div class="rel-dato">REG inicio: <b id="rel-ini-${k}">${ini != null ? fmtNum(ini) : '—'}</b>
+               ${k > 0 ? '<br><small>la REG final del conductor ' + k + '</small>' : ''}</div>
+          <div><label>${etq}</label>
+               <input type="number" min="0" step="1" inputmode="numeric" value="${val(regFinalConductor(k))}"
+                      placeholder="${ultimo ? 'Al terminar el día' : 'Lectura al entregar el bus'}"
+                      oninput="setFinalConductor(${k}, this.value)"></div>`;
+    };
 
     const sale = `<div class="rel-card sale">
         <div class="rel-head"><div class="rel-titulo">1 · ${escapeHtml(nombreConductor(b.conductor_id))}<small>sale con el bus</small></div></div>
         <div class="rel-grid">
-          <div class="rel-dato">Ruta: <b>${escapeHtml(nombreRuta(b.ruta_id) || '—')}</b><br>
-               REG inicio: <b>${fmtNum(b.registradora_inicio)}</b></div>
+          <div class="rel-dato">Ruta: <b>${escapeHtml(nombreRuta(b.ruta_id) || '—')}</b></div>
           <div><label>Viajes del conductor 1</label>
                <input type="number" min="0" step="1" inputmode="numeric" value="${val(relevoForm.viajes1)}"
                       placeholder="0" oninput="setRelevo(-1, 'viajes', this.value)"></div>
+          ${total > 1 ? lecturasHtml(0) : ''}
         </div>
+        ${total > 1 ? '<div class="rel-nota" id="rel-nota-0"></div>' : ''}
       </div>`;
 
     const cards = relevoForm.relevos.map((r, i) => {
@@ -1374,14 +1402,12 @@
                <select onchange="setRelevo(${i}, 'conductor_id', this.value)">${opcConductores(r.conductor_id)}</select></div>
           <div><label>Ruta</label>
                <select onchange="setRelevo(${i}, 'ruta_id', this.value)">${opcRutas(r.ruta_id)}</select></div>
-          <div><label>Registradora al recibir <b>*</b></label>
-               <input type="number" min="0" step="1" inputmode="numeric" value="${val(r.registradora)}"
-                      placeholder="Lectura del torniquete" oninput="setRelevo(${i}, 'registradora', this.value)"></div>
+          ${lecturasHtml(i + 1)}
           <div><label>Viajes del conductor ${n}</label>
                <input type="number" min="0" step="1" inputmode="numeric" value="${val(r.viajes)}"
                       placeholder="0" oninput="setRelevo(${i}, 'viajes', this.value)"></div>
         </div>
-        <div class="rel-nota" id="rel-nota-${i}"></div>
+        <div class="rel-nota" id="rel-nota-${i + 1}"></div>
       </div>`;
     }).join('');
 
@@ -1401,16 +1427,37 @@
     else relevoForm.relevos[i][campo] = v;
     pintarResumenRelevo();
   }
+  /* REG final del conductor k: la del último es la REG fin del bus; la de los demás es
+     la lectura con que recibe el siguiente (y su REG inicio se actualiza en pantalla). */
+  function setFinalConductor(k, raw) {
+    const v = raw === '' || raw == null ? null : Number(raw);
+    if (k < relevoForm.relevos.length) relevoForm.relevos[k].registradora = v;
+    else relevoForm.regFin = v;
+    const ini = document.getElementById(`rel-ini-${k + 1}`);
+    if (ini) ini.textContent = v != null ? fmtNum(v) : '—';
+    pintarResumenRelevo();
+  }
+
+  /* Al agregar un conductor, la última lectura anotada (la REG fin que ya tenía el bus)
+     es donde el anterior entrega el bus: pasa a ser su REG final y la REG fin del bus
+     queda por anotar (la pondrá el nuevo último conductor). Quitar el relevo la devuelve. */
+  function agregarLecturaRelevo(b) {
+    const r = nuevoRelevo(b);
+    r.registradora = relevoForm.regFin;
+    relevoForm.regFin = null;
+    relevoForm.relevos.push(r);
+  }
 
   function agregarRelevo() {
     const b = buses.find(x => x.id === relevoBusId);
     if (!b || relevoForm.relevos.length >= MAX_RELEVOS) return;
-    relevoForm.relevos.push(nuevoRelevo(b));
+    agregarLecturaRelevo(b);
     renderRelevo();
   }
 
   function quitarRelevo() {
-    relevoForm.relevos.pop();
+    const r = relevoForm.relevos.pop();
+    if (r && relevoForm.regFin == null) relevoForm.regFin = r.registradora;
     renderRelevo();
   }
 
@@ -1418,18 +1465,21 @@
   function pintarResumenRelevo() {
     const b = buses.find(x => x.id === relevoBusId);
     if (!b || !relevoForm) return;
-    const lecturas = [b.registradora_inicio, ...relevoForm.relevos.map(r => r.registradora), b.registradora_fin];
+    const lecturas = [b.registradora_inicio, ...relevoForm.relevos.map(r => r.registradora), relevoForm.regFin];
     const nombres  = [nombreConductor(b.conductor_id), ...relevoForm.relevos.map((r, i) => nombreConductor(r.conductor_id) || `Conductor ${i + 2}`)];
-    relevoForm.relevos.forEach((r, i) => {
-      const nota = document.getElementById(`rel-nota-${i}`);
+    nombres.forEach((_, k) => {
+      const nota = document.getElementById(`rel-nota-${k}`);
       if (!nota) return;
-      const previa = lecturas[i];
+      const ini = lecturas[k], fin = lecturas[k + 1];
+      const ultimo = k === nombres.length - 1;
       let txt = '', err = false;
-      if (r.registradora != null && previa != null) {
-        if (r.registradora <= previa) { txt = `Debe ser mayor que ${fmtNum(previa)} (lectura anterior)`; err = true; }
-        else txt = `El conductor ${i + 1} entrega con ${fmtNum(r.registradora - previa)} pasajeros (${fmtNum(previa)} → ${fmtNum(r.registradora)})`;
-      } else if (previa != null) {
-        txt = `Sigue el consecutivo: mayor que ${fmtNum(previa)}`;
+      if (fin != null && ini != null) {
+        if (fin <= ini) { txt = `La REG final debe ser mayor que la REG inicio (${fmtNum(ini)})`; err = true; }
+        else txt = `${fmtNum(fin - ini)} pasajeros (${fmtNum(ini)} → ${fmtNum(fin)})`;
+      } else if (ultimo) {
+        txt = 'La REG final del último conductor es la REG fin del bus: se puede anotar al terminar el día.';
+      } else if (ini != null) {
+        txt = `Escribe la registradora cuando entrega el bus: mayor que ${fmtNum(ini)}`;
       }
       nota.textContent = txt;
       nota.className = 'rel-nota' + (err ? ' err' : '');
@@ -1444,7 +1494,7 @@
         const pax = ini != null && fin != null && fin > ini ? `${fmtNum(fin - ini)} pax` : '—';
         filas += `<div class="fila"><span>${i + 1}. ${escapeHtml(nom || '—')}</span><span>${pax}</span></div>`;
       });
-      if (b.registradora_fin == null) {
+      if (relevoForm.regFin == null) {
         filas += `<div style="font-size:11.5px;color:var(--txt3)">El último conductor termina en la REG fin del bus (aún sin anotar).</div>`;
       }
     }
@@ -1463,10 +1513,16 @@
     try {
       const res = await apiFetch('/api/despacho/relevos', {
         method: 'PUT',
-        body: JSON.stringify({ fecha: HOY, bus_id: b.id, viajes: relevoForm.viajes1, relevos: relevoForm.relevos }),
+        body: JSON.stringify({ fecha: HOY, bus_id: b.id, viajes: relevoForm.viajes1, relevos: relevoForm.relevos,
+                               registradora_fin: relevoForm.regFin }),
       });
       b.relevos = res.relevos || [];
       b.viajes_realizados = res.viajes_realizados;
+      if ('registradora_fin' in res) {
+        b.registradora_fin = res.registradora_fin;
+        const cellFin = document.getElementById(`reg-fin-cell-${b.id}`);
+        if (cellFin) cellFin.innerHTML = regCellHtml(b, 'fin');
+      }
       pintarRelevo(b.id);
       cerrarRelevo();
       showToast(b.relevos.length

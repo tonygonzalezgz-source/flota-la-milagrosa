@@ -2994,16 +2994,18 @@ def _fecha_despacho_permitida(fecha):
 
 def _validar_lecturas_relevo(reg_inicio, reg_fin, lecturas):
     """Las lecturas van en consecutivo: REG inicio < relevo(s) < REG fin, porque
-    cada conductor tiene que haber movido al menos un pasajero. Devuelve el
-    mensaje de error o None."""
-    previa, cual = reg_inicio, "la REG inicio"
+    cada conductor tiene que haber movido al menos un pasajero. Cada lectura de
+    relevo es la REG final de un conductor y la REG inicio del siguiente; la del
+    último conductor es la REG fin del bus. Devuelve el mensaje de error o None."""
+    previa = reg_inicio
     for i, lectura in enumerate(lecturas):
         if previa is not None and lectura <= previa:
-            return (f"la registradora con la que recibe el conductor {i + 2} ({lectura}) "
-                    f"debe ser mayor que {cual} ({previa})")
-        previa, cual = lectura, f"la del conductor {i + 2}"
-    if lecturas and reg_fin is not None and reg_fin <= previa:
-        return f"la REG fin ({reg_fin}) debe ser mayor que {cual} ({previa})"
+            return (f"la REG final del conductor {i + 1} ({lectura}) debe ser mayor que "
+                    f"su REG inicio ({previa})")
+        previa = lectura
+    if lecturas and reg_fin is not None and previa is not None and reg_fin <= previa:
+        return (f"la REG final del conductor {len(lecturas) + 1} (la REG fin del bus, {reg_fin}) "
+                f"debe ser mayor que su REG inicio ({previa})")
     return None
 
 
@@ -3011,7 +3013,10 @@ def _validar_lecturas_relevo(reg_inicio, reg_fin, lecturas):
 @require_role("Administrador", "Analista", "Despachador", "Jefe de Ruta")
 def guardar_relevos_despacho():
     """Guarda los relevos de un bus en el día (reemplaza los que tenía) y el total
-    de viajes del bus = viajes del conductor 1 + los de cada relevo."""
+    de viajes del bus = viajes del conductor 1 + los de cada relevo. La ventana pide
+    la REG final de cada conductor: la de un relevo es la lectura con que lo recibe el
+    siguiente y la del último es la REG fin del bus (`registradora_fin`, opcional: si
+    llega, se guarda en el despacho igual que desde la tabla)."""
     data = request.get_json(silent=True) or {}
     fecha = data.get("fecha")
     try:
@@ -3079,7 +3084,20 @@ def guardar_relevos_despacho():
                                        requerido=True),
                 "viajes": entero(r.get("viajes"), f"los viajes del conductor {n}"),
             })
-        err = _validar_lecturas_relevo(desp["registradora_inicio"], desp["registradora_fin"],
+        # REG fin del bus: si la ventana la manda (aunque sea vacía) se guarda tal cual; al
+        # agregar un relevo, la REG fin que ya tenía el bus pasa a ser la final del conductor
+        # que entrega y la del bus queda por anotar. Sin la clave (página vieja), no se toca.
+        reg_fin = desp["registradora_fin"]
+        nuevo_fin = entero(data.get("registradora_fin"),
+                           f"la REG final del conductor {len(relevos) + 1} (REG fin del bus)")
+        if "registradora_fin" in data:
+            reg_fin = nuevo_fin
+        if nuevo_fin is not None:
+            # Con relevo, _validar_lecturas_relevo dice qué conductor no cuadra.
+            if not relevos and desp["registradora_inicio"] is not None and nuevo_fin <= desp["registradora_inicio"]:
+                raise ValueError(f"La REG fin del bus ({nuevo_fin}) debe ser mayor que la REG inicio "
+                                 f"({desp['registradora_inicio']})")
+        err = _validar_lecturas_relevo(desp["registradora_inicio"], reg_fin,
                                        [r["registradora"] for r in relevos])
         if err:
             raise ValueError(err[0].upper() + err[1:])
@@ -3106,6 +3124,21 @@ def guardar_relevos_despacho():
             WHERE id = ?""",
         (total, uid, desp["id"]),
     )
+    if reg_fin != desp["registradora_fin"]:
+        # REG fin del bus anotada desde el relevo: igual que desde la tabla del despacho.
+        db.execute("UPDATE despacho_diario SET registradora_fin = ? WHERE id = ?", (reg_fin, desp["id"]))
+        if desp["registradora_fin"] is not None:
+            auditoria.registrar(
+                db, "despacho", "despacho", desp["id"], "editar",
+                f"Cambió en el despacho (ventana de relevo) la REG fin del bus {desp['numero']} "
+                f"({desp['placa'] or 's/placa'}) del {fecha}: {desp['registradora_fin']} → {reg_fin}",
+                {"fecha": fecha, "bus": desp["numero"],
+                 "registradora": [[desp["registradora_inicio"], desp["registradora_fin"]],
+                                  [desp["registradora_inicio"], reg_fin]]},
+            )
+        pax = _pax_registradora(desp["registradora_inicio"], reg_fin)
+        if pax is not None:
+            _sync_pax_movilidad(db, fecha, {bus_id: pax})
     # Al historial si cambió quién recibe o con qué lectura (reparte los pasajeros
     # entre conductores, y con ellos lo que entrega cada uno).
     clave = lambda lista: [(r["orden"], r["conductor_id"], r["registradora"]) for r in lista]
@@ -3123,7 +3156,8 @@ def guardar_relevos_despacho():
     db.commit()
     guardados = _relevos_por_bus(db, fecha, bus_id).get(bus_id, [])
     db.close()
-    return jsonify({"ok": True, "relevos": guardados, "viajes_realizados": total})
+    return jsonify({"ok": True, "relevos": guardados, "viajes_realizados": total,
+                    "registradora_fin": reg_fin})
 
 
 @app.route("/api/despacho/registradora", methods=["PUT"])
