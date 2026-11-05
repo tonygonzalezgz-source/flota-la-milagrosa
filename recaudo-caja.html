@@ -358,9 +358,17 @@
     cont.innerHTML = `<span class="cajas-lbl">Cajas abiertas</span>` + lista.map(c => `
       <button class="caja-chip ${c.usuario_id === caja.usuario.id ? 'on' : ''}" onclick="verCajaDe(${c.usuario_id})">
         ${esc(c.usuario_id === yo ? 'Mi caja' : c.nombre || 'Usuario #' + c.usuario_id)}
+        ${c.reabiertos ? `<span class="pill warn" style="margin-left:4px">${c.reabiertos === 1 ? '1 día reabierto' : c.reabiertos + ' días reabiertos'}</span>` : ''}
         <small>${c.dias > 1 ? `${c.dias} días · ` : ''}${c.liquidaciones} liq.${c.pagos ? ` · ${c.pagos} ${c.pagos === 1 ? 'pago' : 'pagos'}` : ''} · ${fmtMoney(c.esperado ?? c.recaudado)}</small></button>`).join('');
   }
   function verCajaDe(uid) { usuarioCaja = uid === CU.id ? null : uid; diaSel = null; cargarCaja(); }
+  /* "Cerrar de nuevo" de un cierre reabierto: abre la caja de ese recaudador en ese día */
+  async function irACaja(uid, fecha) {
+    usuarioCaja = uid === CU.id ? null : uid;
+    diaSel = fecha;
+    await cargarCaja();
+    document.getElementById('cardCaja').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
   function diaActual() { return (caja?.dias || []).find(d => d.fecha === diaSel) || null; }
   function verDia(fecha) { diaSel = fecha; renderCaja(); }
 
@@ -492,7 +500,7 @@
       `Cerrar el día ${fmtDiaLargo(dia.fecha)}${caja.usuario.id === CU.id ? '' : ' de ' + (caja.usuario.nombre || '')}`;
     document.getElementById('cerrarResumen').innerHTML = `
       <div><span>Día de trabajo</span><span class="cap">${fmtDiaCompleto(dia.fecha)}</span></div>
-      ${dia.reabierto ? `<div><span>Reemplaza la caja reabierta</span><span>${numCierre(dia.reabierto.id)}</span></div>` : ''}
+      ${dia.reabierto ? `<div><span>Vuelve a cerrar la caja</span><span>${numCierre(dia.reabierto.id)}</span></div>` : ''}
       <div><span>Liquidaciones</span><span>${t.liquidaciones}</span></div>
       ${t.liquidaciones ? `<div><span>Producido</span><span>${fmtMoney(t.producido)}</span></div>
       <div><span>Gastos</span><span>${fmtMoney(t.total_gastos)}</span></div>` : ''}
@@ -580,7 +588,10 @@
         <th class="num">Recaudado</th><th class="num">Pagos diarios</th><th class="num">Debe haber</th><th class="num">Efectivo</th>
         <th class="num">Diferencia del día</th><th class="num">Saldo acumulado</th><th>Estado</th><th></th></tr></thead>
       <tbody>${lista.map(c => `<tr>
-        <td data-label="Día de trabajo"><b class="cap">${c.fecha ? fmtDiaLargo(c.fecha) : '—'}</b></td>
+        <td data-label="Día de trabajo"><div><b class="cap">${c.fecha ? fmtDiaLargo(c.fecha) : '—'}</b>
+          ${c.por_cerrar && !SOLO_VER && (ES_ADMIN || c.usuario_id === CU.id)
+            ? `<div style="margin-top:6px"><button class="btn-primary" style="padding:5px 10px;font-size:12px;white-space:nowrap"
+                 onclick="irACaja(${c.usuario_id}, '${c.fecha}')">Cerrar de nuevo</button></div>` : ''}</div></td>
         <td data-label="Cierre"><div><b>${numCierre(c.id)}</b>${c.planilla ? `<div class="sub">Planilla ${esc(c.planilla)}</div>` : ''}</div></td>
         <td data-label="Cerrado"><div>${fmtHora(c.cerrado_at)}${c.cerrado_por && c.cerrado_por !== c.usuario_id ? `<div class="sub">por ${esc(c.cerrado_por_nombre || '')}</div>` : ''}</div></td>
         ${ES_ADMIN ? `<td data-label="Recaudador">${esc(c.usuario_nombre || '')}</td>` : ''}
@@ -595,7 +606,8 @@
           : `<span class="c-${clsDif(c.acumulado)}">${textoSaldo(c.acumulado)}</span>`}</td>
         <td data-label="Estado"><div>${c.reabierto_at
           ? `<span class="pill off" title="${esc(c.motivo_reapertura || '')}">Reabierto</span><div class="sub">${fmtHora(c.reabierto_at)}${c.reabierto_por_nombre ? ' · ' + esc(c.reabierto_por_nombre) : ''}</div>`
-          : '<span class="pill on">Cerrado</span>'}</div></td>
+          : `<span class="pill on">Cerrado</span>${c.motivo_reapertura
+              ? `<div class="sub" title="${esc(c.motivo_reapertura)}">Reabierta y vuelta a cerrar</div>` : ''}`}</div></td>
         <td data-label=""><div class="btns">
           <button class="btn sm" onclick="exportar(${c.id}, 'pdf')">PDF</button>
           <button class="btn sm" onclick="exportar(${c.id}, 'excel')">Excel</button>
@@ -609,9 +621,10 @@
     const c = cierres.find(x => x.id === id);
     cierreAReabrir = id;
     document.getElementById('reabrirSub').innerHTML = `${numCierre(id)} del día ${c.fecha ? fmtDiaLargo(c.fecha) : ''} de ${esc(c.usuario_nombre || '')} ·
-      ${c.liquidaciones} liquidaciones${c.pagos ? ` y ${nPagos(c.pagos)}` : ''} · debe haber ${fmtMoney(c.esperado)}.<br>El cierre queda en el
-      historial como reabierto y sus liquidaciones y pagos vuelven a la caja abierta del recaudador, en ese mismo día: ahí se pueden anular,
-      volver a liquidar (o registrar el pago diario correcto en Pagos diarios, con la fecha de ese día) y cerrar de nuevo el día.`;
+      ${c.liquidaciones} liquidaciones${c.pagos ? ` y ${nPagos(c.pagos)}` : ''} · debe haber ${fmtMoney(c.esperado)}.<br>Sus liquidaciones y pagos
+      vuelven a la caja abierta del recaudador, en ese mismo día: ahí se pueden anular, volver a liquidar (o registrar el pago diario correcto en
+      Pagos diarios, con la fecha de ese día) y cerrar de nuevo. Al volver a cerrarla conserva su número; lo que tenía antes queda en el
+      historial de modificaciones.`;
     document.getElementById('reabrirMotivo').value = '';
     document.getElementById('btnReabrir').disabled = false;
     abrirModal('modalReabrir');
@@ -677,7 +690,8 @@
         `Recaudador: ${c.usuario_nombre || ''}${c.cerrado_por && c.cerrado_por !== c.usuario_id ? ` (cerrada por ${c.cerrado_por_nombre || ''})` : ''}`,
         `Cerrado: ${fmtHora(c.cerrado_at)}${c.desde_at ? ` · ${conPagos ? 'Movimientos' : 'Liquidaciones'} desde ${fmtHora(c.desde_at)} hasta ${fmtHora(c.hasta_at)}` : ''}`,
         c.planilla ? `Planilla / precinto de la transportadora: ${c.planilla}` : '',
-        c.reabierto_at ? `REABIERTO el ${fmtHora(c.reabierto_at)}${c.reabierto_por_nombre ? ' por ' + c.reabierto_por_nombre : ''}. Motivo: ${c.motivo_reapertura || ''}` : '',
+        c.reabierto_at ? `REABIERTO el ${fmtHora(c.reabierto_at)}${c.reabierto_por_nombre ? ' por ' + c.reabierto_por_nombre : ''}. Motivo: ${c.motivo_reapertura || ''}`
+          : c.motivo_reapertura ? `Caja reabierta y vuelta a cerrar. Motivo de la reapertura: ${c.motivo_reapertura}` : '',
       ].filter(Boolean),
       resumen: [
         ['Liquidaciones', String(c.liquidaciones)], ['Pasajeros', fmtNum(c.pasajeros)],
@@ -795,11 +809,11 @@
     }
     ws.mergeCells('B1:I1');
     Object.assign(ws.getCell('B1'), { value: d.titulo.toUpperCase(), font: { bold: true, size: 15, color: { argb: AZUL } }, alignment: { horizontal: 'right', vertical: 'middle' } });
-    d.lineas.slice(0, 4).forEach((l, i) => {   // filas 2 a 5 (la 6 empieza el resumen)
+    d.lineas.slice(0, 5).forEach((l, i) => {   // filas 2 a 6 (la 7 empieza el resumen)
       ws.mergeCells(`B${i + 2}:I${i + 2}`);
       Object.assign(ws.getCell(`B${i + 2}`), { value: l, font: { size: 10, color: { argb: l.startsWith('REABIERTO') ? 'FFB91C1C' : 'FF555566' } }, alignment: { horizontal: 'right', vertical: 'middle' } });
     });
-    let fila = 6;
+    let fila = 7;
     d.resumen.forEach(([k, v]) => {
       ws.mergeCells(`A${fila}:C${fila}`);
       ws.getCell(`A${fila}`).value = k; ws.getCell(`A${fila}`).font = { size: 10, color: { argb: 'FF555566' } };
