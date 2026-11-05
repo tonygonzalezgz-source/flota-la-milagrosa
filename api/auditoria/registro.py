@@ -20,8 +20,11 @@ def _ahora():
 
 
 def _ip():
-    fwd = request.headers.get("X-Forwarded-For", "")
-    ip = fwd.split(",")[0].strip() or request.remote_addr or ""
+    try:
+        fwd = request.headers.get("X-Forwarded-For", "")
+        ip = fwd.split(",")[0].strip() or request.remote_addr or ""
+    except RuntimeError:
+        return None   # fuera de una petición (correcciones que corren al arrancar)
     return ip[:64] or None
 
 

@@ -423,6 +423,77 @@ def cerrar_caja():
 
 
 # ──────────────────────────────────────────
+#  Corrección única: cajas re-cerradas con otro número
+# ──────────────────────────────────────────
+
+_SISTEMA = {"id": None, "nombre": "Sistema", "username": "sistema", "rol": "Sistema"}
+_COPIAR = ("cerrado_por", "cerrado_at", "desde_at", "hasta_at", "liquidaciones", "pasajeros", "producido",
+           "total_gastos", "neto", "recaudado", "diferencia_conductores", "efectivo", "diferencia_caja",
+           "planilla", "observacion", "liquidacion_ids", "pagos", "ingresos", "egresos", "pago_ids")
+
+
+def unir_recierres(conn):
+    """Antes del 2026-11-05 (PR #173), volver a cerrar una caja reabierta creaba otra con
+    número nuevo (p. ej. la N° 000002 de Ximena reabierta y la N° 000003 que la volvió a
+    cerrar). Ahora es la misma caja: esta corrección une cada par así — la reabierta y el
+    cierre posterior del mismo recaudador y día que tiene sus liquidaciones o pagos —
+    dejando el número original con los valores del cierre más reciente, y borra el otro.
+    Queda en el historial. Idempotente: si no hay pares, no hace nada. Devuelve cuántas unió."""
+    unidas = 0
+    while True:
+        par = None
+        for r in conn.execute(
+            "SELECT * FROM recaudo_cierres WHERE reabierto_at IS NOT NULL ORDER BY id"
+        ).fetchall():
+            r = dict(r)
+            ids_r = set(json.loads(r["liquidacion_ids"] or "[]"))
+            pagos_r = set(json.loads(r["pago_ids"] or "[]"))
+            for n in conn.execute(
+                "SELECT * FROM recaudo_cierres WHERE usuario_id = ? AND fecha = ? AND id > ? ORDER BY id",
+                (r["usuario_id"], r["fecha"], r["id"]),
+            ).fetchall():
+                n = dict(n)
+                if ids_r & set(json.loads(n["liquidacion_ids"] or "[]")) or \
+                        pagos_r & set(json.loads(n["pago_ids"] or "[]")):
+                    par = (r, n)
+                    break
+            if par:
+                break
+        if not par:
+            return unidas
+        r, n = par
+        # Si el posterior también se reabrió, la caja queda reabierta; si no, cerrada
+        # (con el motivo de la última reapertura como nota).
+        reab = n["reabierto_at"] is not None
+        conn.execute(
+            f"""UPDATE recaudo_cierres SET {', '.join(k + ' = ?' for k in _COPIAR)},
+                       reabierto_at = ?, reabierto_por = ?, motivo_reapertura = ?
+                 WHERE id = ?""",
+            [n[k] for k in _COPIAR] + [n["reabierto_at"],
+                                       n["reabierto_por"] if reab else r["reabierto_por"],
+                                       n["motivo_reapertura"] if reab else r["motivo_reapertura"], r["id"]],
+        )
+        conn.execute("UPDATE recaudos SET cierre_id = ? WHERE cierre_id = ?", (r["id"], n["id"]))
+        conn.execute("UPDATE recaudo_pagos SET cierre_id = ? WHERE cierre_id = ?", (r["id"], n["id"]))
+        conn.execute("DELETE FROM recaudo_cierres WHERE id = ?", (n["id"],))
+        pr, pn = _fila_cierre(r), _fila_cierre(n)
+        auditoria.registrar(
+            conn, "recaudo", "cierre", r["id"], "editar",
+            (f"Unió la caja N° {n['id']} con la N° {r['id']} del día {_dia_txt(pr['fecha'])} de "
+             f"{r['usuario_nombre'] or 'usuario #' + str(r['usuario_id'])}: era la misma caja reabierta y "
+             f"vuelta a cerrar antes de que conservara su número. La N° {r['id']} queda con lo del último "
+             f"cierre: {_contenido(pn)}; debe haber {auditoria.pesos(pn['esperado'])}, efectivo "
+             f"{auditoria.pesos(pn['efectivo'])}, {_resultado_caja(pn['diferencia_caja'])}. Antes tenía: debe haber "
+             f"{auditoria.pesos(pr['esperado'])}, efectivo {auditoria.pesos(pr['efectivo'])}."),
+            {"caja": r["id"], "caja_borrada": n["id"], "fecha": pr["fecha"],
+             "antes": {k: pr[k] for k in ("liquidaciones", "recaudado", "esperado", "efectivo", "diferencia_caja", "planilla")},
+             "despues": {k: pn[k] for k in ("liquidaciones", "recaudado", "esperado", "efectivo", "diferencia_caja", "planilla")}},
+            usuario=_SISTEMA,
+        )
+        unidas += 1
+
+
+# ──────────────────────────────────────────
 #  Cierres anteriores
 # ──────────────────────────────────────────
 
