@@ -5246,6 +5246,10 @@ def admin_delete_usuario(uid):
     db.execute("UPDATE intervenciones_tecnologia SET usuario_id = NULL WHERE usuario_id = ?", (uid,))
     db.execute("UPDATE despacho_diario SET despachador_id = NULL WHERE despachador_id = ?", (uid,))
     db.execute("UPDATE alistamiento_vehicular SET despachador_id = NULL WHERE despachador_id = ?", (uid,))
+    db.execute("UPDATE actividades_eds SET usuario_id = NULL WHERE usuario_id = ?", (uid,))
+    db.execute("UPDATE actividades_lavada SET usuario_id = NULL WHERE usuario_id = ?", (uid,))
+    # El propietario del catálogo (dueño de buses) se conserva, solo sin cuenta de acceso
+    db.execute("UPDATE propietarios SET usuario_id = NULL WHERE usuario_id = ?", (uid,))
     # Asignaciones y chequeos propios de la cuenta sí se eliminan
     db.execute("DELETE FROM usuario_buses WHERE usuario_id = ?", (uid,))
     db.execute("DELETE FROM despachador_rutas WHERE usuario_id = ?", (uid,))
