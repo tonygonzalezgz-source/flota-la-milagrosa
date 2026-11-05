@@ -2683,6 +2683,7 @@ def get_historial_despacho():
             WHERE fecha BETWEEN ? AND ?{grupo_filter}
         )
         SELECT f.fecha, b.id AS bus_id, b.numero, b.placa, b.modelo, b.grupo,
+               d.conductor_id, d.ruta_id,
                c.nombre AS conductor_nombre,
                r.nombre AS ruta_nombre,
                d.estado, d.viajes_realizados,
@@ -2709,10 +2710,27 @@ def get_historial_despacho():
     else:
         bus_filter, params = "", [desde, hasta]
     query = base_query.format(grupo_filter="", bus_filter=bus_filter)
-    rows  = db.execute(query, params).fetchall()
+    rows  = [dict(r) for r in db.execute(query, params).fetchall()]
+
+    # Relevos de cada bus y día (conductores 2 y 3, con la lectura con que reciben el bus).
+    relevos = {}
+    for r in db.execute(
+            """SELECT dr.fecha, dr.bus_id, dr.orden, dr.conductor_id, dr.ruta_id, dr.registradora,
+                      dr.viajes, c.nombre AS conductor_nombre, ru.nombre AS ruta_nombre
+                 FROM despacho_relevos dr
+            LEFT JOIN conductores c ON c.id = dr.conductor_id
+            LEFT JOIN rutas ru ON ru.id = dr.ruta_id
+                WHERE dr.fecha BETWEEN ? AND ?
+             ORDER BY dr.bus_id, dr.fecha, dr.orden""",
+            (desde, hasta)).fetchall():
+        r = dict(r)
+        clave = (str(r.pop("fecha"))[:10], r.pop("bus_id"))
+        relevos.setdefault(clave, []).append(r)
+    for row in rows:
+        row["relevos"] = relevos.get((str(row["fecha"])[:10], row["bus_id"]), [])
 
     db.close()
-    return jsonify([dict(r) for r in rows])
+    return jsonify(rows)
 
 
 @app.route("/api/despacho/batch", methods=["PUT"])
@@ -3219,12 +3237,43 @@ def corregir_registradora_despacho():
             raise ValueError(f"El bus {desp['numero']} ya fue liquidado en Recaudo: para corregir la "
                              "registradora anula la liquidación y vuelve a liquidar")
         relevos = _relevos_por_bus(db, fecha, bus_id).get(bus_id, [])
-        err = _validar_lecturas_relevo(reg_inicio, reg_fin, [r["registradora"] for r in relevos])
+        # Lecturas del relevo (REG final de cada conductor que entrega el bus): opcionales;
+        # si llegan, se corrigen junto con la inicial y la final.
+        lecturas_relevo = [r["registradora"] for r in relevos]
+        nuevas = data.get("relevos_registradora")
+        if nuevas is not None:
+            if not isinstance(nuevas, list) or len(nuevas) != len(relevos):
+                raise ValueError("Las lecturas del relevo no coinciden con los conductores de ese día: "
+                                 "vuelve a cargar el historial")
+            lecturas_relevo = []
+            for i, v in enumerate(nuevas):
+                n = lectura(v, f"final del conductor {i + 1}")
+                if n is None:
+                    raise ValueError(f"Falta la REG final del conductor {i + 1} (donde entrega el bus)")
+                lecturas_relevo.append(n)
+        err = _validar_lecturas_relevo(reg_inicio, reg_fin, lecturas_relevo)
         if err:
             raise ValueError("No cuadra con el relevo: " + err)
     except ValueError as e:
         db.close()
         return jsonify({"error": str(e)}), 400
+
+    relevo_antes = [r["registradora"] for r in relevos]
+    if lecturas_relevo != relevo_antes:
+        for r, nueva in zip(relevos, lecturas_relevo):
+            if nueva != r["registradora"]:
+                db.execute("""UPDATE despacho_relevos SET registradora = ?, updated_at = CURRENT_TIMESTAMP
+                               WHERE bus_id = ? AND fecha = ? AND orden = ?""",
+                           (nueva, bus_id, fecha, r["orden"]))
+        auditoria.registrar(
+            db, "despacho", "relevo", desp["id"], "editar",
+            f"Corrigió las lecturas del relevo del bus {desp['numero']} ({desp['placa'] or 's/placa'}) "
+            f"del {fecha}: " + "; ".join(
+                f"conductor {r['orden'] - 1} entrega en {a} → {n}"
+                for r, a, n in zip(relevos, relevo_antes, lecturas_relevo) if a != n)
+            + (f". Motivo: {motivo}" if motivo else ""),
+            {"fecha": fecha, "bus": desp["numero"], "relevo": [relevo_antes, lecturas_relevo]},
+        )
 
     antes = (desp["registradora_inicio"], desp["registradora_fin"])
     pax_antes = _pax_registradora(*antes)
@@ -3250,10 +3299,11 @@ def corregir_registradora_despacho():
              "pasajeros": [pax_antes, pax],
              **({"motivo": motivo} if motivo else {})},
         )
-        db.commit()
+    db.commit()
     db.close()
     return jsonify({"ok": True, "registradora_inicio": reg_inicio,
-                    "registradora_fin": reg_fin, "pasajeros": pax})
+                    "registradora_fin": reg_fin, "pasajeros": pax,
+                    "relevos_registradora": lecturas_relevo})
 
 
 @app.route("/api/cron/cierre-despacho", methods=["GET", "POST"])

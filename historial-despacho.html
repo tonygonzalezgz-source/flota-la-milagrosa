@@ -243,6 +243,45 @@
     .badge-b { background: rgba(236,72,153,.12); color: #be185d; }
 
     .conductor-nombre { font-weight: 500; }
+    /* Bus con relevo: los conductores siguientes con la lectura con que reciben el bus */
+    .tag-relevo {
+      display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 6px;
+      background: #ede9fe; color: #6d28d9; font-size: 10px; font-weight: 800; vertical-align: 1px;
+    }
+    .rel-lista { margin-top: 3px; font-size: 12px; color: #5b21b6; line-height: 1.5; }
+    .rel-lista small { color: var(--txt3); }
+    .acciones-adm { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+
+    /* Ventana de relevo (igual que en Despacho) */
+    .modal.ancho { max-width: 580px; }
+    .rel-card { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+    .rel-card.sale { background: #fafafb; }
+    .rel-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .rel-titulo { font-size: 13px; font-weight: 800; }
+    .rel-titulo small { font-weight: 600; color: var(--txt3); margin-left: 4px; }
+    .rel-quitar { background: none; border: none; color: var(--red); font: 600 12px inherit; cursor: pointer; padding: 2px 4px; }
+    .rel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .rel-grid label { display: block; font-size: 11px; font-weight: 700; color: var(--txt2); margin-bottom: 4px; }
+    .rel-grid label b { color: var(--red); }
+    .rel-grid select, .rel-grid input {
+      width: 100%; padding: 8px 10px; border: 1px solid var(--border2); border-radius: 10px;
+      font: 14px inherit; background: #fff; color: var(--txt); box-sizing: border-box;
+    }
+    .rel-grid input:focus, .rel-grid select:focus { outline: none; border-color: var(--accent); }
+    .rel-dato { font-size: 13px; color: var(--txt2); line-height: 1.6; }
+    .rel-dato b { color: var(--txt); }
+    .rel-nota { font-size: 11.5px; color: var(--txt3); margin-top: 7px; }
+    .rel-nota.err { color: var(--red); }
+    .rel-agregar {
+      width: 100%; padding: 10px; border: 1px dashed var(--accent); border-radius: 10px;
+      background: none; color: var(--accent); font: 700 13px inherit; cursor: pointer; margin-bottom: 10px;
+    }
+    .rel-agregar:hover { background: rgba(99,102,241,.07); }
+    .rel-resumen { background: #f5f3ff; border-radius: 10px; padding: 10px 14px; font-size: 13px; line-height: 1.7; }
+    .rel-resumen .fila { display: flex; justify-content: space-between; gap: 10px; }
+    .rel-resumen .fila span:last-child { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    /* Corregir REG: lecturas del relevo entre la inicial y la final */
+    .reg-relevos { margin-top: 12px; display: grid; gap: 10px; }
     .conductor-vacio  { color: var(--txt3); font-style: italic; font-size: 12px; }
 
     .ruta-nombre { font-size: 12px; color: var(--txt2); }
@@ -384,6 +423,9 @@
 
     /* ── RESPONSIVE MÓVIL ── */
     @media (max-width: 720px) {
+      .rel-grid { grid-template-columns: 1fr; }
+      .rel-grid select, .rel-grid input { font-size: 16px; }
+      .acciones-adm { justify-content: flex-start; }
       .topbar { flex-wrap: wrap; height: auto; padding: 10px 16px; gap: 8px; }
       .topbar-sep { display: none; }
       .date-wrap { flex-wrap: wrap; }
@@ -508,6 +550,7 @@
           <div class="pista" id="regFinPista"></div>
         </div>
       </div>
+      <div class="reg-relevos" id="regRelevos"></div>
       <div class="pax-preview" id="regPax"><span>Pasajeros</span><strong>—</strong></div>
       <div class="campo" style="margin-top:14px">
         <label for="regMotivo">Motivo (opcional)</label>
@@ -524,12 +567,33 @@
     </div>
   </div>
 </div>
+<!-- Agregar o editar relevo de un día pasado (solo Administrador) -->
+<div class="modal-bg" id="relModal" hidden>
+  <div class="modal ancho" role="dialog" aria-modal="true" aria-labelledby="relTitulo">
+    <div class="modal-head">
+      <div class="modal-title" id="relTitulo">Relevo de conductor</div>
+      <div class="modal-sub" id="relSub">—</div>
+    </div>
+    <div class="modal-body" id="relBody"></div>
+    <div class="modal-body" style="padding-top:0">
+      <div class="modal-nota">El cambio queda en Auditoría. Recaudo toma estos conductores y tramos al liquidar.</div>
+      <div class="modal-err" id="relErr" hidden></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-sec" type="button" onclick="cerrarRelevo()">Cancelar</button>
+      <button class="btn-pri" type="button" id="relGuardar" onclick="guardarRelevo()">Guardar relevo</button>
+    </div>
+  </div>
+</div>
 <div class="toast" id="toast" hidden></div>
 
 <script>
   const API = (window.location.port === '3030') ? 'http://localhost:8001' : '';
 
   function token() { return localStorage.getItem('authToken') || ''; }
+  function esc(t) {
+    return String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
 
   async function apiFetch(path, opts = {}) {
     const r = await fetch(API + path, {
@@ -691,10 +755,17 @@
           : b.registradora_fin >= b.registradora_inicio
             ? (b.registradora_fin - b.registradora_inicio).toLocaleString('es-CO')
             : '<span class="pax-invalida" title="La registradora final es menor que la inicial">Inválida</span>';
+        const relevos  = b.relevos || [];
         const corregir = esAdmin && b.estado === 'trabajando'
-          ? `<button class="btn-corregir" onclick="abrirCorreccion('${fecha}', ${b.bus_id})">
+          ? `<div class="acciones-adm">
+             <button class="btn-corregir" onclick="abrirCorreccion('${fecha}', ${b.bus_id})">
                <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-               Corregir REG</button>` : '';
+               Corregir REG</button>
+             ${b.conductor_id ? `<button class="btn-corregir" onclick="abrirRelevo('${fecha}', ${b.bus_id})">
+               ${relevos.length ? 'Editar relevo' : '+ Relevo'}</button>` : ''}
+             </div>` : '';
+        const listaRelevo = relevos.length ? `<div class="rel-lista">${relevos.map(r =>
+            `→ ${r.orden}. ${esc(r.conductor_nombre || 'Conductor ' + r.orden)} <small>desde ${fmtN(r.registradora)}</small>`).join('<br>')}</div>` : '';
         html += `
                 <tr id="fila-${fecha}-${b.bus_id}">
                   <td data-label="Unidad">
@@ -706,7 +777,7 @@
                   </td>
                   <td data-label="Conductor">
                     ${b.conductor_nombre
-                      ? `<span class="conductor-nombre">${b.conductor_nombre}</span>`
+                      ? `<span class="conductor-nombre">${relevos.length ? '1. ' : ''}${b.conductor_nombre}</span>${relevos.length ? `<span class="tag-relevo">${relevos.length + 1} conductores</span>` : ''}${listaRelevo}`
                       : `<span class="conductor-vacio">Sin asignar</span>`}
                   </td>
                   <td data-label="Ruta">
@@ -799,6 +870,30 @@
     document.getElementById('regFinPista').innerHTML = sig
       ? `El ${sig.fecha.slice(8)}/${sig.fecha.slice(5,7)} empezó en ${fmtN(sig.registradora_inicio)} · <button type="button" onclick="usarValor('regFin', ${sig.registradora_inicio})">Usar</button>` : '';
 
+    // Con relevo: la REG final de cada conductor que entrega el bus (= inicio del siguiente)
+    const rel = b.relevos || [];
+    // En orden del torniquete: Inicial → REG final de cada conductor que entrega → Final
+    const campoFin = document.getElementById('regFin').closest('.campo');
+    document.querySelector('#regModal .reg-grid').appendChild(campoFin);
+    document.getElementById('regRelevos').innerHTML = rel.map((r, i) => `
+      <div class="campo">
+        <label for="regRel-${i}">REG final del conductor ${i + 1} · entrega a ${esc(r.conductor_nombre || 'conductor ' + r.orden)}</label>
+        <input id="regRel-${i}" type="text" inputmode="numeric" autocomplete="off" value="${r.registradora ?? ''}" />
+        <div class="antes">Antes: ${fmtN(r.registradora)} · es la REG inicio del conductor ${i + 2}</div>
+      </div>`).join('');
+    rel.forEach((_, i) => {
+      const el = document.getElementById(`regRel-${i}`);
+      el.addEventListener('input', () => {
+        const limpio = el.value.replace(/\D/g, '');
+        if (limpio !== el.value) el.value = limpio;
+        actualizarPreview();
+      });
+    });
+    if (rel.length) document.getElementById('regRelevos').appendChild(campoFin);
+    document.getElementById('regIni').previousElementSibling.textContent = rel.length ? 'Inicial (conductor 1)' : 'Inicial';
+    document.getElementById('regFin').previousElementSibling.textContent = rel.length
+      ? `Final (conductor ${rel.length + 1}, REG fin del bus)` : 'Final';
+
     document.getElementById('regMotivo').value = '';
     document.getElementById('regErr').hidden = true;
     document.getElementById('regGuardar').disabled = false;
@@ -826,9 +921,19 @@
                       && ant.registradora_fin >= ant.registradora_inicio)
       ? ant.registradora_fin - ant.registradora_inicio : null;
     let txt, mal = false;
-    if (ini == null || fin == null) txt = '—';
+    // Con relevo, las lecturas van en consecutivo: inicial < relevo(s) < final
+    const rel = (ant.relevos || []).map((_, i) => leerN(`regRel-${i}`));
+    const cadena = [ini, ...rel, fin];
+    const malRelevo = rel.findIndex((v, i) => v == null || (cadena[i] != null && v <= cadena[i]));
+    if (rel.length && malRelevo >= 0) {
+      txt = rel[malRelevo] == null ? `Falta la REG final del conductor ${malRelevo + 1}`
+        : `La REG final del conductor ${malRelevo + 1} debe ser mayor que ${fmtN(cadena[malRelevo])}`;
+      mal = true;
+    } else if (rel.length && fin != null && fin <= rel[rel.length - 1]) {
+      txt = `La final debe ser mayor que ${fmtN(rel[rel.length - 1])} (relevo)`; mal = true;
+    } else if (ini == null || fin == null) txt = '—';
     else if (fin < ini) { txt = 'La final es menor que la inicial'; mal = true; }
-    else txt = fmtN(fin - ini);
+    else txt = fmtN(fin - ini) + (rel.length ? ` (${cadena.slice(1).map((v, i) => fmtN(v - cadena[i])).join(' + ')})` : '');
     box.classList.toggle('mal', mal);
     box.innerHTML = `<span>Pasajeros${paxAntes != null ? ` · antes ${fmtN(paxAntes)}` : ''}</span><strong>${txt}</strong>`;
     document.getElementById('regGuardar').disabled = mal;
@@ -848,6 +953,7 @@
   });
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && !document.getElementById('regModal').hidden) cerrarCorreccion();
+    if (e.key === 'Escape' && !document.getElementById('relModal').hidden) cerrarRelevo();
   });
 
   async function guardarCorreccion() {
@@ -865,12 +971,14 @@
           fecha: b.fecha, bus_id: b.bus_id,
           registradora_inicio: leerN('regIni'),
           registradora_fin: leerN('regFin'),
+          ...((b.relevos || []).length ? { relevos_registradora: b.relevos.map((_, i) => leerN(`regRel-${i}`)) } : {}),
           motivo: document.getElementById('regMotivo').value.trim(),
         }),
       });
       if (res === null) return;
       b.registradora_inicio = res.registradora_inicio;
       b.registradora_fin    = res.registradora_fin;
+      (res.relevos_registradora || []).forEach((v, i) => { if (b.relevos[i]) b.relevos[i].registradora = v; });
       cerrarCorreccion();
       const area = document.getElementById('tableArea');
       const scroll = area.scrollTop;
@@ -887,6 +995,208 @@
       btn.textContent = 'Guardar corrección';
     }
   }
+
+  // ── Agregar o editar relevo de un día (solo Administrador) ──
+  // Igual que en Despacho: cada conductor muestra su REG inicio (la del bus o la final del
+  // anterior) y se pide su REG final; la del último es la REG fin del bus.
+  const MAX_RELEVOS = 2;
+  let relBus = null, relForm = null, catConductores = null, catRutas = null;
+
+  async function cargarCatalogos() {
+    if (catConductores && catRutas) return;
+    const [conds, rutas] = await Promise.all([apiFetch('/api/conductores'), apiFetch('/api/rutas/all')]);
+    catConductores = (conds || []).filter(c => c.activo !== 0 && c.activo !== false);
+    catRutas = rutas || [];
+  }
+  const nombreCond = id => (catConductores || []).find(c => c.id === id)?.nombre || '';
+  const nombreRutaCat = id => (catRutas || []).find(r => r.id === id)?.nombre || '';
+
+  async function abrirRelevo(fecha, busId) {
+    const b = filasCargadas.find(r => r.fecha === fecha && r.bus_id === busId);
+    if (!b) return;
+    try { await cargarCatalogos(); } catch (e) { mostrarToast(e.message); return; }
+    const rel = (b.relevos || []).map(r => ({ conductor_id: r.conductor_id, ruta_id: r.ruta_id,
+                                              registradora: r.registradora, viajes: r.viajes }));
+    const viajesRel = rel.reduce((t, r) => t + (r.viajes || 0), 0);
+    const v1 = b.viajes_realizados == null ? null : b.viajes_realizados - viajesRel;
+    relBus = b;
+    relForm = { viajes1: v1 != null && v1 >= 0 ? v1 : null, regFin: b.registradora_fin ?? null, relevos: rel };
+    if (!rel.length) agregarLectura();
+    document.getElementById('relSub').textContent = `Bus ${b.numero} · ${b.placa || 's/placa'} · ${formatFecha(fecha)}`;
+    document.getElementById('relErr').hidden = true;
+    document.getElementById('relGuardar').disabled = false;
+    document.getElementById('relModal').hidden = false;
+    renderRelevo();
+  }
+
+  function cerrarRelevo() {
+    document.getElementById('relModal').hidden = true;
+    relBus = relForm = null;
+  }
+
+  /* Al agregar un conductor, la REG fin que tenía el bus es donde el anterior lo entrega. */
+  function agregarLectura() {
+    const previo = relForm.relevos[relForm.relevos.length - 1];
+    relForm.relevos.push({ conductor_id: null, ruta_id: (previo ? previo.ruta_id : relBus.ruta_id) || null,
+                           registradora: relForm.regFin, viajes: null });
+    relForm.regFin = null;
+  }
+  function agregarRelevo() {
+    if (relForm.relevos.length >= MAX_RELEVOS) return;
+    agregarLectura();
+    renderRelevo();
+  }
+  function quitarRelevo() {
+    const r = relForm.relevos.pop();
+    if (r && relForm.regFin == null) relForm.regFin = r.registradora;
+    renderRelevo();
+  }
+
+  const regInicioCond = k => k === 0 ? relBus.registradora_inicio : relForm.relevos[k - 1].registradora;
+  const regFinalCond  = k => k < relForm.relevos.length ? relForm.relevos[k].registradora : relForm.regFin;
+
+  function renderRelevo() {
+    const b = relBus;
+    const val = v => v == null ? '' : v;
+    const total = relForm.relevos.length + 1;
+    const opcRutas = sel => `<option value="">— Sin ruta —</option>` + catRutas
+      .filter(r => r.grupo === b.grupo && (r.activa || r.id === sel))
+      .map(r => `<option value="${r.id}" ${sel === r.id ? 'selected' : ''}>${esc(r.nombre)}</option>`).join('');
+    const opcConductores = sel => `<option value="">— Elige el conductor —</option>` + catConductores
+      .filter(c => c.id !== b.conductor_id)
+      .map(c => `<option value="${c.id}" ${sel === c.id ? 'selected' : ''}>${esc(c.nombre)}</option>`).join('');
+    const lecturas = k => {
+      const ultimo = k === total - 1;
+      const ini = regInicioCond(k);
+      const etq = ultimo && total > 1 ? `REG final del conductor ${k + 1} <small>(REG fin del bus)</small>`
+                : ultimo ? 'REG fin del bus' : `REG final del conductor ${k + 1} <b>*</b>`;
+      return `<div class="rel-dato">REG inicio: <b id="hrel-ini-${k}">${ini != null ? fmtN(ini) : '—'}</b>
+               ${k > 0 ? '<br><small>la REG final del conductor ' + k + '</small>' : ''}</div>
+          <div><label>${etq}</label>
+               <input type="number" min="0" step="1" inputmode="numeric" value="${val(regFinalCond(k))}"
+                      placeholder="${ultimo ? 'REG fin del bus' : 'Lectura al entregar el bus'}"
+                      oninput="setFinal(${k}, this.value)"></div>`;
+    };
+    const sale = `<div class="rel-card sale">
+        <div class="rel-head"><div class="rel-titulo">1 · ${esc(b.conductor_nombre || '')}<small>sale con el bus</small></div></div>
+        <div class="rel-grid">
+          <div class="rel-dato">Ruta: <b>${esc(b.ruta_nombre || '—')}</b></div>
+          <div><label>Viajes del conductor 1</label>
+               <input type="number" min="0" step="1" inputmode="numeric" value="${val(relForm.viajes1)}"
+                      placeholder="0" oninput="setRel(-1, 'viajes', this.value)"></div>
+          ${total > 1 ? lecturas(0) : ''}
+        </div>
+        ${total > 1 ? '<div class="rel-nota" id="hrel-nota-0"></div>' : ''}
+      </div>`;
+    const cards = relForm.relevos.map((r, i) => `<div class="rel-card">
+        <div class="rel-head">
+          <div class="rel-titulo">${i + 2} · Recibe el bus</div>
+          ${i === relForm.relevos.length - 1 ? `<button class="rel-quitar" onclick="quitarRelevo()">Quitar</button>` : ''}
+        </div>
+        <div class="rel-grid">
+          <div><label>Conductor <b>*</b></label>
+               <select onchange="setRel(${i}, 'conductor_id', this.value)">${opcConductores(r.conductor_id)}</select></div>
+          <div><label>Ruta</label>
+               <select onchange="setRel(${i}, 'ruta_id', this.value)">${opcRutas(r.ruta_id)}</select></div>
+          ${lecturas(i + 1)}
+          <div><label>Viajes del conductor ${i + 2}</label>
+               <input type="number" min="0" step="1" inputmode="numeric" value="${val(r.viajes)}"
+                      placeholder="0" oninput="setRel(${i}, 'viajes', this.value)"></div>
+        </div>
+        <div class="rel-nota" id="hrel-nota-${i + 1}"></div>
+      </div>`).join('');
+    const agregar = relForm.relevos.length < MAX_RELEVOS
+      ? `<button class="rel-agregar" onclick="agregarRelevo()">+ Agregar ${relForm.relevos.length ? 'otro relevo' : 'relevo'}</button>` : '';
+    document.getElementById('relBody').innerHTML = sale + cards + agregar + `<div class="rel-resumen" id="hrelResumen"></div>`;
+    document.getElementById('relGuardar').textContent = relForm.relevos.length ? 'Guardar relevo' : 'Guardar sin relevo';
+    pintarNotasRelevo();
+  }
+
+  function setRel(i, campo, raw) {
+    const v = raw === '' || raw == null ? null : Number(raw);
+    if (i < 0) relForm.viajes1 = v;
+    else relForm.relevos[i][campo] = v;
+    pintarNotasRelevo();
+  }
+  function setFinal(k, raw) {
+    const v = raw === '' || raw == null ? null : Number(raw);
+    if (k < relForm.relevos.length) relForm.relevos[k].registradora = v;
+    else relForm.regFin = v;
+    const ini = document.getElementById(`hrel-ini-${k + 1}`);
+    if (ini) ini.textContent = v != null ? fmtN(v) : '—';
+    pintarNotasRelevo();
+  }
+
+  function pintarNotasRelevo() {
+    const b = relBus;
+    const lect = [b.registradora_inicio, ...relForm.relevos.map(r => r.registradora), relForm.regFin];
+    const nombres = [b.conductor_nombre, ...relForm.relevos.map((r, i) => nombreCond(r.conductor_id) || `Conductor ${i + 2}`)];
+    nombres.forEach((_, k) => {
+      const nota = document.getElementById(`hrel-nota-${k}`);
+      if (!nota) return;
+      const ini = lect[k], fin = lect[k + 1];
+      let txt = '', err = false;
+      if (fin != null && ini != null) {
+        if (fin <= ini) { txt = `La REG final debe ser mayor que la REG inicio (${fmtN(ini)})`; err = true; }
+        else txt = `${fmtN(fin - ini)} pasajeros (${fmtN(ini)} → ${fmtN(fin)})`;
+      } else if (k === nombres.length - 1) {
+        txt = 'La REG final del último conductor es la REG fin del bus.';
+      } else if (ini != null) {
+        txt = `Escribe la registradora cuando entregó el bus: mayor que ${fmtN(ini)}`;
+      }
+      nota.textContent = txt;
+      nota.className = 'rel-nota' + (err ? ' err' : '');
+    });
+    const viajes = [relForm.viajes1, ...relForm.relevos.map(r => r.viajes)].filter(v => v != null);
+    const total = viajes.length ? viajes.reduce((t, v) => t + v, 0) : null;
+    let filas = '';
+    if (relForm.relevos.length) {
+      nombres.forEach((nom, i) => {
+        const ini = lect[i], fin = lect[i + 1];
+        filas += `<div class="fila"><span>${i + 1}. ${esc(nom || '—')}</span><span>${ini != null && fin != null && fin > ini ? fmtN(fin - ini) + ' pax' : '—'}</span></div>`;
+      });
+    }
+    document.getElementById('hrelResumen').innerHTML = filas +
+      `<div class="fila" style="${filas ? 'border-top:1px solid #e9e3ff;margin-top:4px;padding-top:4px' : ''}">
+         <span>Total de viajes del bus</span><span>${total == null ? '—' : total}</span></div>`;
+  }
+
+  async function guardarRelevo() {
+    const b = relBus;
+    const btn = document.getElementById('relGuardar');
+    if (!b || btn.disabled) return;
+    const err = document.getElementById('relErr');
+    err.hidden = true;
+    btn.disabled = true;
+    try {
+      const res = await apiFetch('/api/despacho/relevos', {
+        method: 'PUT',
+        body: JSON.stringify({ fecha: b.fecha, bus_id: b.bus_id, viajes: relForm.viajes1,
+                               relevos: relForm.relevos, registradora_fin: relForm.regFin }),
+      });
+      if (res === null) return;
+      b.relevos = (res.relevos || []).map(r => ({ ...r, conductor_nombre: nombreCond(r.conductor_id),
+                                                   ruta_nombre: nombreRutaCat(r.ruta_id) }));
+      b.viajes_realizados = res.viajes_realizados;
+      if ('registradora_fin' in res) b.registradora_fin = res.registradora_fin;
+      cerrarRelevo();
+      const area = document.getElementById('tableArea');
+      const scroll = area.scrollTop;
+      render(filasCargadas);
+      area.scrollTop = scroll;
+      document.getElementById(`fila-${b.fecha}-${b.bus_id}`)?.classList.add('recien-corregido');
+      mostrarToast(b.relevos.length ? `Bus ${b.numero}: relevo guardado (${b.relevos.length + 1} conductores)`
+                                    : `Bus ${b.numero}: sin relevo`);
+    } catch (e) {
+      err.textContent = e.message;
+      err.hidden = false;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+  document.getElementById('relModal').addEventListener('click', e => {
+    if (e.target.id === 'relModal') cerrarRelevo();
+  });
 
   let toastTimer = null;
   function mostrarToast(msg) {
