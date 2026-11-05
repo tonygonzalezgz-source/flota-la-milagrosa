@@ -13,7 +13,10 @@ parqueos, abonos, anticipos, reembolsos…).
                   propietario de la flota, que queda como tercero (terceros.py);
     FIJO        → el NIT fijo del concepto;
     NINGUNO     → nadie (la observación es obligatoria: qué se pagó).
-- La fecha es la de hoy en Bogotá (la pone el servidor). Solo efectivo.
+- La fecha es la de hoy en Bogotá (la pone el servidor), y es el día de la caja en que
+  entra el pago. Excepción: si el Administrador reabrió la caja de un día del
+  recaudador, en ese día se puede registrar el pago corregido (o uno que se olvidó),
+  porque esa plata entró a la caja ese día (pedido del usuario 2026-11-05). Solo efectivo.
 - Al guardar se copian el concepto, el bus y el tercero, para que el recibo y los
   cierres viejos no cambien si después se edita el catálogo.
 - Igual que una liquidación: no se edita; solo el Administrador lo anula (con
@@ -111,6 +114,21 @@ def quien(p):
 #  Consulta del día
 # ──────────────────────────────────────────
 
+def caja_reabierta(conn, usuario_id, fecha):
+    """El cierre reabierto del día de caja del recaudador, si el último cierre de ese día
+    está reabierto (el día está abierto para corregir); si no, None."""
+    fila = conn.execute(
+        """SELECT id, reabierto_at, motivo_reapertura FROM recaudo_cierres
+            WHERE usuario_id = ? AND fecha = ? ORDER BY id DESC LIMIT 1""",
+        (usuario_id, fecha),
+    ).fetchone()
+    if not fila or not dict(fila)["reabierto_at"]:
+        return None
+    f = dict(fila)
+    return {"id": f["id"], "reabierto_at": _hora_utc(f["reabierto_at"]),
+            "motivo_reapertura": f["motivo_reapertura"]}
+
+
 @bp.route("/api/recaudo/pagos", methods=["GET"])
 @rol(*ROLES_RECAUDO)
 def pagos_del_dia():
@@ -131,9 +149,13 @@ def pagos_del_dia():
         """SELECT id, numero, placa, grupo, tp_propietario_nombre, tp_propietario_documento
              FROM buses ORDER BY numero"""
     ).fetchall()]
+    hoy = hoy_bogota()
     salida = {
         "fecha": fecha,
-        "hoy": hoy_bogota(),
+        "hoy": hoy,
+        # Un día pasado con la caja reabierta admite registrar pagos (los de quien consulta)
+        "dia_reabierto": (caja_reabierta(conn, getattr(request, "jwt_user_id", None), fecha)
+                          if fecha < hoy else None),
         "pagos": pagos,
         "totales": totales_pagos(pagos),
         "conceptos": conceptos_pago(conn),
@@ -153,11 +175,21 @@ def pagos_del_dia():
 @bp.route("/api/recaudo/pagos", methods=["POST"])
 @rol(*ROLES_RECAUDO)
 def registrar_pago():
-    """Body: {concepto_id, valor, bus_id?, pagador?, tercero_id?, observacion?}."""
+    """Body: {concepto_id, valor, bus_id?, pagador?, tercero_id?, observacion?, fecha?}.
+    `fecha` solo si es un día pasado cuya caja (la del que registra) está reabierta."""
     data = request.get_json(silent=True) or {}
     conn = db()
     aviso = None
+    uid = getattr(request, "jwt_user_id", None)
+    hoy = fecha = hoy_bogota()
     try:
+        if data.get("fecha") and data.get("fecha") != hoy:
+            fecha = _fecha_valida(data.get("fecha"))
+            if not fecha or fecha > hoy:
+                raise _Rechazo("Fecha inválida")
+            if not caja_reabierta(conn, uid, fecha):
+                raise _Rechazo("Solo se registran pagos de otro día cuando el administrador reabrió "
+                               "la caja de ese día.", 409)
         concepto_id = _entero(data.get("concepto_id"), "El concepto")
         fila = conn.execute("SELECT * FROM recaudo_conceptos WHERE id = ? AND empresa_id = ?",
                             (concepto_id, EMPRESA_POR_DEFECTO)).fetchone()
@@ -214,7 +246,6 @@ def registrar_pago():
         conn.close()
         return jsonify({"error": str(e)}), e.status
 
-    uid = getattr(request, "jwt_user_id", None)
     cur = conn.execute(
         """INSERT INTO recaudo_pagos
                (empresa_id, fecha, concepto_id, concepto_nombre, cuenta, signo, centro_costo,
@@ -223,7 +254,7 @@ def registrar_pago():
                 pagador_tercero_id, pagador_nombre, pagador_tipo_documento, pagador_documento,
                 pagador_dv, observacion, usuario_id)
            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-        (EMPRESA_POR_DEFECTO, hoy_bogota(), concepto_id, concepto["nombre"], concepto["cuenta"],
+        (EMPRESA_POR_DEFECTO, fecha, concepto_id, concepto["nombre"], concepto["cuenta"],
          concepto["signo"], concepto.get("centro_costo"), tipo, concepto.get("referencia") or "",
          valor, bus["id"] if bus else None, bus["numero"] if bus else None,
          bus.get("placa") if bus else None, tercero_id, copia["nombre"], copia["tipo_documento"],
@@ -244,8 +275,9 @@ def registrar_pago():
         (f"Registró el pago {numero_pago(pago_id)}: {concepto['nombre']} "
          f"({'entrada' if entra else 'salida'} de caja, cuenta {concepto['cuenta']}) por "
          f"{auditoria.pesos(valor)}" + (f" — {detalle}" if detalle else "")
-         + (f". Obs: {observacion}" if observacion else "") + "."),
-        {"concepto": concepto["nombre"], "cuenta": concepto["cuenta"], "signo": concepto["signo"],
+         + (f". Obs: {observacion}" if observacion else "")
+         + (f". Entra a la caja reabierta del día {fecha}" if fecha != hoy else "") + "."),
+        {"fecha": fecha, "concepto": concepto["nombre"], "cuenta": concepto["cuenta"], "signo": concepto["signo"],
          "valor": valor, "bus": bus["numero"] if bus else None, "tercero": copia["nombre"],
          "documento": copia["documento"], "pagador": pagador["nombre"] if pagador else None,
          "observacion": observacion},

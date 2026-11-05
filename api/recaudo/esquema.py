@@ -1,4 +1,4 @@
-"""Tablas del módulo Recaudo — SCHEMA_VERSION 23.
+"""Tablas del módulo Recaudo — SCHEMA_VERSION 25.
 
 - `recaudo_tarifas`: valor del pasaje por grupo de vehículo (A buses, B micros).
 - `recaudo_tipos_gasto`: gastos que el conductor puede reportar (ACPM, Taller…).
@@ -36,6 +36,12 @@
   cierres viejos no cambien si después se edita el catálogo.
 - En `recaudo_cierres` (v20): `pagos`, `ingresos`, `egresos` y `pago_ids`. Lo que debe
   haber en caja = recaudado + ingresos − egresos.
+- Cierre por DÍA DE TRABAJO (v25, pedido del usuario 2026-11-05): el día de una
+  liquidación en la caja es el día en que se recibió la plata (`recaudos.caja_fecha`,
+  hora Bogotá), no el de la tarjeta (`fecha`); el de un pago diario es su `fecha`.
+  Cada día de cada recaudador tiene su cierre (`recaudo_cierres.fecha`) y los cierres
+  se buscan por ese día. El faltante o sobrante de caja se arrastra como saldo
+  acumulado (suma de `diferencia_caja` de los cierres vigentes); no se guarda.
 
 El dinero se guarda en pesos enteros (INTEGER): en Postgres un NUMERIC llega
 como Decimal y Flask lo serializa como texto. La tarifa se copia en cada
@@ -321,6 +327,8 @@ _COLUMNAS_PG = [
     "ALTER TABLE recaudo_pagos ADD COLUMN IF NOT EXISTS pagador_tipo_documento TEXT",
     "ALTER TABLE recaudo_pagos ADD COLUMN IF NOT EXISTS pagador_documento TEXT",
     "ALTER TABLE recaudo_pagos ADD COLUMN IF NOT EXISTS pagador_dv TEXT",
+    "ALTER TABLE recaudos ADD COLUMN IF NOT EXISTS caja_fecha DATE",
+    "ALTER TABLE recaudo_cierres ADD COLUMN IF NOT EXISTS fecha DATE",
 ]
 _COLUMNAS_SQLITE = [
     "ALTER TABLE recaudos ADD COLUMN cierre_id INTEGER REFERENCES recaudo_cierres(id)",
@@ -338,8 +346,26 @@ _COLUMNAS_SQLITE = [
     "ALTER TABLE recaudo_pagos ADD COLUMN pagador_tipo_documento TEXT",
     "ALTER TABLE recaudo_pagos ADD COLUMN pagador_documento TEXT",
     "ALTER TABLE recaudo_pagos ADD COLUMN pagador_dv TEXT",
+    "ALTER TABLE recaudos ADD COLUMN caja_fecha DATE",
+    "ALTER TABLE recaudo_cierres ADD COLUMN fecha DATE",
 ]
-_INDICES = ["CREATE INDEX IF NOT EXISTS idx_recaudos_caja ON recaudos(usuario_id, cierre_id)"]
+_INDICES = ["CREATE INDEX IF NOT EXISTS idx_recaudos_caja ON recaudos(usuario_id, cierre_id)",
+            "CREATE INDEX IF NOT EXISTS idx_recaudo_cierres_fecha ON recaudo_cierres(usuario_id, fecha)"]
+
+# Día de trabajo de la caja (v25) para lo que ya existía: la liquidación, el día en que se
+# recibió (hora Bogotá); el cierre, el día del último movimiento que entró (o el del cierre).
+# Idempotente: solo llena lo vacío.
+_DIA_CAJA_PG = [
+    """UPDATE recaudos SET caja_fecha = (created_at AT TIME ZONE 'America/Bogota')::date
+        WHERE caja_fecha IS NULL""",
+    """UPDATE recaudo_cierres
+          SET fecha = (COALESCE(hasta_at, cerrado_at) AT TIME ZONE 'America/Bogota')::date
+        WHERE fecha IS NULL""",
+]
+_DIA_CAJA_SQLITE = [
+    "UPDATE recaudos SET caja_fecha = date(created_at, '-5 hours') WHERE caja_fecha IS NULL",
+    "UPDATE recaudo_cierres SET fecha = date(COALESCE(hasta_at, cerrado_at), '-5 hours') WHERE fecha IS NULL",
+]
 
 # Gastos mayores que el producido (neto del conductor negativo): la empresa le queda
 # debiendo y la diferencia se cuenta contra $0, no como sobrante; el neto del bus es solo
@@ -377,14 +403,14 @@ def migrar(db):
                 db.execute(sql)
             except Exception:
                 pass   # la columna ya existe
-        for sql in _INDICES + _CORRECCIONES:
+        for sql in _INDICES + _CORRECCIONES + _DIA_CAJA_SQLITE:
             db.execute(sql)
         db.execute(_SEMILLA_TIPOS)
         _ajustar_tipos(db)
         db.commit()
         return
 
-    for sql in _PG + _COLUMNAS_PG + _INDICES + _CORRECCIONES + [_SEMILLA_TIPOS]:
+    for sql in _PG + _COLUMNAS_PG + _INDICES + _CORRECCIONES + _DIA_CAJA_PG + [_SEMILLA_TIPOS]:
         try:
             db.execute(sql)
             db.commit()
