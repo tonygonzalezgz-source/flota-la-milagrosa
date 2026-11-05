@@ -137,7 +137,8 @@
       .btns { justify-content:flex-start; }
       .modal-bg { align-items:flex-start; padding-top:72px; overflow:auto; }
     }
-  </style>
+    .nota-solo-ver { margin-top: 14px; padding: 10px 12px; border-radius: 8px; background: #f3f4f6; color: #555; font-size: 13px; }
+</style>
 </head>
 <body>
   <div class="page-header">
@@ -221,6 +222,8 @@
   const API = (window.location.port === '3030') ? 'http://localhost:8001' : window.location.origin;
   const CU = (() => { try { return JSON.parse(localStorage.getItem('currentUser') || '{}'); } catch (_) { return {}; } })();
   const ES_ADMIN = CU.rol === 'Administrador';
+  // Módulo en "solo ver" (Catálogo › Usuarios y permisos): consulta sin cerrar la caja
+  const SOLO_VER = (CU.soloLectura || []).includes('recaudo-caja');
 
   async function apiFetch(path, opts = {}) {
     const token = localStorage.getItem('authToken');
@@ -392,7 +395,7 @@
           <tr class="total"><td data-label="">Total</td><td></td><td></td><td></td>
             <td data-label="Entradas" class="num c-ok">${fmtMoney(t.ingresos)}</td><td data-label="Salidas" class="num c-bad">${fmtMoney(t.egresos)}</td></tr>
         </tbody></table></div>` : ''}
-      <div class="cierre-form">
+      <div class="cierre-form"${SOLO_VER ? ' style="display:none"' : ''}>
         <div class="campo"><label>Efectivo entregado a la transportadora<span class="req">*</span></label>
           <input id="fEfectivo" inputmode="numeric" placeholder="$0" oninput="formatearDinero(this); recalcularCaja()" /></div>
         <div class="campo"><label>Diferencia de caja</label><div class="calc" id="cDifCaja">—</div></div>
@@ -401,7 +404,9 @@
         <div class="campo ancho"><label>Observación <span class="sub">(opcional)</span></label>
           <input id="fObs" maxlength="500" placeholder="Opcional" /></div>
       </div>
-      <div class="acciones"><button class="btn-primary" onclick="cerrarCaja()">Cerrar caja</button></div>`;
+      ${SOLO_VER
+        ? '<div class="nota-solo-ver">Tu permiso en este módulo es «solo ver»: puedes consultar la caja, pero no cerrarla.</div>'
+        : '<div class="acciones"><button class="btn-primary" onclick="cerrarCaja()">Cerrar caja</button></div>'}`;
   }
 
   function recalcularCaja() {

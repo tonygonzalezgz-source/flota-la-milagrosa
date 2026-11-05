@@ -410,7 +410,9 @@
     document.addEventListener('DOMContentLoaded', async () => {
       currentUser  = JSON.parse(localStorage.getItem('currentUser') || 'null');
       esAdmin      = !!currentUser && currentUser.rol === 'Administrador';
-      esPropietario = !!currentUser && currentUser.rol === 'Propietario';
+      // Solo lectura: el propietario, o quien tiene el módulo en "ver" (Catálogo › Usuarios y permisos)
+      esPropietario = !!currentUser && (currentUser.rol === 'Propietario'
+        || (currentUser.soloLectura || []).includes('lavada'));
       if (esAdmin) document.getElementById('excelBtn').style.display = '';
 
       // El propietario solo lee: ocultamos el form completo y sus tabs contextuales

@@ -558,6 +558,39 @@
       border-top: 1px solid var(--border);
     }
 
+    /* ── USUARIOS Y PERMISOS ── */
+    .perm-buscar {
+      width: 100%; padding: 9px 12px 9px 36px; border: 1.5px solid var(--border); border-radius: 8px;
+      font-size: 16px; background: var(--white); color: var(--txt); outline: none;
+    }
+    /* La tabla es larga: solo el cuerpo hace scroll, Guardar queda siempre a la vista */
+    .perm-modal { max-width: 720px; display: flex; flex-direction: column; overflow: hidden; }
+    .perm-modal .modal-body { overflow-y: auto; flex: 1; min-height: 0; }
+    #tbody-cuentas .badge, #tbody-cuentas .btn-sm { white-space: nowrap; }
+    .perm-tabla { border: 1px solid var(--border); border-radius: var(--radius-s); overflow: hidden; }
+    .perm-fila {
+      display: grid; grid-template-columns: minmax(0, 1fr) 64px 84px; align-items: center;
+      padding: 7px 12px; border-top: 1px solid var(--border); font-size: 13px;
+    }
+    .perm-fila:first-child { border-top: none; }
+    .perm-fila .perm-c { display: flex; justify-content: center; }
+    .perm-fila input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--primary); cursor: pointer; }
+    .perm-fila input[type="checkbox"]:disabled { cursor: not-allowed; opacity: .35; }
+    .perm-cab { background: var(--bg); font-size: 11px; font-weight: 700; color: var(--txt2); text-transform: uppercase; letter-spacing: .4px; }
+    .perm-grupo { background: #fafafc; font-size: 12px; font-weight: 700; color: var(--txt2); }
+    .perm-ayuda { display: block; font-size: 11px; color: var(--txt3); margin-top: 1px; }
+    .perm-fila.off .perm-nombre { color: var(--txt3); }
+    .perm-guion { color: var(--txt3); font-size: 12px; }
+    .perm-estado { font-size: 12px; color: var(--txt2); display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+    .perm-estado button { background: none; border: none; color: var(--primary); font-weight: 600; font-size: 12px; cursor: pointer; padding: 0; }
+    .perm-nota { font-size: 12px; color: var(--txt2); background: var(--primary2); border-radius: var(--radius-s); padding: 10px 12px; }
+    .perm-hint { font-size: 11px; color: var(--txt3); }
+    @media (max-width: 768px) {
+      .perm-fila { grid-template-columns: minmax(0, 1fr) 48px 72px; padding: 8px 10px; }
+      .perm-modal .form-row { grid-template-columns: 1fr; }
+      .perm-modal input, .perm-modal select { font-size: 16px; }
+    }
+
     /* ── TOAST ── */
     .toast {
       position: fixed;
@@ -712,6 +745,10 @@
       </button>
 
       <div class="tab-group-label">Cuentas de acceso</div>
+      <button class="tab" data-tab="cuentas" onclick="showTab('cuentas')">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        Usuarios y permisos
+      </button>
       <button class="tab" data-tab="usuarios" onclick="showTab('usuarios')">
         <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         Acceso Propietarios
@@ -818,6 +855,42 @@
           </tr>
         </thead>
         <tbody id="tbody-rutas">
+          <tr class="loading-row"><td colspan="6">Cargando…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── TAB: USUARIOS Y PERMISOS (todas las cuentas, con módulos por usuario) ── -->
+  <div id="panel-cuentas" class="panel hidden">
+    <div class="sec-header">
+      <div>
+        <div class="sec-title">Usuarios y permisos</div>
+        <div class="sec-sub">Crea cualquier cuenta y elige qué módulos ve y en cuáles puede modificar</div>
+      </div>
+      <button class="btn btn-primary" onclick="openCuenta()">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Nuevo usuario
+      </button>
+    </div>
+    <div style="margin:0 0 12px 0;position:relative;max-width:420px">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--txt3);pointer-events:none"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input id="buscarCuenta" type="search" placeholder="Buscar por nombre, usuario o tipo de cuenta…" autocomplete="off"
+             oninput="renderCuentas()" class="perm-buscar">
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Usuario</th>
+            <th>Nombre</th>
+            <th>Tipo de cuenta</th>
+            <th>Permisos</th>
+            <th>Estado</th>
+            <th style="text-align:right">Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-cuentas">
           <tr class="loading-row"><td colspan="6">Cargando…</td></tr>
         </tbody>
       </table>
@@ -1219,6 +1292,21 @@
 
 </div><!-- /page -->
 
+<!-- ── MODAL: USUARIO CON PERMISOS POR MÓDULO ── -->
+<div id="perm-overlay" class="modal-overlay hidden">
+  <div class="modal perm-modal">
+    <div class="modal-header">
+      <h3 id="perm-title">Nuevo usuario</h3>
+      <button class="modal-close" onclick="closeCuenta()" aria-label="Cerrar">×</button>
+    </div>
+    <div class="modal-body" id="perm-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeCuenta()">Cancelar</button>
+      <button class="btn btn-primary" id="perm-save" onclick="saveCuenta()">Guardar</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── MODAL ── -->
 <div id="modal-overlay" class="modal-overlay hidden" onclick="handleOverlayClick(event)">
   <div class="modal" id="modal-box">
@@ -1282,6 +1370,7 @@
         const rt = await apiFetch('/api/recaudo/terceros');
         tercerosLista = rt.terceros; tiposDocumento = rt.tipos_documento;
       } catch (_) { tercerosLista = []; }
+      try { catPermisos = await apiFetch('/api/admin/permisos'); } catch (_) { catPermisos = null; }
       renderAll();
     } catch (e) {
       showToast('Error al conectar con el servidor', 'error');
@@ -1329,6 +1418,280 @@
     renderTerceros();
     renderCondAcceso();
     renderPuestos();
+    renderCuentas();
+  }
+
+  /* ═══ USUARIOS Y PERMISOS ═══
+     Cualquier cuenta con sus módulos y nivel (ver / modificar). El "tipo de
+     cuenta" es el rol: marca las casillas de su plantilla y decide de quién son
+     los datos (un propietario solo ve sus buses). Si las casillas quedan como la
+     plantilla, la cuenta sigue los permisos estándar de su rol (api/permisos.py). */
+  let catPermisos = null;           // GET /api/admin/permisos
+  let cuentaId = null;              // null = cuenta nueva
+  let cuentaMarcas = {};            // {vista: 'ver' | 'modificar'}
+  const ROL_COLOR = { 'Propietario': '#f59e0b', 'Analista': '#6366f1', 'Despachador': '#22c55e',
+    'Jefe de Ruta': '#3b82f6', 'Recaudador': '#14b8a6', 'Conductor': '#8b5cf6', 'Administrador': '#ef4444' };
+  const CON_BUSES = ['Propietario', 'Técnico Mant.'];
+
+  function esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+  function nombreVista(v) {
+    for (const g of catPermisos?.grupos || []) for (const x of g.vistas) if (x.clave === v) return x.nombre;
+    return v;
+  }
+  function plantillaDe(rol) { return { ...((catPermisos?.plantillas || {})[rol] || {}) }; }
+  function mismasMarcas(a, b) {
+    const ka = Object.keys(a), kb = Object.keys(b);
+    return ka.length === kb.length && ka.every(k => a[k] === b[k]);
+  }
+
+  function renderCuentas() {
+    const tbody = document.getElementById('tbody-cuentas');
+    if (!tbody) return;
+    const q = (document.getElementById('buscarCuenta')?.value || '').trim().toLowerCase();
+    const lista = usuarios.filter(u => !q || [u.nombre, u.username, u.rol].some(x => (x || '').toLowerCase().includes(q)));
+    if (!lista.length) {
+      tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><p>${q ? 'Ninguna cuenta coincide con la búsqueda' : 'No hay cuentas registradas'}</p></div></td></tr>`;
+      return;
+    }
+    tbody.innerHTML = lista.map(u => {
+      const n = Object.keys(u.permisos || {}).length;
+      const permisos = u.rol === 'Administrador'
+        ? '<span class="badge badge-alerta">Acceso total</span>'
+        : n
+          ? `<span class="badge badge-revision" title="${esc(Object.keys(u.permisos).map(nombreVista).join(', '))}">Personalizado · ${n} módulo${n !== 1 ? 's' : ''}</span>`
+          : '<span class="badge badge-inactivo">Estándar del rol</span>';
+      const nombreJs = esc((u.nombre || u.username).replace(/'/g, "\\'"));
+      const asignar = CON_BUSES.includes(u.rol)
+        ? `<button class="btn btn-outline btn-sm" onclick="openBusAssign(${u.id},'${nombreJs}')">Buses (${u.buses_count})</button>`
+        : u.rol === 'Despachador'
+          ? `<button class="btn btn-outline btn-sm" onclick="openRutaAssign(${u.id},'${nombreJs}')">Rutas</button>`
+          : '';
+      return `<tr>
+        <td>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="width:32px;height:32px;border-radius:50%;background:${esc(u.color || '#6366f1')};display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;flex-shrink:0">${esc(u.iniciales)}</div>
+            <div style="font-weight:600;font-size:13px">${esc(u.username)}</div>
+          </div>
+        </td>
+        <td>${esc(u.nombre)}</td>
+        <td><span class="badge badge-a">${esc(u.rol)}</span></td>
+        <td>${permisos}</td>
+        <td><span class="badge badge-${u.activo ? 'activo' : 'inactivo'}">${u.activo ? 'Activo' : 'Inactivo'}</span></td>
+        <td><div class="td-actions">
+          ${asignar}
+          <button class="icon-btn" onclick="openCuenta(${u.id})" title="Editar datos y permisos">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          ${u.id === miId() ? '' : accionEstadoUsuario('cuenta', u)}
+        </div></td>
+      </tr>`;
+    }).join('');
+  }
+
+  function miId() {
+    try { return JSON.parse(localStorage.getItem('currentUser') || '{}').id; } catch (_) { return null; }
+  }
+
+  function openCuenta(id) {
+    if (!catPermisos) { showToast('No se pudo cargar la lista de módulos. Recarga la página.', 'error'); return; }
+    cuentaId = id || null;
+    const d = id ? usuarios.find(u => u.id === id) : null;
+    const rol = d ? d.rol : 'Despachador';
+    cuentaMarcas = d && Object.keys(d.permisos || {}).length ? { ...d.permisos } : plantillaDe(rol);
+    const propio = d && d.id === miId();
+    const roles = ['Administrador', ...catPermisos.roles];
+    const prop = d && d.rol === 'Propietario' ? propietarios.find(p => p.usuario_id === d.id) : null;
+    document.getElementById('perm-title').textContent = d ? `Editar usuario · ${d.nombre}` : 'Nuevo usuario';
+    document.getElementById('perm-body').innerHTML = `
+      <div class="form-row">
+        <div class="field">
+          <label for="c-nombre">Nombre completo *</label>
+          <input type="text" id="c-nombre" value="${esc(d?.nombre)}" placeholder="Ej: Ximena Restrepo" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="c-username">Usuario (cédula) *</label>
+          <input type="text" id="c-username" value="${esc(d?.username)}" placeholder="Ej: 1001577609" autocomplete="off" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label for="c-password">${d ? 'Nueva contraseña (vacío = sin cambio)' : 'Contraseña *'}</label>
+          <div class="pw-wrap">
+            <input type="password" id="c-password" placeholder="${d ? 'Escribe la nueva contraseña' : 'Mínimo 8 caracteres'}" autocomplete="new-password" />
+            <button type="button" class="pw-toggle" onclick="togglePassword('c-password', this)" title="Mostrar/ocultar contraseña" aria-label="Mostrar contraseña">${EYE_ON}</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="c-rol">Tipo de cuenta (plantilla) *</label>
+          <select id="c-rol" onchange="cambiarTipoCuenta()" ${propio ? 'disabled title="No puedes cambiar el tipo de tu propia cuenta"' : ''}>
+            ${roles.map(r => `<option value="${esc(r)}" ${r === rol ? 'selected' : ''}>${esc(r)}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="field full" id="c-extra-tel" style="display:none">
+        <label for="c-telefono">Teléfono WhatsApp <span style="color:var(--txt3);font-weight:400">(para enviar liquidaciones)</span></label>
+        <input type="tel" id="c-telefono" value="${esc(prop?.telefono)}" placeholder="Ej: 3001234567" inputmode="numeric" maxlength="15" />
+      </div>
+      <div class="field full" id="c-extra-puesto" style="display:none">
+        <label for="c-puesto">Puesto de trabajo (para el chequeo de llegada/salida)</label>
+        <select id="c-puesto">
+          <option value="">— Sin puesto —</option>
+          ${puestos.filter(p => p.activo || (d && d.puesto_id === p.id)).map(p =>
+            `<option value="${p.id}" ${d && d.puesto_id === p.id ? 'selected' : ''}>${esc(p.nombre)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="perm-hint" id="c-tipo-ayuda"></div>
+      <div id="c-permisos"></div>
+    `;
+    pintarPermisos();
+    document.getElementById('perm-overlay').classList.remove('hidden');
+    setTimeout(() => document.getElementById('c-nombre')?.focus(), 50);
+  }
+
+  function closeCuenta() {
+    document.getElementById('perm-overlay').classList.add('hidden');
+  }
+
+  function tipoCuenta() { return document.getElementById('c-rol').value; }
+
+  function cambiarTipoCuenta() {
+    cuentaMarcas = plantillaDe(tipoCuenta());
+    pintarPermisos();
+  }
+
+  function restablecerPlantilla() {
+    cuentaMarcas = plantillaDe(tipoCuenta());
+    pintarPermisos();
+  }
+
+  // Ver ↔ Modificar: modificar incluye ver; quitar ver quita modificar.
+  function marcar(vista, nivel, on) {
+    if (nivel === 'modificar') {
+      if (on) cuentaMarcas[vista] = 'modificar';
+      else if (cuentaMarcas[vista]) cuentaMarcas[vista] = 'ver';
+    } else if (on) {
+      cuentaMarcas[vista] = cuentaMarcas[vista] || 'ver';
+    } else {
+      delete cuentaMarcas[vista];
+    }
+    pintarPermisos();
+  }
+
+  function marcarGrupo(i, nivel, on) {
+    const tope = (catPermisos.topes || {})[tipoCuenta()];
+    for (const v of catPermisos.grupos[i].vistas) {
+      if (tope && !tope[v.clave]) continue;
+      if (nivel === 'modificar' && (!v.modificar || (tope && tope[v.clave] !== 'modificar'))) {
+        if (!on && cuentaMarcas[v.clave]) cuentaMarcas[v.clave] = 'ver';
+        continue;
+      }
+      if (nivel === 'modificar') { if (on) cuentaMarcas[v.clave] = 'modificar'; else if (cuentaMarcas[v.clave]) cuentaMarcas[v.clave] = 'ver'; }
+      else if (on) cuentaMarcas[v.clave] = cuentaMarcas[v.clave] || 'ver';
+      else delete cuentaMarcas[v.clave];
+    }
+    pintarPermisos();
+  }
+
+  function pintarPermisos() {
+    const rol = tipoCuenta();
+    const tope = (catPermisos.topes || {})[rol];
+    document.getElementById('c-extra-tel').style.display = rol === 'Propietario' ? '' : 'none';
+    document.getElementById('c-extra-puesto').style.display = rol === 'Despachador' ? '' : 'none';
+    document.getElementById('c-tipo-ayuda').textContent = rol === 'Administrador' ? ''
+      : tope ? `Una cuenta de ${rol} solo ve sus propios buses: por eso solo se le pueden dar estos módulos.`
+             : 'El tipo de cuenta marca las casillas de una vez; después puedes ajustarlas.';
+    const caja = document.getElementById('c-permisos');
+    if (rol === 'Administrador') {
+      caja.innerHTML = `<div class="perm-nota">El administrador entra a todos los módulos y puede modificar todo, incluido este Catálogo.</div>`;
+      return;
+    }
+    let html = `<div class="perm-tabla">
+      <div class="perm-fila perm-cab"><span>Módulo</span><span class="perm-c">Ver</span><span class="perm-c">Modificar</span></div>`;
+    catPermisos.grupos.forEach((g, i) => {
+      const usables = g.vistas.filter(v => !tope || tope[v.clave]);
+      const conMod = usables.filter(v => v.modificar && (!tope || tope[v.clave] === 'modificar'));
+      const todosVer = usables.length && usables.every(v => cuentaMarcas[v.clave]);
+      const todosMod = conMod.length && conMod.every(v => cuentaMarcas[v.clave] === 'modificar');
+      html += `<div class="perm-fila perm-grupo"><span>${esc(g.nombre)}</span>
+        <span class="perm-c"><input type="checkbox" aria-label="Ver todo ${esc(g.nombre)}" ${todosVer ? 'checked' : ''} ${usables.length ? '' : 'disabled'} onchange="marcarGrupo(${i}, 'ver', this.checked)"></span>
+        <span class="perm-c"><input type="checkbox" aria-label="Modificar todo ${esc(g.nombre)}" ${todosMod ? 'checked' : ''} ${conMod.length ? '' : 'disabled'} onchange="marcarGrupo(${i}, 'modificar', this.checked)"></span></div>`;
+      for (const v of g.vistas) {
+        const permitido = !tope || tope[v.clave];
+        const puedeMod = v.modificar && (!tope || tope[v.clave] === 'modificar');
+        const nivel = cuentaMarcas[v.clave];
+        const ayuda = !permitido ? `No disponible para una cuenta de ${rol}` : v.ayuda;
+        html += `<div class="perm-fila ${permitido ? '' : 'off'}">
+          <span class="perm-nombre">${esc(v.nombre)}${ayuda ? `<span class="perm-ayuda">${esc(ayuda)}</span>` : ''}</span>
+          <span class="perm-c"><input type="checkbox" aria-label="Ver ${esc(v.nombre)}" ${nivel ? 'checked' : ''} ${permitido ? '' : 'disabled'} onchange="marcar('${v.clave}', 'ver', this.checked)"></span>
+          <span class="perm-c">${v.modificar
+            ? `<input type="checkbox" aria-label="Modificar ${esc(v.nombre)}" ${nivel === 'modificar' ? 'checked' : ''} ${puedeMod ? '' : 'disabled'} onchange="marcar('${v.clave}', 'modificar', this.checked)">`
+            : '<span class="perm-guion" title="Este módulo solo se consulta">—</span>'}</span>
+        </div>`;
+      }
+    });
+    html += `<div class="perm-fila perm-grupo"><span>Solo administrador</span><span></span><span></span></div>`;
+    for (const v of catPermisos.solo_admin) {
+      html += `<div class="perm-fila off"><span class="perm-nombre">
+        <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" style="vertical-align:-1px"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        ${esc(v.nombre)}</span><span></span><span></span></div>`;
+    }
+    html += `</div>`;
+    const plantilla = plantillaDe(rol);
+    const n = Object.keys(cuentaMarcas).length;
+    const igual = mismasMarcas(cuentaMarcas, plantilla);
+    let cambios = 0;
+    new Set([...Object.keys(plantilla), ...Object.keys(cuentaMarcas)]).forEach(k => { if (plantilla[k] !== cuentaMarcas[k]) cambios++; });
+    html += `<div class="perm-estado" style="margin-top:10px">
+      <span><b>${n}</b> módulo${n !== 1 ? 's' : ''} marcado${n !== 1 ? 's' : ''} ·
+      ${igual ? `igual a la plantilla <b>${esc(rol)}</b> (usa los permisos estándar de ese tipo de cuenta)`
+              : `personalizado: ${cambios} cambio${cambios !== 1 ? 's' : ''} respecto a la plantilla <b>${esc(rol)}</b>`}</span>
+      ${igual ? '' : '<button type="button" onclick="restablecerPlantilla()">Restablecer plantilla</button>'}
+    </div>`;
+    caja.innerHTML = html;
+  }
+
+  async function saveCuenta() {
+    const btn = document.getElementById('perm-save');
+    const nombre = document.getElementById('c-nombre').value.trim();
+    const username = document.getElementById('c-username').value.trim();
+    const password = document.getElementById('c-password').value.trim();
+    const rol = tipoCuenta();
+    if (!nombre || !username) { showToast('Escribe el nombre y el usuario', 'error'); return; }
+    if (!cuentaId && !password) { showToast('Escribe una contraseña', 'error'); return; }
+    if (password && password.length < 8) { showToast('La contraseña debe tener al menos 8 caracteres', 'error'); return; }
+    if (rol !== 'Administrador' && !Object.keys(cuentaMarcas).length) { showToast('Marca al menos un módulo', 'error'); return; }
+    const d = cuentaId ? usuarios.find(u => u.id === cuentaId) : null;
+    const partes = nombre.split(/\s+/);
+    const body = { nombre, username,
+      iniciales: d?.iniciales || (partes.length >= 2 ? partes[0][0] + partes[1][0] : nombre.slice(0, 2)).toUpperCase(),
+      color: d?.color || ROL_COLOR[rol] || '#6366f1',
+      permisos: rol === 'Administrador' ? null : { ...cuentaMarcas } };
+    if (!document.getElementById('c-rol').disabled) body.rol = rol;
+    if (password) body.password = password;
+    if (rol === 'Propietario') body.telefono = document.getElementById('c-telefono').value.replace(/\D+/g, '');
+    if (rol === 'Despachador') {
+      const p = document.getElementById('c-puesto').value;
+      body.puesto_id = p ? parseInt(p) : null;
+    }
+    btn.disabled = true; btn.textContent = 'Guardando…';
+    try {
+      const res = await apiFetch(cuentaId ? `/api/admin/usuarios/${cuentaId}` : '/api/admin/usuarios',
+        { method: cuentaId ? 'PUT' : 'POST', body: JSON.stringify(body) });
+      const nuevoId = cuentaId ? null : res.id;
+      closeCuenta();
+      await loadAll();
+      notifyParent('usuario');
+      showToast(cuentaId ? 'Usuario actualizado' : 'Usuario creado');
+      // Cuentas nuevas que trabajan con buses o rutas propias: asignarlos de una vez
+      if (nuevoId && CON_BUSES.includes(rol)) openBusAssign(nuevoId, nombre);
+      else if (nuevoId && rol === 'Despachador') openRutaAssign(nuevoId, nombre);
+    } catch (e) {
+      showToast(e.message, 'error');
+    } finally {
+      btn.disabled = false; btn.textContent = 'Guardar';
+    }
   }
 
   /* ─── RENDER: PUESTOS DE TRABAJO ─── */
@@ -2607,7 +2970,7 @@
 
   /* ─── DELETE ─── */
   async function deleteItem(type, id) {
-    const labels = { bus: 'bus', ruta: 'ruta', usuario: 'cuenta de acceso', analista: 'cuenta de analista', mecanico: 'cuenta de mecánico', conductor: 'conductor', despachador: 'cuenta de despachador', jeferuta: 'cuenta de jefe de ruta', recaudador: 'cuenta de recaudador', condacceso: 'cuenta de conductor', puesto: 'puesto de trabajo' };
+    const labels = { bus: 'bus', ruta: 'ruta', usuario: 'cuenta de acceso', analista: 'cuenta de analista', mecanico: 'cuenta de mecánico', conductor: 'conductor', despachador: 'cuenta de despachador', jeferuta: 'cuenta de jefe de ruta', recaudador: 'cuenta de recaudador', condacceso: 'cuenta de conductor', puesto: 'puesto de trabajo', cuenta: 'cuenta de acceso' };
     if (!confirm(`¿Seguro que deseas eliminar este ${labels[type]}?`)) return;
 
     try {
@@ -2622,6 +2985,7 @@
         jeferuta:    `/api/admin/usuarios/${id}`,
         recaudador:  `/api/admin/usuarios/${id}`,
         condacceso:  `/api/admin/usuarios/${id}`,
+        cuenta:      `/api/admin/usuarios/${id}`,
         puesto:      `/api/puestos/${id}`,
       };
       const result = await apiFetch(urls[type], { method: 'DELETE' });

@@ -382,7 +382,9 @@
     // ── INIT ──
     document.addEventListener('DOMContentLoaded', async () => {
       currentUser   = JSON.parse(localStorage.getItem('currentUser') || 'null');
-      esPropietario = !!currentUser && currentUser.rol === 'Propietario';
+      // Solo lectura: el propietario, o quien tiene el módulo en "ver" (Catálogo › Usuarios y permisos)
+      esPropietario = !!currentUser && (currentUser.rol === 'Propietario'
+        || (currentUser.soloLectura || []).includes('tecnologia'));
       if (esPropietario) document.getElementById('formCard').style.display = 'none';
       if (currentUser && currentUser.rol === 'Administrador') {
         document.getElementById('excelBtn').style.display = 'inline-flex';

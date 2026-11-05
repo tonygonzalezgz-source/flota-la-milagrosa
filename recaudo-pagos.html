@@ -293,6 +293,8 @@
   const API = (window.location.port === '3030') ? 'http://localhost:8001' : window.location.origin;
   const CU = (() => { try { return JSON.parse(localStorage.getItem('currentUser') || '{}'); } catch (_) { return {}; } })();
   const ES_ADMIN = CU.rol === 'Administrador';
+  // Módulo en "solo ver" (Catálogo › Usuarios y permisos): consulta sin registrar ni reimprimir
+  const SOLO_VER = (CU.soloLectura || []).includes('recaudo-pagos');
   const TIPO = { A: 'Bus', B: 'Micro' };
   const $ = id => document.getElementById(id);
 
@@ -402,7 +404,7 @@
   window.addEventListener('message', e => { if (e.data?.type === 'VIEW_SHOWN' && !dirty) cargar(); });
   /* Reimprimir: el recaudador una vez (el suyo), el Administrador los que quiera; lo cuenta el
      servidor. Tras imprimir se vacía la tirilla para que ⌘P no la repita. */
-  const puedeReimprimir = p => ES_ADMIN || (p.usuario_id === CU.id && (p.reimpresiones || 0) < 1);
+  const puedeReimprimir = p => ES_ADMIN || (!SOLO_VER && p.usuario_id === CU.id && (p.reimpresiones || 0) < 1);
   window.addEventListener('afterprint', () => { if (!ES_ADMIN) document.getElementById('tirilla').innerHTML = ''; });
   window.addEventListener('beforeunload', e => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
   ['input', 'change'].forEach(tipo => document.addEventListener(tipo, e => e.target.classList?.remove('err')));
@@ -516,6 +518,11 @@
 
   /* ── Formulario (solo el día de hoy: la fecha del pago la pone el servidor) ── */
   function renderForm() {
+    if (SOLO_VER) {
+      $('formCard').innerHTML = `<div class="card-title"><span>Registrar pago</span></div>
+        <div class="bloqueado">Tu permiso en este módulo es «solo ver»: puedes consultar los pagos, pero no registrarlos.</div>`;
+      return;
+    }
     if (fecha !== D.hoy) {
       $('formCard').innerHTML = `<div class="card-title"><span>Registrar pago</span></div>
         <div class="bloqueado">Los pagos se registran con la fecha de hoy. Este día solo se puede consultar.<br>

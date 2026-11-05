@@ -309,6 +309,15 @@
 <script>
   const API = (window.location.port === '3030') ? 'http://localhost:8001' : window.location.origin;
   const HOY = new Date().toISOString().slice(0, 10);
+  // Enviar novedades a mantenimiento: quien tiene Dashboard o Mantenimiento con "modificar"
+  // (Catálogo › Usuarios y permisos); con los dos en "solo ver" el reporte solo se consulta.
+  const PUEDE_MANT = (() => {
+    try {
+      const u = JSON.parse(localStorage.getItem('currentUser') || 'null') || {};
+      if (u.rol === 'Administrador') return true;
+      return ['dashboard', 'mant'].some(v => (u.allowedViews || []).includes(v) && !(u.soloLectura || []).includes(v));
+    } catch (_) { return true; }
+  })();
 
   // Lista EXACTA del formulario oficial de alistamiento (espejo de despacho.html).
   const ITEMS_ALIST = [
@@ -466,7 +475,7 @@
       const acciones = `
         <div class="row-actions">
           <button class="btn-sm" onclick="verDetalle(${b.bus_id})" ${hecho ? '' : 'disabled'}>Ver detalle</button>
-          <button class="btn-sm warn" onclick="abrirMant(${b.bus_id})" ${fallas > 0 ? '' : 'disabled'}>Programar mant.</button>
+          ${PUEDE_MANT ? `<button class="btn-sm warn" onclick="abrirMant(${b.bus_id})" ${fallas > 0 ? '' : 'disabled'}>Programar mant.</button>` : ''}
         </div>`;
 
       return `<tr class="${cambiados.has(b.bus_id) ? 'flash' : ''}">

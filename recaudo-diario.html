@@ -457,6 +457,8 @@
   const API = (window.location.port === '3030') ? 'http://localhost:8001' : window.location.origin;
   const CU = (() => { try { return JSON.parse(localStorage.getItem('currentUser') || '{}'); } catch (_) { return {}; } })();
   const ES_ADMIN = CU.rol === 'Administrador';
+  // Módulo en "solo ver" (Catálogo › Usuarios y permisos): consulta sin liquidar ni reimprimir
+  const SOLO_VER = (CU.soloLectura || []).includes('recaudo-diario');
   const GRUPOS = { A: 'Buses', B: 'Micros' };
   const TIPO   = { A: 'Bus', B: 'Micro' };
 
@@ -550,7 +552,7 @@
   window.addEventListener('message', e => { if (e.data?.type === 'VIEW_SHOWN' && !dirty) cargar(); });
   /* Reimprimir: el recaudador una vez (la suya), el Administrador las que quiera; lo cuenta el
      servidor. Tras imprimir se vacía la tirilla para que ⌘P no la repita. */
-  const puedeReimprimir = r => ES_ADMIN || (r.usuario_id === CU.id && (r.reimpresiones || 0) < 1);
+  const puedeReimprimir = r => ES_ADMIN || (!SOLO_VER && r.usuario_id === CU.id && (r.reimpresiones || 0) < 1);
   window.addEventListener('afterprint', () => { if (!ES_ADMIN) document.getElementById('tirilla').innerHTML = ''; });
   window.addEventListener('beforeunload', e => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
   // Al corregir un campo se le quita la marca roja; las lecturas (final y relevos) las marca recalcular().
@@ -561,6 +563,7 @@
   async function cargar() {
     try {
       D = await apiFetch(`/api/recaudo/dia?fecha=${fecha}`);
+      if (SOLO_VER && D.editable) { D.editable = false; D.motivo = 'Tu permiso en este módulo es «solo ver».'; }
     } catch (e) {
       document.getElementById('lista').innerHTML = `<div class="vacio">${esc(e.message)}</div>`;
       return;
