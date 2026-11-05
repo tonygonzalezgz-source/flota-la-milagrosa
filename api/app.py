@@ -20,6 +20,7 @@ import jwt as _jwt
 from werkzeug.security import generate_password_hash, check_password_hash
 
 import auditoria  # historial de modificaciones (api/auditoria/)
+import permisos   # módulos por usuario con nivel ver/modificar (api/permisos.py)
 
 load_dotenv()  # carga variables desde .env si existe
 
@@ -122,6 +123,62 @@ def _cuenta_vigente(user_id, rol):
     return visto[1] and visto[2] == rol
 
 
+# Permisos por usuario (api/permisos.py): igual que _cuenta_vigente, lo visto se
+# recuerda 60 s por instancia y editar una cuenta en Catálogo lo olvida.
+_permisos_vistos = {}   # (demo, user_id) → (vence, activo, rol, {vista: nivel})
+
+
+def _leer_permisos(db, user_id):
+    """{vista: nivel} marcados en Catálogo, o {} si la cuenta usa los de su rol."""
+    try:
+        filas = db.execute(
+            "SELECT vista, nivel FROM usuario_permisos WHERE usuario_id = ?", (user_id,)
+        ).fetchall()
+    except Exception as e:
+        # Sin la tabla (migración aún no corrida) nadie tiene permisos propios.
+        # Cualquier otro error se propaga: nunca se abren permisos por un fallo.
+        txt = str(e).lower()
+        if "usuario_permisos" in txt and ("no such table" in txt or "does not exist" in txt):
+            try:
+                db.rollback()
+            except Exception:
+                pass
+            return {}
+        raise
+    return {dict(f)["vista"]: dict(f)["nivel"] for f in filas}
+
+
+def _permisos_sesion():
+    """(activo, rol en la base, {vista: nivel}) de quien hace la petición."""
+    clave = (bool(getattr(request, "jwt_demo", False)), request.jwt_user_id)
+    ahora = time.time()
+    visto = _permisos_vistos.get(clave)
+    if not visto or visto[0] < ahora:
+        db = get_db()
+        try:
+            u = db.execute("SELECT activo, rol FROM usuarios WHERE id = ?", (request.jwt_user_id,)).fetchone()
+            perms = _leer_permisos(db, request.jwt_user_id) if u else {}
+        finally:
+            db.close()
+        visto = (ahora + _SESION_TTL, bool(u and u["activo"]), u["rol"] if u else None, perms)
+        _permisos_vistos[clave] = visto
+    return visto[1:]
+
+
+def _vistas_de_cuenta(db, user_id, rol):
+    """(allowedViews, soloLectura): las del rol, o las marcadas en Catálogo."""
+    perms = {} if rol == "Administrador" else _leer_permisos(db, user_id)
+    if perms:
+        return permisos.vistas(perms)
+    return ROLE_VIEWS.get(rol, []), ROLE_VIEWS_LECTURA.get(rol, [])
+
+
+def _olvidar_sesiones():
+    """Tras editar una cuenta: rol, estado y permisos cuentan desde ya (en esta instancia)."""
+    _sesiones_vistas.clear()
+    _permisos_vistos.clear()
+
+
 # ── Decorador de autenticación JWT ──
 def require_auth(f):
     @wraps(f)
@@ -149,12 +206,30 @@ def require_auth(f):
 
 # ── Decorador de autorización por rol ──
 def require_role(*roles):
-    """Exige token válido (require_auth) y que el rol esté entre los permitidos."""
+    """Exige token válido (require_auth) y que el rol esté entre los permitidos.
+
+    Una cuenta con permisos marcados en Catálogo no pasa por el rol sino por sus
+    módulos (permisos.api_permitida); lo que es solo del Administrador sigue
+    cerrado para ella. Las cuentas sin permisos propios siguen igual que siempre."""
     def wrapper(f):
         @require_auth
         @wraps(f)
         def decorated(*args, **kwargs):
-            if getattr(request, "jwt_user_rol", None) not in roles:
+            rol = getattr(request, "jwt_user_rol", None)
+            if rol != "Administrador":
+                activo, rol_bd, perms = _permisos_sesion()
+                # Desactivar la cuenta o cambiarle el rol la saca en menos de un minuto
+                if not activo or rol_bd != rol:
+                    return jsonify({"error": "Tu sesión ya no es válida. Inicia sesión nuevamente."}), 401
+                if perms:
+                    if tuple(roles) == ("Administrador",):
+                        motivo = "No autorizado para esta acción"
+                    else:
+                        motivo = permisos.api_permitida(perms, request.method, request.url_rule.rule)
+                    if motivo:
+                        return jsonify({"error": motivo}), 403
+                    return f(*args, **kwargs)
+            if rol not in roles:
                 return jsonify({"error": "No autorizado para esta acción"}), 403
             return f(*args, **kwargs)
         return decorated
@@ -190,7 +265,7 @@ PG_SCHEMA    = os.path.join(os.path.dirname(__file__), "supabase_schema.sql")
 # Versión del esquema. IMPORTANTE: incrementar en 1 cada vez que se agregue
 # una migración (ALTER/CREATE) a migrate_db(); si no se incrementa, la
 # migración nueva NO corre en las BD ya versionadas.
-SCHEMA_VERSION = 23   # 23: gastos mayores que el producido = la empresa le debe al conductor (no sobrante)
+SCHEMA_VERSION = 24   # 24: permisos por usuario (usuario_permisos)
 
 ROLE_VIEWS = {
     "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho", "historial-despacho", "gastos", "tecnologia", "chequeo", "eds", "lavada", "mapa", "relojes", "mb-mapa", "mb-reportes", "mb-rutas", "mb-equipos", "recaudo-diario", "recaudo-pagos", "recaudo-caja", "auditoria"],
@@ -1273,6 +1348,9 @@ def migrate_db():
     # Respuestas del asistente reportadas por los usuarios — SCHEMA_VERSION 19
     _migrar_chat_reportes(db)
 
+    # Permisos por usuario (módulos + nivel ver/modificar) — SCHEMA_VERSION 24
+    _migrar_usuario_permisos(db)
+
     # Pasajeros de movilidad desde la registradora del despacho — SCHEMA_VERSION 15
     # Backfill de los días desde PAX_REGISTRADORA_DESDE que ya tenían movilidad
     # guardada antes del cambio. Idempotente: solo toca filas cuyo despacho
@@ -1461,6 +1539,7 @@ def login():
             "SELECT bus_id FROM usuario_buses WHERE usuario_id = ?", (user["id"],)
         ).fetchall()
         bus_ids = [r["bus_id"] for r in rows]
+    allowed_views, solo_lectura = _vistas_de_cuenta(db, user["id"], rol)
 
     db.close()
 
@@ -1481,8 +1560,8 @@ def login():
         "rol":          rol,
         "iniciales":    user["iniciales"],
         "color":        user["color"],
-        "allowedViews": ROLE_VIEWS.get(rol, []),
-        "soloLectura":  ROLE_VIEWS_LECTURA.get(rol, []),
+        "allowedViews": allowed_views,
+        "soloLectura":  solo_lectura,
         "bus_ids":      bus_ids,
         "tratamiento_aceptado": tratamiento_aceptado,
     })
@@ -1555,13 +1634,15 @@ def get_current_user():
         "FROM usuarios WHERE id = ? AND activo = 1",
         (request.jwt_user_id,),
     ).fetchone()
-    db.close()
-
     if not user:
+        db.close()
         return jsonify({"error": "Usuario no encontrado"}), 404
 
     rol = user["rol"]
-    allowed_views = ROLE_VIEWS.get(rol, [])
+    try:
+        allowed_views, solo_lectura = _vistas_de_cuenta(db, user["id"], rol)
+    finally:
+        db.close()
 
     try:
         tratamiento_aceptado = bool(user["tratamiento_aceptado_at"])
@@ -1576,7 +1657,7 @@ def get_current_user():
         "iniciales": user["iniciales"],
         "color": user["color"],
         "allowedViews": allowed_views,
-        "soloLectura": ROLE_VIEWS_LECTURA.get(rol, []),
+        "soloLectura": solo_lectura,
         "tratamiento_aceptado": tratamiento_aceptado,
         # Feature flag del chatbot (Fase 1): off salvo que FEATURE_CHATBOT sea true.
         "chatbot_enabled": _feature_chatbot_enabled(),
@@ -1686,6 +1767,29 @@ _CHAT_REPORTES_DDL = """CREATE TABLE IF NOT EXISTS chat_reportes (
 CHAT_MOTIVOS_REPORTE = ("Ofensiva o inapropiada", "Información incorrecta", "Otro")
 
 
+_USUARIO_PERMISOS_DDL = """CREATE TABLE IF NOT EXISTS usuario_permisos (
+    usuario_id  INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+    vista       TEXT NOT NULL,
+    nivel       TEXT NOT NULL CHECK (nivel IN ('ver', 'modificar')),
+    PRIMARY KEY (usuario_id, vista)
+)"""
+
+
+def _migrar_usuario_permisos(db):
+    sentencias = [_USUARIO_PERMISOS_DDL]
+    if _es_pg():
+        # Tabla nueva: RLS sin políticas y sin privilegios para los roles públicos
+        sentencias += ["ALTER TABLE usuario_permisos ENABLE ROW LEVEL SECURITY",
+                       "REVOKE ALL ON usuario_permisos FROM anon, authenticated"]
+    for sql in sentencias:
+        try:
+            db.execute(sql)
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            print(f"[migrate_db] usuario_permisos: {e}")
+
+
 def _migrar_chat_reportes(db):
     if _es_pg():
         sentencias = [_CHAT_REPORTES_DDL.format(pk="SERIAL PRIMARY KEY"),
@@ -1760,6 +1864,13 @@ def chat():
     """
     if not _feature_chatbot_enabled():
         return jsonify({"error": "El chatbot no está habilitado."}), 404
+    # Cuenta con permisos propios (Catálogo › Usuarios y permisos): el asistente
+    # consulta datos de la operación, así que solo lo usa quien tiene Dashboard o
+    # Mis Buses, igual que la app decide si lo muestra.
+    if request.jwt_user_rol != "Administrador":
+        _, _, perms = _permisos_sesion()
+        if perms and not ({"dashboard", "propietario"} & set(perms)):
+            return jsonify({"error": "Tu cuenta no tiene acceso al asistente."}), 403
 
     data = request.get_json(force=True, silent=True) or {}
     raw_messages = data.get("messages", [])
@@ -5067,8 +5178,39 @@ def admin_get_usuarios():
            GROUP BY u.id, u.puesto_id, p.nombre
            ORDER BY u.nombre"""
     ).fetchall()
+    # Módulos marcados en Catálogo ({} = permisos estándar del rol). Si la tabla
+    # aún no existe, la lista de cuentas igual carga.
+    por_usuario = {}
+    try:
+        filas = db.execute("SELECT usuario_id, vista, nivel FROM usuario_permisos").fetchall()
+    except Exception as e:
+        print(f"[admin_get_usuarios] usuario_permisos: {e}")
+        filas = []
+    for f in filas:
+        f = dict(f)
+        por_usuario.setdefault(f["usuario_id"], {})[f["vista"]] = f["nivel"]
     db.close()
-    return jsonify([dict(r) for r in rows])
+    lista = []
+    for r in rows:
+        u = dict(r)
+        u["permisos"] = por_usuario.get(u["id"], {})
+        lista.append(u)
+    return jsonify(lista)
+
+
+@app.route("/api/admin/permisos", methods=["GET"])
+@require_role("Administrador")
+def admin_catalogo_permisos():
+    """Módulos que se pueden asignar, plantillas por rol y límites (api/permisos.py)."""
+    return jsonify({**permisos.catalogo(), "roles": [r for r in ROLE_VIEWS if r != "Administrador"]})
+
+
+def _guardar_permisos(db, uid, perms):
+    """Reemplaza los módulos de la cuenta. perms = {} la deja con los de su rol."""
+    db.execute("DELETE FROM usuario_permisos WHERE usuario_id = ?", (uid,))
+    for vista, nivel in perms.items():
+        db.execute("INSERT INTO usuario_permisos (usuario_id, vista, nivel) VALUES (?, ?, ?)",
+                   (uid, vista, nivel))
 
 
 def _sync_propietario_from_usuario(db, usuario_id, nombre, rol, activo=1, telefono=None):
@@ -5127,10 +5269,19 @@ def admin_create_usuario():
     # Un rol que no existe entraría sin vistas, pero con permisos que nadie revisó.
     if rol not in ROLE_VIEWS:
         return jsonify({"error": f"El rol «{rol}» no existe"}), 400
+    # Módulos marcados en "Usuarios y permisos" (sin la clave = permisos del rol)
+    perms = {}
+    if data.get("permisos") is not None:
+        perms, error = permisos.limpiar(rol, data["permisos"])
+        if error:
+            return jsonify({"error": error}), 400
 
     hashed_pw = generate_password_hash(password, method='pbkdf2:sha256')
     db = get_db()
     try:
+        if db.execute("SELECT 1 FROM usuarios WHERE username = ?", (username,)).fetchone():
+            db.close()
+            return jsonify({"error": f"Ya existe una cuenta con el usuario «{username}»."}), 400
         cursor = db.execute(
             "INSERT INTO usuarios (username, password, nombre, rol, iniciales, color, puesto_id) VALUES (?,?,?,?,?,?,?)",
             (username, hashed_pw, nombre, rol, iniciales, color, data.get("puesto_id") or None),
@@ -5139,10 +5290,15 @@ def admin_create_usuario():
         tel_raw = data.get("telefono")
         tel = None if tel_raw is None else (str(tel_raw).strip() or None)
         _sync_propietario_from_usuario(db, new_id, nombre, rol, activo=1, telefono=tel)
+        _guardar_permisos(db, new_id, perms)
+        detalle = {"nombre": nombre, "username": username, "rol": rol, "puesto_id": data.get("puesto_id") or None}
+        if perms:
+            detalle["permisos"] = perms
         auditoria.registrar(
             db, "catalogo", "usuario", new_id, "crear",
-            f"Creó la cuenta {_usuario_txt({'nombre': nombre, 'username': username, 'rol': rol})}",
-            {"nombre": nombre, "username": username, "rol": rol, "puesto_id": data.get("puesto_id") or None},
+            f"Creó la cuenta {_usuario_txt({'nombre': nombre, 'username': username, 'rol': rol})}"
+            + (f" con permisos propios: {permisos.resumen(perms)}" if perms else ""),
+            detalle,
         )
         db.commit()
     except Exception as e:
@@ -5155,7 +5311,7 @@ def admin_create_usuario():
 @app.route("/api/admin/usuarios/<int:uid>", methods=["PUT"])
 @require_role("Administrador")
 def admin_update_usuario(uid):
-    _sesiones_vistas.clear()   # si se desactiva o cambia de rol, cuenta desde ya
+    _olvidar_sesiones()   # si se desactiva, cambia de rol o de permisos, cuenta desde ya
     data = request.get_json(force=True)
     db   = get_db()
     antes = db.execute(
@@ -5169,6 +5325,27 @@ def admin_update_usuario(uid):
     if "rol" in data and data["rol"] != antes["rol"] and data["rol"] not in ROLE_VIEWS:
         db.close()
         return jsonify({"error": f"El rol «{data['rol']}» no existe"}), 400
+    # Quitarse el rol o desactivarse a sí mismo dejaría la empresa sin quien administre.
+    if uid == request.jwt_user_id and (data.get("rol", antes["rol"]) != antes["rol"]
+                                       or ("activo" in data and not data["activo"])):
+        db.close()
+        return jsonify({"error": "No puedes cambiar el tipo ni desactivar tu propia cuenta."}), 400
+
+    # Permisos: "permisos" ausente = no tocarlos; null = volver a los del rol;
+    # {vista: nivel} = reemplazarlos. Si solo cambia el rol, se ajustan a él.
+    rol_final = data.get("rol", antes["rol"])
+    perms_antes = _leer_permisos(db, uid)
+    perms_nuevos = None
+    if "permisos" in data:
+        if data["permisos"] is None:
+            perms_nuevos = {}
+        else:
+            perms_nuevos, error = permisos.limpiar(rol_final, data["permisos"])
+            if error:
+                db.close()
+                return jsonify({"error": error}), 400
+    elif rol_final != antes["rol"] and perms_antes:
+        perms_nuevos = permisos.ajustar_a_rol(rol_final, perms_antes)
 
     allowed = ["nombre", "username", "iniciales", "color", "activo", "puesto_id", "rol"]
     updates, values = [], []
@@ -5209,6 +5386,12 @@ def admin_update_usuario(uid):
             cambios["contraseña"] = "cambiada"
         auditoria.registrar(db, "catalogo", "usuario", uid, "editar",
                             f"Editó la cuenta {_usuario_txt(antes)}: {'; '.join(partes)}", cambios)
+    if perms_nuevos is not None and perms_nuevos != perms_antes:
+        _guardar_permisos(db, uid, perms_nuevos)
+        auditoria.registrar(db, "catalogo", "usuario_permisos", uid, "editar",
+                            f"Cambió los permisos de la cuenta {_usuario_txt(antes)}: "
+                            f"{permisos.describir_cambio(perms_antes, perms_nuevos)}",
+                            {"antes": perms_antes, "despues": perms_nuevos})
     db.commit()
     db.close()
     return jsonify({"ok": True})
@@ -5220,8 +5403,10 @@ def admin_delete_usuario(uid):
     """Por defecto desactiva la cuenta (soft delete). Con ?hard=1 la elimina
     definitivamente, liberando el username (cédula) para poder crearla de nuevo
     con otro rol/puesto. El historial se conserva desvinculado (queda sin nombre)."""
-    _sesiones_vistas.clear()
+    _olvidar_sesiones()
     hard = request.args.get("hard") == "1"
+    if uid == request.jwt_user_id:
+        return jsonify({"error": "No puedes desactivar ni eliminar tu propia cuenta."}), 400
     db = get_db()
     cuenta = db.execute("SELECT nombre, username, rol, activo FROM usuarios WHERE id = ?", (uid,)).fetchone()
     cuenta = dict(cuenta) if cuenta else {"nombre": f"#{uid}", "username": "?", "rol": "?", "activo": 0}
@@ -5246,10 +5431,15 @@ def admin_delete_usuario(uid):
     db.execute("UPDATE intervenciones_tecnologia SET usuario_id = NULL WHERE usuario_id = ?", (uid,))
     db.execute("UPDATE despacho_diario SET despachador_id = NULL WHERE despachador_id = ?", (uid,))
     db.execute("UPDATE alistamiento_vehicular SET despachador_id = NULL WHERE despachador_id = ?", (uid,))
+    db.execute("UPDATE actividades_eds SET usuario_id = NULL WHERE usuario_id = ?", (uid,))
+    db.execute("UPDATE actividades_lavada SET usuario_id = NULL WHERE usuario_id = ?", (uid,))
+    # El propietario del catálogo (dueño de buses) se conserva, solo sin cuenta de acceso
+    db.execute("UPDATE propietarios SET usuario_id = NULL WHERE usuario_id = ?", (uid,))
     # Asignaciones y chequeos propios de la cuenta sí se eliminan
     db.execute("DELETE FROM usuario_buses WHERE usuario_id = ?", (uid,))
     db.execute("DELETE FROM despachador_rutas WHERE usuario_id = ?", (uid,))
     db.execute("DELETE FROM chequeos_despachador WHERE usuario_id = ?", (uid,))
+    db.execute("DELETE FROM usuario_permisos WHERE usuario_id = ?", (uid,))
     db.execute("DELETE FROM usuarios WHERE id = ?", (uid,))
     auditoria.registrar(db, "catalogo", "usuario", uid, "eliminar",
                         f"Eliminó definitivamente la cuenta {_usuario_txt(cuenta)}")

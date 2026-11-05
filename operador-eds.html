@@ -424,6 +424,10 @@
       currentUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
       esAdmin = !!currentUser && currentUser.rol === 'Administrador';
       if (esAdmin) document.getElementById('excelBtn').style.display = '';
+      // Módulo en "solo ver" (Catálogo › Usuarios y permisos): sin formulario
+      if (((currentUser && currentUser.soloLectura) || []).includes('eds')) {
+        document.getElementById('formCard').style.display = 'none';
+      }
 
       renderCronograma();
       poblarTipos();

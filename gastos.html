@@ -190,7 +190,7 @@
     </div>
 
     <!-- ── REGISTRAR ── -->
-    <div class="card">
+    <div class="card" id="formCard">
       <h2>Registrar gasto</h2>
       <form id="gastoForm">
         <div class="form-grid">
@@ -288,12 +288,15 @@
     const CATEGORIAS = ["Cambio de aceite","Frenos","Llantas","Motor","Suspensión","Eléctrico","Combustible","Repuestos","Lavado","Otro"];
 
     let currentUser = null;
+    let soloVer     = false;  // módulo en "ver" (Catálogo › Usuarios y permisos)
     let gastosData  = [];
     let comprobante = null; // {base64, mime, nombre}
 
     // ── INIT ──
     document.addEventListener('DOMContentLoaded', async () => {
       currentUser = JSON.parse(localStorage.getItem('currentUser') || 'null');
+      soloVer = ((currentUser && currentUser.soloLectura) || []).includes('gastos');
+      if (soloVer) document.getElementById('formCard').style.display = 'none';
       // categorías
       const catSel = document.getElementById('f-cat');
       catSel.innerHTML = '<option value="" disabled selected>Selecciona…</option>' +
@@ -509,7 +512,7 @@
           <td data-label="Comprobante">${g.tiene_comprobante
             ? `<button class="btn-sm ver" onclick="verComprobante(${g.id})">Ver</button>`
             : '<span class="no-comp">Sin foto</span>'}</td>
-          <td class="acciones"><button class="btn-sm del" onclick="eliminarGasto(${g.id})">Eliminar</button></td>
+          <td class="acciones">${soloVer ? '' : `<button class="btn-sm del" onclick="eliminarGasto(${g.id})">Eliminar</button>`}</td>
         </tr>`).join('');
 
       cont.innerHTML = `<table>

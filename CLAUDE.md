@@ -73,6 +73,13 @@ misma API; los permisos salen de `ROLE_VIEWS` → `allowedViews`.
 - Endpoints con `require_role` según las pantallas que los usan; el autor de
   los registros de mantenimiento sale de la sesión.
 - `/api/despacho/historial`: el propietario lo ve solo con sus buses.
+- **Permisos por usuario** (Catálogo › Usuarios y permisos, `api/permisos.py`,
+  tabla `usuario_permisos`): una cuenta sin filas usa su rol como siempre; con
+  filas, `require_role` la deja pasar solo por sus módulos (`VISTA_API`: qué
+  endpoints usa cada pantalla para ver y para modificar). Al agregar un endpoint
+  que use una pantalla, anotarlo en `VISTA_API` o esas cuentas recibirán 403; al
+  agregar una vista, sumarla a `GRUPOS` y a `PLANTILLAS`. Las pantallas esconden
+  lo que guarda con `soloLectura`. Lo solo-admin nunca se delega.
 
 ## Pendientes e ideas
 
