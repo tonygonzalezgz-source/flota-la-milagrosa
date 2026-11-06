@@ -352,6 +352,16 @@
 
     .placa-input:focus { outline: none; border-color: var(--primary); background: var(--white); }
 
+    /* ── BUSCADOR DE BUSES / PLACAS ── */
+    .buscador-fila { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 0 12px; }
+    .buscador { position: relative; flex: 1; max-width: 420px; min-width: 220px; }
+    .buscador svg {
+      position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+      color: var(--txt3); pointer-events: none;
+    }
+    .buscador-cuenta { font-size: 12px; color: var(--txt3); }
+    .placas-vacio { color: var(--txt3); font-size: 13px; padding: 12px 0; }
+
     /* ── COLOR PICKER ── */
     .color-picker-row {
       display: flex;
@@ -563,6 +573,7 @@
       width: 100%; padding: 9px 12px 9px 36px; border: 1.5px solid var(--border); border-radius: 8px;
       font-size: 16px; background: var(--white); color: var(--txt); outline: none;
     }
+    .perm-buscar:focus { border-color: var(--primary); }
     /* La tabla es larga: solo el cuerpo hace scroll, Guardar queda siempre a la vista */
     .perm-modal { max-width: 720px; display: flex; flex-direction: column; overflow: hidden; }
     .perm-modal .modal-body { overflow-y: auto; flex: 1; min-height: 0; }
@@ -798,6 +809,14 @@
         Nuevo Bus
       </button>
     </div>
+    <div class="buscador-fila">
+      <div class="buscador">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input id="buscarBus" type="search" placeholder="Buscar por placa, número de bus o propietario…" autocomplete="off"
+               oninput="renderBuses()" class="perm-buscar">
+      </div>
+      <span id="buscarBusCount" class="buscador-cuenta"></span>
+    </div>
     <div class="table-wrap">
       <table>
         <thead>
@@ -1001,6 +1020,15 @@
         <div class="sec-sub">Modifica o asigna placas rápidamente</div>
       </div>
     </div>
+    <div class="buscador-fila">
+      <div class="buscador">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input id="buscarPlaca" type="search" placeholder="Buscar por placa o número de bus…" autocomplete="off"
+               oninput="filtrarPlacas()" class="perm-buscar">
+      </div>
+      <span id="buscarPlacaCount" class="buscador-cuenta"></span>
+    </div>
+    <p id="placas-vacio" class="placas-vacio" hidden></p>
     <div class="placas-grid" id="placas-grid">
       <p style="color:var(--txt3);font-size:13px;">Cargando…</p>
     </div>
@@ -2253,14 +2281,41 @@
     return `<span title="Vence ${fecha.toLocaleDateString('es-CO')}" style="display:inline-block;padding:3px 7px;border-radius:6px;background:${bg};color:${fg};font-size:10px;font-weight:700;white-space:nowrap">${txt}</span>`;
   }
 
+  /* ─── BUSCADOR DE BUSES / PLACAS ─── */
+  // Sin tildes, mayúsculas y solo letras y números: "abc 123" encuentra "ABC-123".
+  function normBusca(s) {
+    return String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .toUpperCase().replace(/[^A-Z0-9]/g, '');
+  }
+  function textoBusBusca(b, conPropietario) {
+    const partes = [b.placa, b.numero];
+    if (conPropietario) {
+      const prop = propietarios.find(p => p.id === b.propietario_id);
+      partes.push(prop?.nombre, b.tp_propietario_nombre);
+    }
+    return partes.map(normBusca).join('|');
+  }
+  function contarBusqueda(id, q, encontrados, total) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = q ? `${encontrados} de ${total} bus${total !== 1 ? 'es' : ''}` : '';
+  }
+
   /* ─── RENDER: BUSES ─── */
   function renderBuses() {
     const tbody = document.getElementById('tbody-buses');
+    const texto = document.getElementById('buscarBus')?.value.trim() || '';
+    const q = normBusca(texto);
+    const lista = q ? buses.filter(b => textoBusBusca(b, true).includes(q)) : buses;
+    contarBusqueda('buscarBusCount', q, lista.length, buses.length);
     if (!buses.length) {
       tbody.innerHTML = `<tr><td colspan="11"><div class="empty-state"><p>No hay buses registrados</p></div></td></tr>`;
       return;
     }
-    tbody.innerHTML = buses.map(b => {
+    if (!lista.length) {
+      tbody.innerHTML = `<tr><td colspan="11"><div class="empty-state"><p>Ningún bus coincide con "${esc(texto)}"</p></div></td></tr>`;
+      return;
+    }
+    tbody.innerHTML = lista.map(b => {
       const prop = propietarios.find(p => p.id === b.propietario_id);
       const estadoClass = { activo: 'activo', inactivo: 'inactivo', alerta: 'alerta', revision: 'revision' }[b.estado] || 'inactivo';
       return `<tr>
@@ -2342,7 +2397,7 @@
       return;
     }
     grid.innerHTML = buses.map(b => `
-      <div class="placa-card">
+      <div class="placa-card" data-busca="${esc(textoBusBusca(b, false))}">
         <div class="placa-card-top">
           <div class="placa-bus-num">Bus ${b.numero}</div>
           <span class="badge badge-${(b.grupo||'A').toLowerCase()}">${b.grupo}</span>
@@ -2356,6 +2411,27 @@
         </div>
       </div>
     `).join('');
+    filtrarPlacas();
+  }
+
+  // Oculta las tarjetas que no coinciden (sin volver a dibujarlas, para no
+  // perder una placa que se esté escribiendo y aún no se haya guardado).
+  function filtrarPlacas() {
+    const texto = document.getElementById('buscarPlaca')?.value.trim() || '';
+    const q = normBusca(texto);
+    const tarjetas = [...document.querySelectorAll('#placas-grid .placa-card')];
+    let visibles = 0;
+    tarjetas.forEach(t => {
+      const ok = !q || (t.dataset.busca || '').includes(q);
+      t.hidden = !ok;
+      if (ok) visibles++;
+    });
+    contarBusqueda('buscarPlacaCount', q, visibles, tarjetas.length);
+    const vacio = document.getElementById('placas-vacio');
+    if (vacio) {
+      vacio.hidden = !(q && tarjetas.length && !visibles);
+      vacio.textContent = `Ningún bus coincide con "${texto}"`;
+    }
   }
 
   /* ─── MODAL: ABRIR ─── */
@@ -3189,6 +3265,10 @@
       const bus = buses.find(b => b.id === busId);
       if (bus) bus.placa = placa;
       input.value = placa;
+      // El buscador ya encuentra la placa nueva, y la tabla de Buses la muestra
+      const tarjeta = input.closest('.placa-card');
+      if (tarjeta && bus) tarjeta.dataset.busca = textoBusBusca(bus, false);
+      renderBuses();
       notifyParent('bus');
       showToast('Placa actualizada');
     } catch (e) {
