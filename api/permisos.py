@@ -115,7 +115,8 @@ VISTA_API = {
     },
     "recaudo-diario": {
         VER: _api("GET /api/recaudo/dia", "GET /api/recaudo/tarifas", "GET /api/recaudo/tipos-gasto"),
-        MODIFICAR: _api("POST /api/recaudo", "POST /api/recaudo/<int:recaudo_id>/reimpresion"),
+        MODIFICAR: _api("POST /api/recaudo", "POST /api/recaudo/relevo",
+                        "POST /api/recaudo/<int:recaudo_id>/reimpresion"),
     },
     "recaudo-pagos": {
         VER: _api("GET /api/recaudo/pagos", "GET /api/recaudo/terceros", "GET /api/recaudo/conceptos"),

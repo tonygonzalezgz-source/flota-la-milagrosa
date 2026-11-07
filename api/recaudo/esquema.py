@@ -1,4 +1,4 @@
-"""Tablas del módulo Recaudo — SCHEMA_VERSION 25.
+"""Tablas del módulo Recaudo — SCHEMA_VERSION 27.
 
 - `recaudo_tarifas`: valor del pasaje por grupo de vehículo (A buses, B micros).
 - `recaudo_tipos_gasto`: gastos que el conductor puede reportar (ACPM, Taller…).
@@ -42,6 +42,12 @@
   Cada día de cada recaudador tiene su cierre (`recaudo_cierres.fecha`) y los cierres
   se buscan por ese día. El faltante o sobrante de caja se arrastra como saldo
   acumulado (suma de `diferencia_caja` de los cierres vigentes); no se guarda.
+- Relevo agregado a un bus ya liquidado (v27, pedido del usuario 2026-11-07): si al bus
+  le faltaron conductores, los que siguen se liquidan aparte como otra PARTE de la
+  liquidación del día (`recaudos.parte` = número de su primer conductor: 1 la original,
+  2 o 3 el relevo agregado). Cada parte es una fila con su caja, su tirilla y su número;
+  lo ya liquidado no se toca. Por eso la unicidad es (bus, fecha, parte) entre las no
+  anuladas, y lo que se muestra por bus y día suma las partes.
 
 El dinero se guarda en pesos enteros (INTEGER): en Postgres un NUMERIC llega
 como Decimal y Flask lo serializa como texto. La tarifa se copia en cada
@@ -109,8 +115,10 @@ def _ajustar_tipos(db):
                (EMPRESA_POR_DEFECTO, _MARCA_TIPOS))
 
 # Una sola liquidación vigente por bus y día; las anuladas se conservan aparte.
-_UNICA_ACTIVA = ("CREATE UNIQUE INDEX IF NOT EXISTS uq_recaudos_bus_fecha_vigente "
-                 "ON recaudos(bus_id, fecha) WHERE anulado_at IS NULL")
+# Una liquidación vigente por bus, día y parte (v27: el relevo agregado es la parte 2 o 3).
+# Va en _INDICES, después de agregar la columna `parte` a las bases que ya existían.
+_UNICA_ACTIVA = ("CREATE UNIQUE INDEX IF NOT EXISTS uq_recaudos_bus_fecha_parte_vigente "
+                 "ON recaudos(bus_id, fecha, parte) WHERE anulado_at IS NULL")
 
 # Columnas de dinero de un encabezado o de un tramo de conductor.
 _TOTALES = """
@@ -190,10 +198,10 @@ def _tablas(serial, ts, ts_default, ref_empresa):
             anulado_at           {ts},
             anulado_por          INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
             motivo_anulacion     TEXT,
-            cierre_id            INTEGER REFERENCES recaudo_cierres(id)
+            cierre_id            INTEGER REFERENCES recaudo_cierres(id),
+            parte                INTEGER NOT NULL DEFAULT 1
         )""",
         "CREATE INDEX IF NOT EXISTS idx_recaudos_fecha ON recaudos(fecha)",
-        _UNICA_ACTIVA,
 
         f"""CREATE TABLE IF NOT EXISTS recaudo_conductores (
             id                   {serial},
@@ -329,6 +337,7 @@ _COLUMNAS_PG = [
     "ALTER TABLE recaudo_pagos ADD COLUMN IF NOT EXISTS pagador_dv TEXT",
     "ALTER TABLE recaudos ADD COLUMN IF NOT EXISTS caja_fecha DATE",
     "ALTER TABLE recaudo_cierres ADD COLUMN IF NOT EXISTS fecha DATE",
+    "ALTER TABLE recaudos ADD COLUMN IF NOT EXISTS parte INTEGER NOT NULL DEFAULT 1",
 ]
 _COLUMNAS_SQLITE = [
     "ALTER TABLE recaudos ADD COLUMN cierre_id INTEGER REFERENCES recaudo_cierres(id)",
@@ -348,9 +357,13 @@ _COLUMNAS_SQLITE = [
     "ALTER TABLE recaudo_pagos ADD COLUMN pagador_dv TEXT",
     "ALTER TABLE recaudos ADD COLUMN caja_fecha DATE",
     "ALTER TABLE recaudo_cierres ADD COLUMN fecha DATE",
+    "ALTER TABLE recaudos ADD COLUMN parte INTEGER NOT NULL DEFAULT 1",
 ]
 _INDICES = ["CREATE INDEX IF NOT EXISTS idx_recaudos_caja ON recaudos(usuario_id, cierre_id)",
-            "CREATE INDEX IF NOT EXISTS idx_recaudo_cierres_fecha ON recaudo_cierres(usuario_id, fecha)"]
+            "CREATE INDEX IF NOT EXISTS idx_recaudo_cierres_fecha ON recaudo_cierres(usuario_id, fecha)",
+            # v27: la unicidad (bus, fecha) pasa a (bus, fecha, parte)
+            "DROP INDEX IF EXISTS uq_recaudos_bus_fecha_vigente",
+            _UNICA_ACTIVA]
 
 # Día de trabajo de la caja (v25) para lo que ya existía: la liquidación, el día en que se
 # recibió (hora Bogotá); el cierre, el día del último movimiento que entró (o el del cierre).

@@ -265,7 +265,7 @@ PG_SCHEMA    = os.path.join(os.path.dirname(__file__), "supabase_schema.sql")
 # Versión del esquema. IMPORTANTE: incrementar en 1 cada vez que se agregue
 # una migración (ALTER/CREATE) a migrate_db(); si no se incrementa, la
 # migración nueva NO corre en las BD ya versionadas.
-SCHEMA_VERSION = 26   # 26: une las cajas reabiertas que se volvieron a cerrar con otro número
+SCHEMA_VERSION = 27   # 27: relevo agregado a un bus ya liquidado (recaudos.parte)
 
 ROLE_VIEWS = {
     "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho", "historial-despacho", "gastos", "tecnologia", "chequeo", "eds", "lavada", "mapa", "relojes", "mb-mapa", "mb-reportes", "mb-rutas", "mb-equipos", "recaudo-diario", "recaudo-pagos", "recaudo-caja", "auditoria"],
@@ -2846,8 +2846,18 @@ def get_historial_despacho():
         r = dict(r)
         clave = (str(r.pop("fecha"))[:10], r.pop("bus_id"))
         relevos.setdefault(clave, []).append(r)
+    # Buses ya liquidados en Recaudo: la ventana de relevo solo deja agregar los que faltaron.
+    try:
+        liquidados = {(str(r["fecha"])[:10], r["bus_id"]) for r in db.execute(
+            "SELECT DISTINCT fecha, bus_id FROM recaudos WHERE fecha BETWEEN ? AND ? AND anulado_at IS NULL",
+            (desde, hasta)).fetchall()}
+    except Exception:
+        db.rollback()
+        liquidados = set()   # sin el módulo de recaudo todavía
     for row in rows:
-        row["relevos"] = relevos.get((str(row["fecha"])[:10], row["bus_id"]), [])
+        clave = (str(row["fecha"])[:10], row["bus_id"])
+        row["relevos"] = relevos.get(clave, [])
+        row["liquidado"] = clave in liquidados
 
     db.close()
     return jsonify(rows)
@@ -3196,10 +3206,18 @@ def guardar_relevos_despacho():
         desp = dict(desp)
         if not desp["conductor_id"]:
             raise ValueError("Primero asigna el conductor que sale con el bus")
-        if db.execute("SELECT 1 FROM recaudos WHERE bus_id = ? AND fecha = ? AND anulado_at IS NULL",
-                      (bus_id, fecha)).fetchone():
-            raise ValueError(f"El bus {desp['numero']} ya fue liquidado en Recaudo: el relevo "
-                             "quedó en la liquidación y no se cambia desde el despacho")
+        # Bus ya liquidado: lo liquidado no se cambia, pero se pueden anotar los relevos
+        # que faltaron; el recaudador los liquida aparte (pedido del usuario 2026-11-07).
+        liquidados = [dict(r) for r in db.execute(
+            """SELECT rc.orden, rc.conductor_id, rc.registradora_inicio, rc.registradora_fin
+                 FROM recaudos r JOIN recaudo_conductores rc ON rc.recaudo_id = r.id
+                WHERE r.bus_id = ? AND r.fecha = ? AND r.anulado_at IS NULL
+             ORDER BY rc.orden""",
+            (bus_id, fecha),
+        ).fetchall()]
+        if liquidados and liquidados[0]["registradora_inicio"] is None:
+            raise ValueError(f"El bus {desp['numero']} ya fue liquidado en Recaudo y cuenta pasajeros con "
+                             "sensores: el relevo que faltó se agrega en Recaudo diario")
 
         viajes1 = entero(data.get("viajes"), "los viajes del conductor 1")
         relevos, vistos = [], {desp["conductor_id"]}
@@ -3222,6 +3240,24 @@ def guardar_relevos_despacho():
                                        requerido=True),
                 "viajes": entero(r.get("viajes"), f"los viajes del conductor {n}"),
             })
+        if liquidados:
+            ya = len(liquidados)
+            liq = f"El bus {desp['numero']} ya fue liquidado en Recaudo"
+            if len(relevos) < ya - 1:
+                raise ValueError(f"{liq} con {ya} conductores: esos relevos no se quitan desde el despacho")
+            for r in relevos[:ya - 1]:
+                l = liquidados[r["orden"] - 1]
+                if (r["conductor_id"], r["registradora"]) != (l["conductor_id"], l["registradora_inicio"]):
+                    raise ValueError(f"{liq}: el conductor {r['orden']} ya está liquidado y su relevo no se "
+                                     "cambia desde el despacho")
+            fin_liquidado = liquidados[-1]["registradora_fin"]
+            if len(relevos) >= ya and relevos[ya - 1]["registradora"] != fin_liquidado:
+                raise ValueError(f"{liq} y el conductor {ya} terminó en {fin_liquidado}: el conductor "
+                                 f"{ya + 1} recibe el bus en esa lectura")
+            if len(relevos) == ya - 1 and data.get("registradora_fin") not in (None, "", "null") \
+                    and entero(data.get("registradora_fin"), "la REG fin del bus") != fin_liquidado:
+                raise ValueError(f"{liq} hasta {fin_liquidado}: la REG fin no se cambia desde el despacho. "
+                                 "Si el bus siguió con otro conductor, agrega el relevo.")
         # REG fin del bus: si la ventana la manda (aunque sea vacía) se guarda tal cual; al
         # agregar un relevo, la REG fin que ya tenía el bus pasa a ser la final del conductor
         # que entrega y la del bus queda por anotar. Sin la clave (página vieja), no se toca.
@@ -3988,16 +4024,18 @@ def get_movilidad_recaudo_sensores():
         return jsonify({"error": "Fecha inválida (use AAAA-MM-DD)"}), 400
     db = get_db()
     try:
+        # Con relevo agregado el bus tiene varias partes: se suman sus pasajeros.
         filas = db.execute(
-            """SELECT r.id AS recaudo_id, r.bus_id, r.pasajeros, r.tarifa
+            """SELECT MIN(r.id) AS recaudo_id, r.bus_id, SUM(r.pasajeros) AS pasajeros, MAX(r.tarifa) AS tarifa
                  FROM recaudos r
-                WHERE r.fecha = ? AND r.anulado_at IS NULL AND r.registradora_inicio IS NULL""",
+                WHERE r.fecha = ? AND r.anulado_at IS NULL AND r.registradora_inicio IS NULL
+             GROUP BY r.bus_id""",
             (fecha,),
         ).fetchall()
     except Exception:
         filas = []   # sin el módulo de recaudo todavía
     db.close()
-    return jsonify([dict(f) for f in filas])
+    return jsonify([{k: (int(v) if v is not None else v) for k, v in dict(f).items()} for f in filas])
 
 
 @app.route("/api/movilidad/rango", methods=["GET"])

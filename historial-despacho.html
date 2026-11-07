@@ -278,6 +278,8 @@
     }
     .rel-agregar:hover { background: rgba(99,102,241,.07); }
     .rel-resumen { background: #f5f3ff; border-radius: 10px; padding: 10px 14px; font-size: 13px; line-height: 1.7; }
+    .rel-liquidado { background:#eef2ff; border:1px solid #c7d2fe; color:#3730a3; border-radius:10px;
+      padding:10px 12px; font-size:12.5px; line-height:1.5; margin-bottom:12px; }
     .rel-resumen .fila { display: flex; justify-content: space-between; gap: 10px; }
     .rel-resumen .fila span:last-child { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
     /* Corregir REG: lecturas del relevo entre la inicial y la final */
@@ -1107,7 +1109,11 @@
       </div>`).join('');
     const agregar = relForm.relevos.length < MAX_RELEVOS
       ? `<button class="rel-agregar" onclick="agregarRelevo()">+ Agregar ${relForm.relevos.length ? 'otro relevo' : 'relevo'}</button>` : '';
-    document.getElementById('relBody').innerHTML = sale + cards + agregar + `<div class="rel-resumen" id="hrelResumen"></div>`;
+    // Bus ya liquidado: solo se agregan los conductores que faltaron (lo liquidado no cambia)
+    const avisoLiq = b.liquidado ? `<div class="rel-liquidado">Este bus ya está liquidado en Recaudo. Agrega aquí los
+        conductores que faltaron, desde la lectura donde terminó lo liquidado; lo liquidado no cambia y el
+        recaudador liquida el relevo aparte.</div>` : '';
+    document.getElementById('relBody').innerHTML = avisoLiq + sale + cards + agregar + `<div class="rel-resumen" id="hrelResumen"></div>`;
     document.getElementById('relGuardar').textContent = relForm.relevos.length ? 'Guardar relevo' : 'Guardar sin relevo';
     pintarNotasRelevo();
   }

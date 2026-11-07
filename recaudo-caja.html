@@ -411,7 +411,8 @@
         <td data-label="Liquidada">${fmtHora(l.created_at)}</td>
         <td data-label="Tarjeta">${fmtDia(l.fecha)}</td>
         <td data-label="Bus"><span><b>${l.bus_numero}</b> <span class="sub">${esc(l.bus_placa || '')}</span></span></td>
-        <td data-label="Conductor">${l.conductores.map(c => esc(c.conductor_nombre)).join(', ')}</td>
+        <td data-label="Conductor">${l.conductores.map(c => esc(c.conductor_nombre)).join(', ')}${(l.parte || 1) > 1
+          ? ` <span class="sub">· relevo agregado (conductor${l.conductores.length > 1 ? 'es' : ''} ${l.conductores.map(c => c.orden).join(' y ')})</span>` : ''}</td>
         <td data-label="Producido" class="num">${fmtMoney(l.producido)}</td>
         <td data-label="Gastos" class="num">${fmtMoney(l.total_gastos)}</td>
         <td data-label="Recaudado" class="num"><b>${fmtMoney(l.recaudado)}</b></td>

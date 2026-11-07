@@ -343,6 +343,8 @@
       border: 1px dashed var(--primary); border-radius: 5px; padding: 4px 8px; white-space: nowrap;
     }
     .btn-relevo:hover { background: var(--primary2); }
+    .rel-liquidado { background:#eef2ff; border:1px solid #c7d2fe; color:#3730a3; border-radius:10px;
+      padding:10px 12px; font-size:12.5px; line-height:1.5; margin-bottom:12px; }
     /* Bus con relevo: etiqueta en la unidad y franja debajo del bus con los conductores */
     /* Bus ya liquidado en Recaudo: su fila del despacho queda bloqueada */
     .tag-liquidado {
@@ -678,20 +680,21 @@
     document.getElementById('content').innerHTML = html;
     if (SOLO_LECTURA) bloquearEdicion(document.getElementById('content'));
     // Un bus ya liquidado en Recaudo no cambia su despacho (la API tampoco lo acepta):
-    // si hay un error, el administrador anula la liquidación.
+    // si hay un error, el administrador anula la liquidación. Sí se le pueden anotar los
+    // relevos que faltaron: el recaudador los liquida aparte (pedido del usuario 2026-11-07).
     buses.filter(b => b.liquidado).forEach(b => {
       [document.getElementById(`fila-${b.id}`), document.getElementById(`relsub-${b.id}`)]
-        .forEach(el => el && bloquearEdicion(el));
+        .forEach(el => el && bloquearEdicion(el, !SOLO_LECTURA));
     });
   }
 
   /* Solo consulta o bus liquidado: nada se puede tocar (ni relevos ni viajes).
      El alistamiento sigue disponible: no cambia el despacho. */
-  function bloquearEdicion(zona) {
+  function bloquearEdicion(zona, dejarRelevo = false) {
     // Sin el "0" de ayuda: en una celda bloqueada parecería una lectura real.
     zona.querySelectorAll('input').forEach(el => { el.disabled = true; el.placeholder = '—'; });
     zona.querySelectorAll('select').forEach(el => { el.disabled = true; });
-    zona.querySelectorAll('.btn-relevo').forEach(el => el.remove());
+    if (!dejarRelevo) zona.querySelectorAll('.btn-relevo').forEach(el => el.remove());
   }
 
   /* Documentos legales del bus: devuelve {estado, vencidos:[label], porVencer:[{label,dias}]} */
@@ -1414,7 +1417,11 @@
     const agregar = relevoForm.relevos.length < MAX_RELEVOS
       ? `<button class="rel-agregar" onclick="agregarRelevo()">+ Agregar ${relevoForm.relevos.length ? 'otro relevo' : 'relevo'}</button>` : '';
 
-    document.getElementById('relevoBody').innerHTML = sale + cards + agregar +
+    // Bus ya liquidado: solo se agregan los conductores que faltaron (lo liquidado no cambia)
+    const avisoLiq = b.liquidado ? `<div class="rel-liquidado">Este bus ya está liquidado en Recaudo. Agrega aquí los
+        conductores que faltaron, desde la lectura donde terminó lo liquidado; lo liquidado no cambia y el
+        recaudador liquida el relevo aparte.</div>` : '';
+    document.getElementById('relevoBody').innerHTML = avisoLiq + sale + cards + agregar +
       `<div class="rel-resumen" id="relResumen"></div><div class="rel-error" id="relError"></div>`;
     document.getElementById('btnGuardarRelevo').textContent =
       relevoForm.relevos.length ? 'Guardar relevo' : 'Guardar sin relevo';
