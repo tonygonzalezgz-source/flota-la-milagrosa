@@ -518,18 +518,18 @@
       </tbody></table></div>`;
   }
 
-  /* ── Formulario: hoy (la fecha la pone el servidor) o un día pasado cuya caja el
-     administrador reabrió: ahí entra el pago corregido, porque esa plata entró ese día. ── */
+  /* ── Formulario: hoy (la fecha la pone el servidor) o un día pasado cuya caja sigue
+     abierta: sin cerrar todavía, o reabierta por el administrador para corregirla. ── */
   function renderForm() {
     if (SOLO_VER) {
       $('formCard').innerHTML = `<div class="card-title"><span>Registrar pago</span></div>
         <div class="bloqueado">Tu permiso en este módulo es «solo ver»: puedes consultar los pagos, pero no registrarlos.</div>`;
       return;
     }
-    if (fecha !== D.hoy && !D.dia_reabierto) {
+    if (fecha !== D.hoy && !D.dia_reabierto && !D.dia_sin_cerrar) {
       $('formCard').innerHTML = `<div class="card-title"><span>Registrar pago</span></div>
-        <div class="bloqueado">Los pagos se registran con la fecha de hoy. Este día solo se puede consultar
-          (solo se registra en un día pasado si el administrador reabre la caja de ese día).<br>
+        <div class="bloqueado">La caja de este día ya está cerrada (o no tiene movimientos tuyos): solo se puede consultar.
+          Para registrar aquí, el administrador debe reabrirla.<br>
           <button class="link" onclick="cambiarFecha('${D.hoy}')">Ir a hoy →</button></div>`;
       return;
     }
@@ -540,9 +540,15 @@
     }
     const opciones = s => D.conceptos.filter(c => c.signo === s)
       .map(c => `<option value="${c.id}">${esc(c.nombre)}</option>`).join('');
+    const otrasAbiertas = (D.dias_abiertos || []).map(d =>
+      `<button class="link" onclick="cambiarFecha('${d}')">${esc(fmtDia(d))}</button>`).join(', ');
     $('formCard').innerHTML = `<div class="card-title"><span>Registrar pago</span></div>
-      ${fecha !== D.hoy ? `<div class="reabierto">Este día está reabierto (caja N° ${String(D.dia_reabierto.id).padStart(6, '0')}):
+      ${fecha !== D.hoy && D.dia_reabierto ? `<div class="reabierto">Este día está reabierto (caja N° ${String(D.dia_reabierto.id).padStart(6, '0')}):
         el pago entra a la caja del <b>${esc(fmtDia(fecha))}</b>, el día en que entró la plata.</div>` : ''}
+      ${fecha !== D.hoy && !D.dia_reabierto ? `<div class="reabierto">La caja de este día sigue abierta (aún no se cierra):
+        el pago entra a la caja del <b>${esc(fmtDia(fecha))}</b>.</div>` : ''}
+      ${fecha === D.hoy && otrasAbiertas ? `<div class="reabierto">Este pago entra a la caja de <b>hoy</b>.
+        Si es de un día anterior que aún no cierras, regístralo en esa caja: ${otrasAbiertas}.</div>` : ''}
       <div class="campo"><label for="fConcepto">Concepto<span class="req">*</span></label>
         <select id="fConcepto" onchange="cambiarConcepto()">
           <option value="">— Elige el concepto —</option>
@@ -747,7 +753,7 @@
       return;
     }
     pendiente = { concepto_id: c.id, valor, observacion: obs, ...(b ? { bus_id: b.id } : {}), ...(t ? { pagador: t.clave } : {}),
-                  ...(fecha !== D.hoy ? { fecha } : {}) };   // día reabierto
+                  ...(fecha !== D.hoy ? { fecha } : {}) };   // caja de un día pasado aún abierta
     $('confTitulo').textContent = entra(c) ? 'Confirmar entrada a caja' : 'Confirmar salida de caja';
     $('confResumen').innerHTML = `
       <div><span>Concepto</span><span>${esc(c.nombre)}</span></div>
@@ -757,7 +763,7 @@
       ${t ? `<div><span>${entra(c) ? 'Paga' : 'Se le paga a'}</span><span>${esc(t.nombre)}<br><small style="font-weight:600">${esc(t.tipo_documento)} ${esc(docConDv(t.documento, t.dv))}</small></span></div>` : ''}
       <div><span>Valor</span><span style="font-size:17px">${fmtMoney(valor)}</span></div>
       ${obs ? `<div><span>Observación</span><span>${esc(obs)}</span></div>` : ''}
-      ${pendiente.fecha ? `<div><span>Caja del día</span><span>${esc(fmtDia(pendiente.fecha))} (reabierta)</span></div>` : ''}`;
+      ${pendiente.fecha ? `<div><span>Caja del día</span><span>${esc(fmtDia(pendiente.fecha))} (${D.dia_reabierto ? 'reabierta' : 'sin cerrar'})</span></div>` : ''}`;
     $('btnConfirmar').disabled = false;
     abrirModal('modalConfirmar');
   }

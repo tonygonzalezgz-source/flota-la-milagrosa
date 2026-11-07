@@ -165,8 +165,18 @@ def dia_de_caja(conn, usuario_id, bus_id, fecha):
     ).fetchone()
     if ultimo is not None:
         return dia if dict(ultimo)["reabierto_at"] else hoy
-    # Ese día nunca se cerró: sigue abierto solo si todavía tiene movimientos sin cerrar.
-    pendiente = conn.execute(
+    return dia if dia_sin_cerrar(conn, usuario_id, dia) else hoy
+
+
+def dia_sin_cerrar(conn, usuario_id, dia):
+    """True si la caja de ese día del recaudador nunca se ha cerrado y todavía tiene
+    movimientos (liquidaciones o pagos) sin cerrar: sigue abierta. Un día sin
+    movimientos no cuenta (no hay caja), ni uno que ya tuvo un cierre (para registrar
+    ahí, el Administrador lo reabre)."""
+    if conn.execute("SELECT 1 FROM recaudo_cierres WHERE usuario_id = ? AND fecha = ? LIMIT 1",
+                    (usuario_id, dia)).fetchone():
+        return False
+    return bool(conn.execute(
         """SELECT 1 FROM recaudos WHERE usuario_id = ? AND caja_fecha = ?
               AND anulado_at IS NULL AND cierre_id IS NULL LIMIT 1""",
         (usuario_id, dia),
@@ -174,8 +184,7 @@ def dia_de_caja(conn, usuario_id, bus_id, fecha):
         """SELECT 1 FROM recaudo_pagos WHERE usuario_id = ? AND fecha = ?
               AND anulado_at IS NULL AND cierre_id IS NULL LIMIT 1""",
         (usuario_id, dia),
-    ).fetchone()
-    return dia if pendiente else hoy
+    ).fetchone())
 
 
 def _miles(n):
