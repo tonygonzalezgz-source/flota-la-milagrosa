@@ -14,9 +14,11 @@ parqueos, abonos, anticipos, reembolsos…).
     FIJO        → el NIT fijo del concepto;
     NINGUNO     → nadie (la observación es obligatoria: qué se pagó).
 - La fecha es la de hoy en Bogotá (la pone el servidor), y es el día de la caja en que
-  entra el pago. Excepción: si el Administrador reabrió la caja de un día del
-  recaudador, en ese día se puede registrar el pago corregido (o uno que se olvidó),
-  porque esa plata entró a la caja ese día (pedido del usuario 2026-11-05). Solo efectivo.
+  entra el pago. Excepciones, un día pasado cuya caja (la del que registra) sigue abierta:
+    · reabierta por el Administrador: entra el pago corregido (o uno que se olvidó),
+      porque esa plata entró a la caja ese día (pedido del usuario 2026-11-05);
+    · sin cerrar todavía (tiene movimientos pendientes y nunca se cerró): el pago entra
+      a esa caja antes de cerrarla (pedido del usuario 2026-11-07). Solo efectivo.
 - Al guardar se copian el concepto, el bus y el tercero, para que el recibo y los
   cierres viejos no cambien si después se edita el catálogo.
 - Igual que una liquidación: no se edita; solo el Administrador lo anula (con
@@ -32,7 +34,7 @@ import auditoria
 from . import bp
 from .comun import EMPRESA_POR_DEFECTO, ROLES_RECAUDO, db, hoy_bogota, rol
 from .endpoints import (_ahora, _entero, _fecha_iso, _fecha_valida, _hora_utc, _Rechazo, _texto,
-                        autorizar_reimpresion, reimpresiones)
+                        autorizar_reimpresion, dia_sin_cerrar, reimpresiones)
 from .terceros import TIPOS_DOCUMENTO, documento_con_dv, pagadores, tercero_de_pagador
 
 ADMIN = ("Administrador",)
@@ -129,6 +131,21 @@ def caja_reabierta(conn, usuario_id, fecha):
             "motivo_reapertura": f["motivo_reapertura"]}
 
 
+def dias_abiertos(conn, usuario_id, hoy):
+    """Días pasados en los que el usuario todavía puede registrar pagos: su caja de ese
+    día sigue sin cerrar o el Administrador la reabrió. Para avisarle en la caja de hoy."""
+    candidatos = set()
+    for sql in ("""SELECT DISTINCT caja_fecha AS d FROM recaudos
+                    WHERE usuario_id = ? AND anulado_at IS NULL AND cierre_id IS NULL AND caja_fecha < ?""",
+                """SELECT DISTINCT fecha AS d FROM recaudo_pagos
+                    WHERE usuario_id = ? AND anulado_at IS NULL AND cierre_id IS NULL AND fecha < ?""",
+                """SELECT DISTINCT fecha AS d FROM recaudo_cierres
+                    WHERE usuario_id = ? AND reabierto_at IS NOT NULL AND fecha < ?"""):
+        candidatos |= {_fecha_iso(dict(f)["d"]) for f in conn.execute(sql, (usuario_id, hoy)).fetchall()}
+    return [d for d in sorted(c for c in candidatos if c)
+            if caja_reabierta(conn, usuario_id, d) or dia_sin_cerrar(conn, usuario_id, d)]
+
+
 @bp.route("/api/recaudo/pagos", methods=["GET"])
 @rol(*ROLES_RECAUDO)
 def pagos_del_dia():
@@ -150,12 +167,16 @@ def pagos_del_dia():
              FROM buses ORDER BY numero"""
     ).fetchall()]
     hoy = hoy_bogota()
+    uid = getattr(request, "jwt_user_id", None)
+    # Un día pasado admite registrar pagos si la caja de quien consulta sigue abierta:
+    # reabierta por el Administrador o todavía sin cerrar.
+    reabierto = caja_reabierta(conn, uid, fecha) if fecha < hoy else None
     salida = {
         "fecha": fecha,
         "hoy": hoy,
-        # Un día pasado con la caja reabierta admite registrar pagos (los de quien consulta)
-        "dia_reabierto": (caja_reabierta(conn, getattr(request, "jwt_user_id", None), fecha)
-                          if fecha < hoy else None),
+        "dia_reabierto": reabierto,
+        "dia_sin_cerrar": bool(fecha < hoy and not reabierto and dia_sin_cerrar(conn, uid, fecha)),
+        "dias_abiertos": dias_abiertos(conn, uid, hoy) if fecha == hoy else [],
         "pagos": pagos,
         "totales": totales_pagos(pagos),
         "conceptos": conceptos_pago(conn),
@@ -176,7 +197,8 @@ def pagos_del_dia():
 @rol(*ROLES_RECAUDO)
 def registrar_pago():
     """Body: {concepto_id, valor, bus_id?, pagador?, tercero_id?, observacion?, fecha?}.
-    `fecha` solo si es un día pasado cuya caja (la del que registra) está reabierta."""
+    `fecha` solo si es un día pasado cuya caja (la del que registra) sigue abierta:
+    reabierta por el Administrador o todavía sin cerrar."""
     data = request.get_json(silent=True) or {}
     conn = db()
     aviso = None
@@ -187,9 +209,9 @@ def registrar_pago():
             fecha = _fecha_valida(data.get("fecha"))
             if not fecha or fecha > hoy:
                 raise _Rechazo("Fecha inválida")
-            if not caja_reabierta(conn, uid, fecha):
-                raise _Rechazo("Solo se registran pagos de otro día cuando el administrador reabrió "
-                               "la caja de ese día.", 409)
+            if not (caja_reabierta(conn, uid, fecha) or dia_sin_cerrar(conn, uid, fecha)):
+                raise _Rechazo("La caja de ese día ya está cerrada (o no tiene movimientos): "
+                               "solo se registra ahí si el administrador la reabre.", 409)
         concepto_id = _entero(data.get("concepto_id"), "El concepto")
         fila = conn.execute("SELECT * FROM recaudo_conceptos WHERE id = ? AND empresa_id = ?",
                             (concepto_id, EMPRESA_POR_DEFECTO)).fetchone()
@@ -276,7 +298,7 @@ def registrar_pago():
          f"({'entrada' if entra else 'salida'} de caja, cuenta {concepto['cuenta']}) por "
          f"{auditoria.pesos(valor)}" + (f" — {detalle}" if detalle else "")
          + (f". Obs: {observacion}" if observacion else "")
-         + (f". Entra a la caja reabierta del día {fecha}" if fecha != hoy else "") + "."),
+         + (f". Entra a la caja del día {fecha}" if fecha != hoy else "") + "."),
         {"fecha": fecha, "concepto": concepto["nombre"], "cuenta": concepto["cuenta"], "signo": concepto["signo"],
          "valor": valor, "bus": bus["numero"] if bus else None, "tercero": copia["nombre"],
          "documento": copia["documento"], "pagador": pagador["nombre"] if pagador else None,
