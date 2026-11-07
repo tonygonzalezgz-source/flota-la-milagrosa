@@ -70,7 +70,7 @@ def informe():
 
     conn = db()
     filas = [dict(f) for f in conn.execute(
-        f"""SELECT r.id AS recaudo_id, r.fecha, r.created_at, r.bus_id, r.tarifa,
+        f"""SELECT r.id AS recaudo_id, r.parte, r.fecha, r.created_at, r.bus_id, r.tarifa,
                    b.numero AS bus_numero, b.placa AS bus_placa, b.grupo AS bus_grupo,
                    u.nombre AS usuario_nombre,
                    rc.orden, rc.viajes, rc.registradora_inicio, rc.registradora_fin, rc.pasajeros,
@@ -113,18 +113,20 @@ def informe():
         por_conductor.setdefault((g["recaudo_id"], g["orden_conductor"]), []).append(
             {"tipo": tipo, "valor": int(g["valor"]), "observacion": g["observacion"]})
 
+    # Conductores del bus en el día: con relevo agregado (otra parte) se cuentan todos.
     conductores = {}
     for f in filas:
-        conductores[f["recaudo_id"]] = conductores.get(f["recaudo_id"], 0) + 1
+        clave = (f["bus_id"], _fecha_iso(f["fecha"]))
+        conductores[clave] = conductores.get(clave, 0) + 1
     for f in filas:
         f["fecha"] = _fecha_iso(f["fecha"])
         f["created_at"] = _hora_utc(f["created_at"])
         f["bus_numero"] = str(f["bus_numero"])
-        f["conductores"] = conductores[f["recaudo_id"]]
+        f["conductores"] = conductores[(f["bus_id"], f["fecha"])]
         f["gastos"] = por_conductor.get((f["recaudo_id"], f["orden"]), [])
         # Observación del conductor (por qué sobró o faltó); la general de la liquidación
-        # va con el conductor 1, como en la tirilla.
-        obs = [f.pop("obs_conductor"), f.pop("obs_recaudo") if f["orden"] == 1 else None]
+        # va con el primer conductor de la liquidación (o del relevo agregado), como en la tirilla.
+        obs = [f.pop("obs_conductor"), f.pop("obs_recaudo") if f["orden"] == (f.pop("parte") or 1) else None]
         f.pop("obs_recaudo", None)
         f["observacion"] = " · ".join(o for o in obs if o)
     filas.sort(key=lambda f: (_orden_bus(f["bus_numero"]), f["fecha"], f["created_at"] or "",

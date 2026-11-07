@@ -70,7 +70,7 @@ def _dias_pendientes(conn, usuario_id):
     Regla general: el día en que se recibió la plata. Excepción, un cierre reabierto:
     todo lo que tenía vuelve JUNTO a su día, aunque se hubiera recibido en varios días
     (los cierres de antes del 2026-11-05 juntaban varios días), y la liquidación que
-    reemplaza a una anulada de ese cierre (mismo bus y día de tarjeta) también entra
+    reemplaza a una anulada de ese cierre (mismo bus, día de tarjeta y parte) también entra
     ahí mientras el día siga reabierto, aunque se haya liquidado hoy. Así el día se
     vuelve a cerrar completo, contra el efectivo que ya se había entregado."""
     liqs, pagos = _pendientes(conn, usuario_id)
@@ -100,14 +100,15 @@ def _dias_pendientes(conn, usuario_id):
             ids = list(en_abiertos)
             reemplazadas = {}
             for f in conn.execute(
-                f"""SELECT id, bus_id, fecha FROM recaudos
+                f"""SELECT id, bus_id, fecha, parte FROM recaudos
                      WHERE anulado_at IS NOT NULL AND id IN ({','.join('?' * len(ids))})""",
                 ids,
             ).fetchall():
                 f = dict(f)
-                reemplazadas[(f["bus_id"], _fecha_iso(f["fecha"]))] = en_abiertos[f["id"]]
+                # La parte cuenta: un relevo agregado hoy no reemplaza a la liquidación original.
+                reemplazadas[(f["bus_id"], _fecha_iso(f["fecha"]), f.get("parte") or 1)] = en_abiertos[f["id"]]
             for l in sueltas:
-                dia = reemplazadas.get((l["bus_id"], l["fecha"]))
+                dia = reemplazadas.get((l["bus_id"], l["fecha"], l.get("parte") or 1))
                 if dia:
                     dia_liq[l["id"]] = dia
     dias = {}
