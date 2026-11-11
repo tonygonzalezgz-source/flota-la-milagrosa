@@ -103,6 +103,37 @@ def relevos_por_bus(conn, fecha, bus_id=None):
     return _deps["relevos_por_bus"](conn, fecha, bus_id)
 
 
+def pendientes_abiertos(conn, fecha, bus_id=None):
+    """Conductores que quedaron pendientes por liquidar (ver liquidar en endpoints.py):
+    {bus_id: [{orden, conductor_id, conductor_nombre, ruta_id, viajes, registradora_inicio,
+    registradora_fin, recaudo_id}]}, por orden. Sigue abierto mientras la liquidación que
+    lo dejó pendiente esté vigente y ninguna parte vigente del bus ese día lo tenga."""
+    where, params = "p.fecha = ?", [fecha]
+    if bus_id is not None:
+        where += " AND p.bus_id = ?"
+        params.append(bus_id)
+    filas = conn.execute(
+        f"""SELECT p.bus_id, p.orden, p.conductor_id, c.nombre AS conductor_nombre, p.ruta_id,
+                   p.viajes, p.registradora_inicio, p.registradora_fin, p.recaudo_id
+              FROM recaudo_pendientes p
+              JOIN recaudos r ON r.id = p.recaudo_id AND r.anulado_at IS NULL
+         LEFT JOIN conductores c ON c.id = p.conductor_id
+             WHERE {where}
+               AND NOT EXISTS (
+                   SELECT 1 FROM recaudos r2
+                     JOIN recaudo_conductores rc ON rc.recaudo_id = r2.id
+                    WHERE r2.bus_id = p.bus_id AND r2.fecha = p.fecha
+                      AND r2.anulado_at IS NULL AND rc.orden = p.orden)
+          ORDER BY p.bus_id, p.orden""",
+        params,
+    ).fetchall()
+    out = {}
+    for f in filas:
+        f = dict(f)
+        out.setdefault(f.pop("bus_id"), []).append(f)
+    return out
+
+
 def rol(*roles):
     """Igual que require_role de app.py, resuelto en tiempo de request."""
     def wrapper(f):
