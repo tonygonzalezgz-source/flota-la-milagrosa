@@ -265,7 +265,7 @@ PG_SCHEMA    = os.path.join(os.path.dirname(__file__), "supabase_schema.sql")
 # Versión del esquema. IMPORTANTE: incrementar en 1 cada vez que se agregue
 # una migración (ALTER/CREATE) a migrate_db(); si no se incrementa, la
 # migración nueva NO corre en las BD ya versionadas.
-SCHEMA_VERSION = 27   # 27: relevo agregado a un bus ya liquidado (recaudos.parte)
+SCHEMA_VERSION = 28   # 28: conductor pendiente en Recaudo (recaudo_pendientes)
 
 ROLE_VIEWS = {
     "Administrador":  ["dashboard", "historial", "mant", "propietario", "catalogo", "despacho", "historial-despacho", "gastos", "tecnologia", "chequeo", "eds", "lavada", "mapa", "relojes", "mb-mapa", "mb-reportes", "mb-rutas", "mb-equipos", "recaudo-diario", "recaudo-pagos", "recaudo-caja", "auditoria"],
@@ -3218,6 +3218,12 @@ def guardar_relevos_despacho():
         if liquidados and liquidados[0]["registradora_inicio"] is None:
             raise ValueError(f"El bus {desp['numero']} ya fue liquidado en Recaudo y cuenta pasajeros con "
                              "sensores: el relevo que faltó se agrega en Recaudo diario")
+        if liquidados:
+            # Los conductores que quedaron pendientes en Recaudo también tienen su tramo
+            # fijo: con ellos, los conductores del bus van seguidos desde el 1.
+            for p in recaudo.comun.pendientes_abiertos(db, fecha, bus_id).get(bus_id, []):
+                liquidados.append({**p, "pendiente": True})
+            liquidados.sort(key=lambda t: t["orden"])
 
         viajes1 = entero(data.get("viajes"), "los viajes del conductor 1")
         relevos, vistos = [], {desp["conductor_id"]}
@@ -3248,7 +3254,8 @@ def guardar_relevos_despacho():
             for r in relevos[:ya - 1]:
                 l = liquidados[r["orden"] - 1]
                 if (r["conductor_id"], r["registradora"]) != (l["conductor_id"], l["registradora_inicio"]):
-                    raise ValueError(f"{liq}: el conductor {r['orden']} ya está liquidado y su relevo no se "
+                    raise ValueError(f"{liq}: el conductor {r['orden']} ya está "
+                                     f"{'pendiente por liquidar' if l.get('pendiente') else 'liquidado'} y su relevo no se "
                                      "cambia desde el despacho")
             fin_liquidado = liquidados[-1]["registradora_fin"]
             if len(relevos) >= ya and relevos[ya - 1]["registradora"] != fin_liquidado:

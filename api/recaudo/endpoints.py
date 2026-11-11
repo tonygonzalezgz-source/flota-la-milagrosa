@@ -38,7 +38,7 @@ import auditoria
 
 from . import bp
 from .comun import (EMPRESA_POR_DEFECTO, MAX_CONDUCTORES, ROLES_RECAUDO, db, es_pg, hoy_bogota,
-                    relevos_por_bus, rol, sync_pax_movilidad)
+                    pendientes_abiertos, relevos_por_bus, rol, sync_pax_movilidad)
 
 ADMIN = ("Administrador",)
 _RE_FECHA = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -450,6 +450,7 @@ def recaudo_dia():
     tipos = _tipos_gasto(conn)
     vigentes, anuladas = _liquidaciones_del_dia(conn, fecha)
     relevos = relevos_por_bus(conn, fecha)
+    pendientes = pendientes_abiertos(conn, fecha)
     conn.close()
 
     salida = []
@@ -458,6 +459,13 @@ def recaudo_dia():
         b["ultima_reg_fecha"] = _fecha_iso(b["ultima_reg_fecha"])
         b["relevos"] = relevos.get(b["id"], [])   # los anotó el despachador; el formulario los precarga
         b["recaudo"] = vigentes.get(b["id"])
+        # Conductores que no han entregado: se liquidan después (POST /api/recaudo/pendiente)
+        b["pendientes"] = pendientes.get(b["id"], [])
+        if b["recaudo"] and b["pendientes"]:
+            # La tirilla dice "conductor 2 de 2" aunque el 1 siga pendiente.
+            total = max([c["orden"] for c in b["recaudo"]["conductores"]] + [p["orden"] for p in b["pendientes"]])
+            for r in [b["recaudo"]] + b["recaudo"]["partes"]:
+                r["total_conductores"] = total
         b["anulados"] = anuladas.get(b["id"], [])
         salida.append(b)
 
@@ -481,15 +489,19 @@ def recaudo_dia():
 #  Liquidar (solo crea: una liquidación guardada no se modifica)
 # ──────────────────────────────────────────
 
-def _armar_gastos(conn, gastos_in, n_conductores, primero=1):
+def _armar_gastos(conn, gastos_in, n_conductores, primero=1, ordenes=None):
     """Valida los gastos reportados: tipo activo, valor > 0, sin repetir tipo por conductor,
     salvo los que piden descripción (p. ej. "Otros"): esos pueden ir varias veces, cada uno
     con lo que fue (pedido del usuario 2026-11-03). `orden_conductor` es el número del
-    conductor en el bus; en un relevo agregado los conductores van de `primero` en adelante."""
+    conductor en el bus; en un relevo agregado los conductores van de `primero` en adelante.
+    `ordenes`: los números de los conductores que se liquidan, cuando no son seguidos (hay
+    conductores pendientes); un pendiente no lleva gastos hasta que se liquida."""
     if gastos_in in (None, ""):
         return []
     if not isinstance(gastos_in, list) or len(gastos_in) > 40:
         raise _Rechazo("Lista de gastos inválida")
+    if ordenes is None:
+        ordenes = set(range(primero, primero + n_conductores))
     tipos = {t["id"]: t for t in _tipos_gasto(conn)}
     gastos, vistos = [], set()
     for g in gastos_in:
@@ -498,8 +510,8 @@ def _armar_gastos(conn, gastos_in, n_conductores, primero=1):
         if tipo_id not in tipos:
             raise _Rechazo("Hay un tipo de gasto que no existe o está desactivado")
         nombre = tipos[tipo_id]["nombre"]
-        orden = _entero(g.get("orden_conductor"), "El conductor del gasto", requerido=False) or primero
-        if not primero <= orden < primero + n_conductores:
+        orden = _entero(g.get("orden_conductor"), "El conductor del gasto", requerido=False) or min(ordenes)
+        if orden not in ordenes:
             raise _Rechazo(f"El gasto {nombre} apunta a un conductor que no está en la liquidación")
         if (orden, tipo_id) in vistos and not tipos[tipo_id]["requiere_detalle"]:
             raise _Rechazo(f"El gasto {nombre} está repetido")
@@ -517,43 +529,80 @@ def _armar_gastos(conn, gastos_in, n_conductores, primero=1):
     return gastos
 
 
+def _datos_conductor(conn, c, n, cual, vistos, previos, pendiente=False):
+    """Conductor, ruta y viajes de un tramo: (conductor_id, {nombre, cedula}, ruta_id, viajes).
+    Un conductor pendiente solo necesita el nombre: ruta y viajes se completan al liquidarlo."""
+    conductor_id = _entero(c.get("conductor_id"), "El conductor" + (f" {n}" if cual else ""))
+    if conductor_id in vistos:
+        raise _Rechazo("Un mismo conductor no puede aparecer dos veces en la liquidación del bus"
+                       + (" (ya está en lo liquidado o pendiente)" if conductor_id in previos else ""))
+    vistos.add(conductor_id)
+    conductor = conn.execute(
+        "SELECT nombre, cedula FROM conductores WHERE id = ?", (conductor_id,)
+    ).fetchone()
+    if not conductor:
+        raise _Rechazo(f"El conductor {n} no existe")
+
+    ruta_id = _entero(c.get("ruta_id"), f"La ruta{cual}", requerido=not pendiente)
+    if ruta_id is not None and not conn.execute("SELECT id FROM rutas WHERE id = ?", (ruta_id,)).fetchone():
+        raise _Rechazo(f"La ruta{cual} no existe")
+
+    viajes = _entero(c.get("viajes"), f"Los viajes{cual}", requerido=not pendiente)
+    if viajes is not None and viajes < 1:
+        raise _Rechazo(f"Los viajes{cual} deben ser al menos 1")
+    return conductor_id, dict(conductor), ruta_id, viajes
+
+
+def _tramo(n, conductor_id, conductor, ruta_id, viajes, inicio, fin, pasajeros, tarifa, gastos,
+           recaudado, observacion):
+    """Totales de un conductor: producido, gastos, lo que debe entregar y la diferencia."""
+    producido = pasajeros * tarifa
+    total_gastos = sum(g["valor"] for g in gastos if g["orden_conductor"] == n)
+    neto = aproximar_mil(producido - total_gastos)
+    return {
+        "orden": n, "conductor_id": conductor_id, "conductor_nombre": conductor["nombre"],
+        "conductor_cedula": conductor.get("cedula"), "ruta_id": ruta_id, "viajes": viajes,
+        "registradora_inicio": inicio, "registradora_fin": fin, "pasajeros": pasajeros,
+        "producido": producido, "total_gastos": total_gastos, "neto": neto,
+        "recaudado": recaudado, "diferencia": recaudado - por_entregar(neto),
+        "observacion": observacion,
+    }
+
+
 def _armar_tramos(conn, conductores_in, reg_inicio, reg_fin, tarifa, gastos, pax_total=None,
-                  primero=1, previos=()):
+                  primero=1, previos=(), sensores=None, pendientes=()):
     """Valida los conductores y calcula el tramo de registradora y los totales de cada uno.
     Obligatorios por conductor: conductor, ruta, viajes (>= 1), pasajeros (>= 1) y recaudo.
     Los gastos son opcionales. Bus con sensores (`pax_total`, los que digitó el recaudador):
     sin registradora; con relevo, cada conductor lleva sus pasajeros y el último lo que falta.
     Relevo agregado a un bus ya liquidado: los conductores se numeran desde `primero` y no
-    pueden repetir a los ya liquidados (`previos`)."""
+    pueden repetir a los ya liquidados (`previos`).
+    `pendientes` (índices en `conductores_in`): conductores que todavía no entregan. Su tramo
+    de registradora se calcula igual (queda fijo) pero no llevan ruta, viajes, recaudo ni
+    gastos obligatorios: salen con `pendiente` y sin totales. Con sensores y pendientes,
+    cada conductor que se liquida lleva sus pasajeros (no hay total del día del que repartir)."""
+    if sensores is None:
+        sensores = pax_total is not None
     tramos, vistos, inicio, repartidos = [], set(previos), reg_inicio, 0
     for i, c in enumerate(conductores_in):
         n = primero + i
         ultimo = i == len(conductores_in) - 1
+        pendiente = i in pendientes
         c = c if isinstance(c, dict) else {}
         # Con un solo conductor en el bus los mensajes no necesitan número.
         cual = f" del conductor {n}" if primero - 1 + len(conductores_in) > 1 else ""
 
-        conductor_id = _entero(c.get("conductor_id"), "El conductor" + (f" {n}" if cual else ""))
-        if conductor_id in vistos:
-            raise _Rechazo("Un mismo conductor no puede aparecer dos veces en la liquidación del bus"
-                           + (" (ya está en lo liquidado)" if conductor_id in previos else ""))
-        vistos.add(conductor_id)
-        conductor = conn.execute(
-            "SELECT nombre, cedula FROM conductores WHERE id = ?", (conductor_id,)
-        ).fetchone()
-        if not conductor:
-            raise _Rechazo(f"El conductor {n} no existe")
-        conductor = dict(conductor)
+        conductor_id, conductor, ruta_id, viajes = _datos_conductor(
+            conn, c, n, cual, vistos, previos, pendiente)
 
-        ruta_id = _entero(c.get("ruta_id"), f"La ruta{cual}")
-        if not conn.execute("SELECT id FROM rutas WHERE id = ?", (ruta_id,)).fetchone():
-            raise _Rechazo(f"La ruta{cual} no existe")
-
-        viajes = _entero(c.get("viajes"), f"Los viajes{cual}")
-        if viajes < 1:
-            raise _Rechazo(f"Los viajes{cual} deben ser al menos 1")
-
-        if pax_total is not None:
+        if sensores and pendientes:
+            inicio = fin = None
+            pasajeros = None
+            if not pendiente:
+                pasajeros = _entero(c.get("pasajeros"), f"Los pasajeros del conductor {n}")
+                if pasajeros < 1:
+                    raise _Rechazo(f"Los pasajeros del conductor {n} deben ser al menos 1")
+        elif sensores:
             inicio = fin = None
             if ultimo:
                 pasajeros = pax_total - repartidos
@@ -578,20 +627,101 @@ def _armar_tramos(conn, conductores_in, reg_inicio, reg_fin, tarifa, gastos, pax
             if pasajeros < 1:
                 raise _Rechazo(f"No hay pasajeros{cual}: la registradora final debe ser mayor que la inicial")
 
-        recaudado = _entero(c.get("recaudado"), f"El recaudo entregado{cual}")
-        producido = pasajeros * tarifa
-        total_gastos = sum(g["valor"] for g in gastos if g["orden_conductor"] == n)
-        neto = aproximar_mil(producido - total_gastos)
-        tramos.append({
-            "orden": n, "conductor_id": conductor_id, "conductor_nombre": conductor["nombre"],
-            "conductor_cedula": conductor.get("cedula"), "ruta_id": ruta_id, "viajes": viajes,
-            "registradora_inicio": inicio, "registradora_fin": fin, "pasajeros": pasajeros,
-            "producido": producido, "total_gastos": total_gastos, "neto": neto,
-            "recaudado": recaudado, "diferencia": recaudado - por_entregar(neto),
-            "observacion": _texto(c.get("observacion")),
-        })
+        if pendiente:
+            tramos.append({
+                "orden": n, "pendiente": True, "conductor_id": conductor_id,
+                "conductor_nombre": conductor["nombre"], "ruta_id": ruta_id, "viajes": viajes,
+                "registradora_inicio": inicio, "registradora_fin": fin, "pasajeros": pasajeros,
+            })
+        else:
+            recaudado = _entero(c.get("recaudado"), f"El recaudo entregado{cual}")
+            tramos.append(_tramo(n, conductor_id, conductor, ruta_id, viajes, inicio, fin, pasajeros,
+                                 tarifa, gastos, recaudado, _texto(c.get("observacion"))))
         inicio = fin
     return tramos
+
+
+def _corridas(tramos):
+    """Agrupa los tramos que se liquidan en corridas de conductores seguidos: cada corrida es
+    una parte de la liquidación (`recaudos.parte` = número de su primer conductor)."""
+    corridas = []
+    for t in sorted(tramos, key=lambda t: t["orden"]):
+        if corridas and corridas[-1][-1]["orden"] == t["orden"] - 1:
+            corridas[-1].append(t)
+        else:
+            corridas.append([t])
+    return corridas
+
+
+def _guardar_parte(conn, uid, bus_id, fecha, tarifa, tramos, gastos, observacion=None):
+    """Guarda una parte de la liquidación del bus en el día (encabezado, conductores y
+    gastos) con los conductores seguidos de `tramos`. Devuelve (id, totales)."""
+    parte = tramos[0]["orden"]
+    tot = {
+        "pasajeros": sum(t["pasajeros"] for t in tramos),
+        "producido": sum(t["producido"] for t in tramos),
+        "total_gastos": sum(g["valor"] for g in gastos),
+        # Cada conductor ya viene aproximado; el de la parte es solo lo que hay por entregar
+        # (lo que la empresa le debe a un conductor no se descuenta de lo que entrega otro).
+        "neto": sum(por_entregar(t["neto"]) for t in tramos),
+        "recaudado": sum(t["recaudado"] for t in tramos),
+        "diferencia": sum(t["diferencia"] for t in tramos),
+        "debe": sum(debe_conductor(t["neto"]) for t in tramos),
+        "caja_fecha": dia_de_caja(conn, uid, bus_id, fecha, parte=parte),
+        "parte": parte,
+    }
+    cur = conn.execute(
+        """INSERT INTO recaudos
+               (empresa_id, fecha, bus_id, registradora_inicio, registradora_fin, pasajeros,
+                tarifa, producido, total_gastos, neto, recaudado, diferencia, observacion,
+                usuario_id, caja_fecha, parte)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (EMPRESA_POR_DEFECTO, fecha, bus_id, tramos[0]["registradora_inicio"],
+         tramos[-1]["registradora_fin"], tot["pasajeros"], tarifa, tot["producido"],
+         tot["total_gastos"], tot["neto"], tot["recaudado"], tot["diferencia"], observacion, uid,
+         tot["caja_fecha"], parte),
+    )
+    recaudo_id = cur.lastrowid
+    for t in tramos:
+        conn.execute(
+            """INSERT INTO recaudo_conductores
+                   (recaudo_id, orden, conductor_id, ruta_id, viajes, registradora_inicio,
+                    registradora_fin, pasajeros, producido, total_gastos, neto, recaudado,
+                    diferencia, observacion)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (recaudo_id, t["orden"], t["conductor_id"], t["ruta_id"], t["viajes"],
+             t["registradora_inicio"], t["registradora_fin"], t["pasajeros"], t["producido"],
+             t["total_gastos"], t["neto"], t["recaudado"], t["diferencia"], t["observacion"]),
+        )
+    for g in gastos:
+        conn.execute(
+            """INSERT INTO recaudo_gastos
+                   (recaudo_id, orden_conductor, tipo_gasto_id, tipo_nombre, valor, observacion)
+               VALUES (?,?,?,?,?,?)""",
+            (recaudo_id, g["orden_conductor"], g["tipo_gasto_id"], g["tipo_nombre"],
+             g["valor"], g["observacion"]),
+        )
+    return recaudo_id, tot
+
+
+def _texto_tramos(tramos, sensores):
+    """Detalle por conductor para el historial de modificaciones."""
+    return "; ".join(
+        f"{t['orden']}) {t['conductor_nombre']}"
+        + (f" {t['registradora_inicio']}→{t['registradora_fin']}" if not sensores else "") + ": "
+        f"{_miles(t['pasajeros'])} pax, producido {auditoria.pesos(t['producido'])}, "
+        f"gastos {auditoria.pesos(t['total_gastos'])}, entregó {auditoria.pesos(t['recaudado'])}, "
+        f"{_resultado(t['diferencia'])}"
+        for t in tramos)
+
+
+def _texto_pendientes(pendientes, sensores):
+    """Los conductores que quedan pendientes por liquidar, para el historial."""
+    return "; ".join(
+        f"{t['orden']}) {t['conductor_nombre']}"
+        + (f" {t['registradora_inicio']}→{t['registradora_fin']} ({_miles(t['pasajeros'])} pax)"
+           if not sensores else "")
+        for t in pendientes)
 
 
 def _es_admin():
@@ -683,6 +813,11 @@ def _vigente(conn, bus_id, fecha):
 @bp.route("/api/recaudo", methods=["POST"])
 @rol(*ROLES_RECAUDO)
 def liquidar():
+    """Liquida el bus en el día con todos sus conductores. Con relevo, los conductores que
+    todavía no entregan pueden quedar pendientes (`conductores[k].pendiente`, pedido del
+    usuario 2026-11-11): se liquida a los que llegaron, cada grupo de conductores seguidos
+    como una parte, y los pendientes quedan en `recaudo_pendientes` con su tramo de
+    registradora fijo hasta que se liquidan (POST /api/recaudo/pendiente)."""
     data = request.get_json(silent=True) or {}
     fecha = _fecha_valida(data.get("fecha"))
     if not fecha:
@@ -699,16 +834,26 @@ def liquidar():
             raise _Rechazo("El vehículo no existe", 404)
         bus = dict(bus)
 
+        conductores_in = data.get("conductores")
+        if not isinstance(conductores_in, list) or not 1 <= len(conductores_in) <= MAX_CONDUCTORES:
+            raise _Rechazo(f"Debe haber entre 1 y {MAX_CONDUCTORES} conductores")
+        pendientes = {i for i, c in enumerate(conductores_in) if isinstance(c, dict) and c.get("pendiente")}
+        if len(pendientes) == len(conductores_in):
+            raise _Rechazo("Tiene que haber al menos un conductor para liquidar: los pendientes se "
+                           "liquidan cuando entreguen")
+
         # Bus con sensores: el recaudador digita los pasajeros que reporta el conductor (los
         # de los sensores llegan al día siguiente). La movilidad sigue siendo la de la
-        # analista y de ahí sale la diferencia (pedido del usuario 2026-11-03).
+        # analista y de ahí sale la diferencia (pedido del usuario 2026-11-03). Con
+        # conductores pendientes no hay total del día: cada uno liquida sus pasajeros.
         sensores = (bus.get("cuenta_pasajeros") or "registradora") == "sensores"
         pax_total = None
         if sensores:
             reg_inicio = reg_fin = None
-            pax_total = _entero(data.get("pasajeros"), "Los pasajeros del día")
-            if pax_total < 1:
-                raise _Rechazo("Los pasajeros del día deben ser al menos 1")
+            if not pendientes:
+                pax_total = _entero(data.get("pasajeros"), "Los pasajeros del día")
+                if pax_total < 1:
+                    raise _Rechazo("Los pasajeros del día deben ser al menos 1")
         else:
             reg_inicio = _entero(data.get("registradora_inicio"), "La registradora inicial")
             reg_fin = _entero(data.get("registradora_fin"), "La registradora final")
@@ -736,61 +881,40 @@ def liquidar():
         if not tarifa:
             raise _Rechazo("No hay tarifa configurada para este tipo de vehículo", 409)
 
-        conductores_in = data.get("conductores")
-        if not isinstance(conductores_in, list) or not 1 <= len(conductores_in) <= MAX_CONDUCTORES:
-            raise _Rechazo(f"Debe haber entre 1 y {MAX_CONDUCTORES} conductores")
         es_admin = _es_admin()
         digitadas = [] if es_admin or sensores else _lecturas_del_despacho(
             conn, bus_id, fecha, despacho, reg_inicio, reg_fin, conductores_in)
         salto = None if sensores else _salto_registradora(conn, bus_id, fecha, reg_inicio)
-        gastos = _armar_gastos(conn, data.get("gastos"), len(conductores_in))
-        tramos = _armar_tramos(conn, conductores_in, reg_inicio, reg_fin, tarifa, gastos, pax_total)
+        ordenes = {i + 1 for i in range(len(conductores_in)) if i not in pendientes}
+        gastos = _armar_gastos(conn, data.get("gastos"), len(conductores_in), ordenes=ordenes)
+        tramos = _armar_tramos(conn, conductores_in, reg_inicio, reg_fin, tarifa, gastos, pax_total,
+                               sensores=sensores, pendientes=pendientes)
     except _Rechazo as e:
         conn.close()
         return jsonify({"error": str(e)}), e.status
 
-    pasajeros = pax_total if sensores else reg_fin - reg_inicio
-    producido = sum(t["producido"] for t in tramos)
-    total_gastos = sum(g["valor"] for g in gastos)
-    # Cada conductor ya viene aproximado; el del bus es solo lo que hay por entregar
-    # (lo que la empresa le debe a un conductor no se descuenta de lo que entrega otro).
-    neto = sum(por_entregar(t["neto"]) for t in tramos)
-    recaudado = sum(t["recaudado"] for t in tramos)
-    diferencia = sum(t["diferencia"] for t in tramos)
-    debe = sum(debe_conductor(t["neto"]) for t in tramos)
+    sin_liquidar = [t for t in tramos if t.get("pendiente")]
+    corridas = _corridas([t for t in tramos if not t.get("pendiente")])
     uid = getattr(request, "jwt_user_id", None)
 
     try:
-        caja_fecha = dia_de_caja(conn, uid, bus_id, fecha)
-        cur = conn.execute(
-            """INSERT INTO recaudos
-                   (empresa_id, fecha, bus_id, registradora_inicio, registradora_fin, pasajeros,
-                    tarifa, producido, total_gastos, neto, recaudado, diferencia, observacion,
-                    usuario_id, caja_fecha)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (EMPRESA_POR_DEFECTO, fecha, bus_id, reg_inicio, reg_fin, pasajeros, tarifa,
-             producido, total_gastos, neto, recaudado, diferencia,
-             _texto(data.get("observacion")), uid, caja_fecha),
-        )
-        recaudo_id = cur.lastrowid
-        for t in tramos:
+        partes = []   # (id, conductores, gastos, totales) de cada parte que se guarda
+        for k, corrida in enumerate(corridas):
+            nums = {t["orden"] for t in corrida}
+            gastos_c = [g for g in gastos if g["orden_conductor"] in nums]
+            rid, tot = _guardar_parte(conn, uid, bus_id, fecha, tarifa, corrida, gastos_c,
+                                      _texto(data.get("observacion")) if k == 0 else None)
+            partes.append((rid, corrida, gastos_c, tot))
+        # Los pendientes quedan con su tramo fijo, atados a la primera parte: si esa se
+        # anula, dejan de estar pendientes y el bus se vuelve a liquidar completo.
+        for t in sin_liquidar:
             conn.execute(
-                """INSERT INTO recaudo_conductores
-                       (recaudo_id, orden, conductor_id, ruta_id, viajes, registradora_inicio,
-                        registradora_fin, pasajeros, producido, total_gastos, neto, recaudado,
-                        diferencia, observacion)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                (recaudo_id, t["orden"], t["conductor_id"], t["ruta_id"], t["viajes"],
-                 t["registradora_inicio"], t["registradora_fin"], t["pasajeros"], t["producido"],
-                 t["total_gastos"], t["neto"], t["recaudado"], t["diferencia"], t["observacion"]),
-            )
-        for g in gastos:
-            conn.execute(
-                """INSERT INTO recaudo_gastos
-                       (recaudo_id, orden_conductor, tipo_gasto_id, tipo_nombre, valor, observacion)
-                   VALUES (?,?,?,?,?,?)""",
-                (recaudo_id, g["orden_conductor"], g["tipo_gasto_id"], g["tipo_nombre"],
-                 g["valor"], g["observacion"]),
+                """INSERT INTO recaudo_pendientes
+                       (empresa_id, recaudo_id, fecha, bus_id, orden, conductor_id, ruta_id, viajes,
+                        registradora_inicio, registradora_fin)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                (EMPRESA_POR_DEFECTO, partes[0][0], fecha, bus_id, t["orden"], t["conductor_id"],
+                 t["ruta_id"], t["viajes"], t["registradora_inicio"], t["registradora_fin"]),
             )
 
         # Una sola fuente de verdad: la registradora del recaudo corrige el despacho.
@@ -827,66 +951,74 @@ def liquidar():
                  reg_inicio, reg_fin, uid),
             )
         if not sensores:   # con sensores la movilidad es la de la analista: no se reescribe
-            sync_pax_movilidad(conn, fecha, {bus_id: pasajeros})
+            # Los pasajeros del bus son los de todo el día, con o sin conductores pendientes.
+            sync_pax_movilidad(conn, fecha, {bus_id: reg_fin - reg_inicio})
 
-        nombres = ", ".join(t["conductor_nombre"] for t in tramos)
-        detalle_gastos = ", ".join(f"{g['tipo_nombre']} {auditoria.pesos(g['valor'])}" for g in gastos)
-        descripcion = (
-            f"Liquidó el bus {bus['numero']} ({bus['placa'] or 's/placa'}) del {fecha} — {nombres}: "
-            f"{_miles(pasajeros)} pasajeros × {auditoria.pesos(tarifa)} = producido "
-            f"{auditoria.pesos(producido)}; gastos {auditoria.pesos(total_gastos)}"
-            + (f" ({detalle_gastos})" if gastos else "")
-            + f"; por entregar {auditoria.pesos(neto)}; recaudado {auditoria.pesos(recaudado)}; "
-              f"{_resultado(diferencia)}."
-            + (" La empresa le debe " + ", ".join(
-                   f"{auditoria.pesos(debe_conductor(t['neto']))} a {t['conductor_nombre']}"
-                   for t in tramos if debe_conductor(t["neto"])) + " (los gastos superan el producido)."
-               if debe else "")
-        )
-        if len(tramos) > 1:
-            descripcion += " Relevo: " + "; ".join(
-                f"{t['orden']}) {t['conductor_nombre']}"
-                + (f" {t['registradora_inicio']}→{t['registradora_fin']}" if not sensores else "") + ": "
-                f"{_miles(t['pasajeros'])} pax, producido {auditoria.pesos(t['producido'])}, "
-                f"gastos {auditoria.pesos(t['total_gastos'])}, entregó {auditoria.pesos(t['recaudado'])}, "
-                f"{_resultado(t['diferencia'])}"
-                for t in tramos) + "."
-        if correccion:
-            descripcion += (f" Corrigió la registradora del despacho: "
-                            f"{correccion[0] if correccion[0] is not None else '—'}–"
-                            f"{correccion[1] if correccion[1] is not None else '—'} → "
-                            f"{reg_inicio}–{reg_fin}.")
-        elif not despacho:
-            descripcion += " El bus no tenía despacho: se creó con estos datos."
-        if sensores:
-            pax_mov = _pasajeros_movilidad(conn, bus_id, fecha)
-            descripcion += (" Bus con sensores (sin registradora): pasajeros digitados en recaudo; "
-                            + (f"la movilidad tiene {_miles(pax_mov)}." if pax_mov
-                               else "la movilidad aún no los tiene."))
-        if salto:
-            marcas = reg_inicio - salto[0]
-            descripcion += (f" Salto en la registradora: cerró en {_miles(salto[0])} el {salto[1]} y "
-                            f"arrancó en {_miles(reg_inicio)} "
-                            f"({_miles(abs(marcas))} marcas {'sin liquidar' if marcas > 0 else 'de menos'}).")
-        if digitadas:
-            descripcion += (" Registradora digitada en recaudo (el despacho no la traía): "
-                            + ", ".join(digitadas) + ".")
-        auditoria.registrar(
-            conn, "recaudo", "liquidacion", recaudo_id, "crear", descripcion,
-            {"fecha": fecha, "bus": bus["numero"], "registradora": [reg_inicio, reg_fin],
-             "pasajeros": pasajeros, "tarifa": tarifa, "producido": producido,
-             "gastos": [f"{g['tipo_nombre']} {auditoria.pesos(g['valor'])}" for g in gastos],
-             "total_gastos": total_gastos, "neto": neto, "recaudado": recaudado,
-             "diferencia": diferencia, "debe_al_conductor": debe or None,
-             "despacho_antes": list(correccion) if correccion else None,
-             "digitadas_en_recaudo": digitadas or None,
-             "salto_registradora": ({"ultima_final": salto[0], "fecha": salto[1]}
-                                    if salto else None),
-             "conductores": [{k: t[k] for k in ("conductor_nombre", "registradora_inicio",
-                                                "registradora_fin", "pasajeros", "producido",
-                                                "total_gastos", "recaudado", "diferencia")}
-                             for t in tramos]},
-        )
+        for k, (rid, corrida, gastos_c, tot) in enumerate(partes):
+            nombres = ", ".join(t["conductor_nombre"] for t in corrida)
+            detalle_gastos = ", ".join(f"{g['tipo_nombre']} {auditoria.pesos(g['valor'])}" for g in gastos_c)
+            descripcion = (
+                f"Liquidó el bus {bus['numero']} ({bus['placa'] or 's/placa'}) del {fecha} — {nombres}: "
+                f"{_miles(tot['pasajeros'])} pasajeros × {auditoria.pesos(tarifa)} = producido "
+                f"{auditoria.pesos(tot['producido'])}; gastos {auditoria.pesos(tot['total_gastos'])}"
+                + (f" ({detalle_gastos})" if gastos_c else "")
+                + f"; por entregar {auditoria.pesos(tot['neto'])}; recaudado {auditoria.pesos(tot['recaudado'])}; "
+                  f"{_resultado(tot['diferencia'])}."
+                + (" La empresa le debe " + ", ".join(
+                       f"{auditoria.pesos(debe_conductor(t['neto']))} a {t['conductor_nombre']}"
+                       for t in corrida if debe_conductor(t["neto"])) + " (los gastos superan el producido)."
+                   if tot["debe"] else "")
+            )
+            if len(tramos) > 1:
+                descripcion += " Relevo: " + _texto_tramos(corrida, sensores) + "."
+            if len(partes) > 1:
+                descripcion += (f" Parte {k + 1} de {len(partes)} de la liquidación del bus (un conductor "
+                                "pendiente separa los conductores que se liquidaron).")
+            if k == 0:
+                if sin_liquidar:
+                    descripcion += (" Quedan pendientes por liquidar (no han entregado): "
+                                    + _texto_pendientes(sin_liquidar, sensores) + ".")
+                if correccion:
+                    descripcion += (f" Corrigió la registradora del despacho: "
+                                    f"{correccion[0] if correccion[0] is not None else '—'}–"
+                                    f"{correccion[1] if correccion[1] is not None else '—'} → "
+                                    f"{reg_inicio}–{reg_fin}.")
+                elif not despacho:
+                    descripcion += " El bus no tenía despacho: se creó con estos datos."
+                if sensores:
+                    pax_mov = _pasajeros_movilidad(conn, bus_id, fecha)
+                    descripcion += (" Bus con sensores (sin registradora): pasajeros digitados en recaudo; "
+                                    + (f"la movilidad tiene {_miles(pax_mov)}." if pax_mov
+                                       else "la movilidad aún no los tiene."))
+                if salto:
+                    marcas = reg_inicio - salto[0]
+                    descripcion += (f" Salto en la registradora: cerró en {_miles(salto[0])} el {salto[1]} y "
+                                    f"arrancó en {_miles(reg_inicio)} "
+                                    f"({_miles(abs(marcas))} marcas {'sin liquidar' if marcas > 0 else 'de menos'}).")
+                if digitadas:
+                    descripcion += (" Registradora digitada en recaudo (el despacho no la traía): "
+                                    + ", ".join(digitadas) + ".")
+            auditoria.registrar(
+                conn, "recaudo", "liquidacion", rid, "crear", descripcion,
+                {"fecha": fecha, "bus": bus["numero"],
+                 "registradora": [corrida[0]["registradora_inicio"], corrida[-1]["registradora_fin"]],
+                 "pasajeros": tot["pasajeros"], "tarifa": tarifa, "producido": tot["producido"],
+                 "gastos": [f"{g['tipo_nombre']} {auditoria.pesos(g['valor'])}" for g in gastos_c],
+                 "total_gastos": tot["total_gastos"], "neto": tot["neto"], "recaudado": tot["recaudado"],
+                 "diferencia": tot["diferencia"], "debe_al_conductor": tot["debe"] or None,
+                 "parte": tot["parte"] if (sin_liquidar or len(partes) > 1) else None,
+                 "despacho_antes": list(correccion) if correccion and k == 0 else None,
+                 "digitadas_en_recaudo": (digitadas or None) if k == 0 else None,
+                 "salto_registradora": ({"ultima_final": salto[0], "fecha": salto[1]}
+                                        if salto and k == 0 else None),
+                 "conductores": [{c: t[c] for c in ("conductor_nombre", "registradora_inicio",
+                                                    "registradora_fin", "pasajeros", "producido",
+                                                    "total_gastos", "recaudado", "diferencia")}
+                                 for t in corrida],
+                 "pendientes": ([{c: t[c] for c in ("orden", "conductor_nombre", "registradora_inicio",
+                                                    "registradora_fin", "pasajeros")}
+                                 for t in sin_liquidar] or None) if k == 0 else None},
+            )
         conn.commit()
     except Exception as e:
         conn.rollback()
@@ -900,7 +1032,149 @@ def liquidar():
 
     vigentes, _ = _liquidaciones_del_dia(conn, fecha, bus_id)
     conn.close()
-    return jsonify({"ok": True, "recaudo": vigentes.get(bus_id)}), 201
+    return jsonify({"ok": True, "recaudo": vigentes.get(bus_id), "nuevas": [p[0] for p in partes]}), 201
+
+
+# ──────────────────────────────────────────
+#  Conductor pendiente: se liquida cuando entrega
+# ──────────────────────────────────────────
+
+def _tarjeta(partes, abiertos):
+    """Los conductores del bus en el día, por número: los liquidados (de las partes
+    vigentes) y los pendientes abiertos, cada uno con su tramo de registradora."""
+    tarjeta = [dict(c, liquidado=True) for p in partes for c in p["conductores"]]
+    tarjeta += [dict(p, liquidado=False) for p in abiertos]
+    return sorted(tarjeta, key=lambda t: t["orden"])
+
+
+@bp.route("/api/recaudo/pendiente", methods=["POST"])
+@rol(*ROLES_RECAUDO)
+def liquidar_pendiente():
+    """Liquida a los conductores que quedaron pendientes en la liquidación del bus (pedido
+    del usuario 2026-11-11): cada grupo de conductores seguidos es otra parte, con su
+    tirilla, y su plata entra a la caja del día en que la entregan. El tramo de
+    registradora es el que quedó fijo al liquidar a los demás; la tarifa, la de ese día.
+    Body: {fecha, bus_id, conductores: [{orden, conductor_id, ruta_id, viajes, pasajeros
+    (solo bus con sensores), recaudado, observacion}], gastos: [{orden_conductor, tipo_gasto_id,
+    valor, observacion}]}. Los pendientes que no vienen siguen pendientes."""
+    data = request.get_json(silent=True) or {}
+    fecha = _fecha_valida(data.get("fecha"))
+    if not fecha:
+        return jsonify({"error": "Fecha inválida (use AAAA-MM-DD)"}), 400
+    permitido, motivo = _puede_liquidar(fecha)
+    if not permitido:
+        return jsonify({"error": motivo}), 403
+
+    conn = db()
+    uid = getattr(request, "jwt_user_id", None)
+    try:
+        bus_id = _entero(data.get("bus_id"), "El vehículo")
+        bus = conn.execute("SELECT * FROM buses WHERE id = ?", (bus_id,)).fetchone()
+        if not bus:
+            raise _Rechazo("El vehículo no existe", 404)
+        bus = dict(bus)
+        abiertos = {p["orden"]: p for p in pendientes_abiertos(conn, fecha, bus_id).get(bus_id, [])}
+        if not abiertos:
+            raise _Rechazo(f"El bus {bus['numero']} no tiene conductores pendientes por liquidar ese día.", 409)
+        conductores_in = data.get("conductores")
+        if not isinstance(conductores_in, list) or not 1 <= len(conductores_in) <= len(abiertos):
+            raise _Rechazo("Elige al menos un conductor pendiente para liquidar")
+        por_orden = {}
+        for c in conductores_in:
+            c = c if isinstance(c, dict) else {}
+            orden = _entero(c.get("orden"), "El número del conductor")
+            if orden not in abiertos:
+                raise _Rechazo(f"El conductor {orden} no está pendiente por liquidar en el bus {bus['numero']}", 409)
+            if orden in por_orden:
+                raise _Rechazo(f"El conductor {orden} viene dos veces")
+            por_orden[orden] = c
+
+        partes = _cargar(conn, "r.bus_id = ? AND r.fecha = ? AND r.anulado_at IS NULL", [bus_id, fecha])
+        tarifa = int(partes[0]["tarifa"])   # la del día, la misma de lo ya liquidado
+        sensores = all(p["registradora_inicio"] is None for p in partes)
+        tarjeta = _tarjeta(partes, abiertos.values())
+        # Nadie se repite en el bus: ni los liquidados ni los que siguen pendientes.
+        previos = [t["conductor_id"] for t in tarjeta if t["orden"] not in por_orden]
+        gastos = _armar_gastos(conn, data.get("gastos"), len(por_orden), ordenes=set(por_orden))
+        tramos, vistos = [], set(previos)
+        for orden in sorted(por_orden):
+            c, p = por_orden[orden], abiertos[orden]
+            cual = f" del conductor {orden}"
+            conductor_id, conductor, ruta_id, viajes = _datos_conductor(conn, c, orden, cual, vistos, previos)
+            if sensores:
+                pasajeros = _entero(c.get("pasajeros"), f"Los pasajeros del conductor {orden}")
+                if pasajeros < 1:
+                    raise _Rechazo(f"Los pasajeros del conductor {orden} deben ser al menos 1")
+            else:
+                pasajeros = p["registradora_fin"] - p["registradora_inicio"]
+            recaudado = _entero(c.get("recaudado"), f"El recaudo entregado{cual}")
+            tramos.append(_tramo(orden, conductor_id, conductor, ruta_id, viajes, p["registradora_inicio"],
+                                 p["registradora_fin"], pasajeros, tarifa, gastos, recaudado,
+                                 _texto(c.get("observacion"))))
+    except _Rechazo as e:
+        conn.close()
+        return jsonify({"error": str(e)}), e.status
+
+    corridas = _corridas(tramos)
+    origen = next(iter(abiertos.values()))["recaudo_id"]
+    siguen = [t for o, t in abiertos.items() if o not in por_orden]
+    try:
+        nuevas = []
+        for corrida in corridas:
+            nums = {t["orden"] for t in corrida}
+            gastos_c = [g for g in gastos if g["orden_conductor"] in nums]
+            rid, tot = _guardar_parte(conn, uid, bus_id, fecha, tarifa, corrida, gastos_c)
+            nuevas.append(rid)
+            detalle_gastos = ", ".join(f"{g['tipo_nombre']} {auditoria.pesos(g['valor'])}" for g in gastos_c)
+            descripcion = (
+                f"Liquidó {'a los conductores pendientes' if len(corrida) > 1 else 'al conductor pendiente'} "
+                + ", ".join(f"{t['conductor_nombre']} (conductor {t['orden']})" for t in corrida)
+                + f" del bus {bus['numero']} ({bus['placa'] or 's/placa'}) del {fecha}, que había quedado "
+                f"pendiente en la liquidación N° {str(origen).zfill(6)}: {_miles(tot['pasajeros'])} pasajeros × {auditoria.pesos(tarifa)} "
+                f"= producido {auditoria.pesos(tot['producido'])}; gastos {auditoria.pesos(tot['total_gastos'])}"
+                + (f" ({detalle_gastos})" if gastos_c else "")
+                + f"; por entregar {auditoria.pesos(tot['neto'])}; recaudado {auditoria.pesos(tot['recaudado'])}; "
+                  f"{_resultado(tot['diferencia'])}. Entra a la caja del {tot['caja_fecha']}."
+                + (" La empresa le debe " + ", ".join(
+                       f"{auditoria.pesos(debe_conductor(t['neto']))} a {t['conductor_nombre']}"
+                       for t in corrida if debe_conductor(t["neto"])) + " (los gastos superan el producido)."
+                   if tot["debe"] else "")
+                + (" Detalle: " + _texto_tramos(corrida, sensores) + "." if len(corrida) > 1 else "")
+                + (" Siguen pendientes: " + _texto_pendientes(
+                       [dict(t, pasajeros=(t["registradora_fin"] - t["registradora_inicio"]) if not sensores else None)
+                        for t in siguen], sensores) + "." if siguen else "")
+            )
+            auditoria.registrar(
+                conn, "recaudo", "liquidacion", rid, "crear", descripcion,
+                {"fecha": fecha, "bus": bus["numero"], "pendiente_liquidado": True, "parte": tot["parte"],
+                 "liquidacion_original": origen,
+                 "registradora": [corrida[0]["registradora_inicio"], corrida[-1]["registradora_fin"]],
+                 "pasajeros": tot["pasajeros"], "tarifa": tarifa, "producido": tot["producido"],
+                 "gastos": [f"{g['tipo_nombre']} {auditoria.pesos(g['valor'])}" for g in gastos_c],
+                 "total_gastos": tot["total_gastos"], "neto": tot["neto"], "recaudado": tot["recaudado"],
+                 "diferencia": tot["diferencia"], "caja_fecha": tot["caja_fecha"],
+                 "conductores": [{c: t[c] for c in ("conductor_nombre", "registradora_inicio",
+                                                    "registradora_fin", "pasajeros", "producido",
+                                                    "total_gastos", "recaudado", "diferencia")}
+                                 for t in corrida]},
+            )
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        # Dos personas liquidando el mismo pendiente a la vez: la segunda choca con el índice único.
+        ya_esta = conn.execute(
+            "SELECT 1 FROM recaudos WHERE bus_id = ? AND fecha = ? AND parte = ? AND anulado_at IS NULL",
+            (bus_id, fecha, corridas[0][0]["orden"]),
+        ).fetchone()
+        conn.close()
+        if ya_esta:
+            return jsonify({"error": f"El conductor pendiente del bus {bus['numero']} ya fue liquidado por otra persona."}), 409
+        print(f"[recaudo.liquidar_pendiente] {e}")
+        return jsonify({"error": "No se pudo guardar la liquidación"}), 500
+
+    vigentes, _ = _liquidaciones_del_dia(conn, fecha, bus_id)
+    conn.close()
+    return jsonify({"ok": True, "recaudo": vigentes.get(bus_id), "nuevas": nuevas}), 201
 
 
 # ──────────────────────────────────────────
@@ -982,14 +1256,17 @@ def agregar_relevo():
         if not partes:
             raise _Rechazo(f"El bus {bus['numero']} no está liquidado ese día: liquídalo con todos sus "
                            "conductores.", 409)
-        ya = sum(len(p["conductores"]) for p in partes)
+        # El relevo va después del último conductor del bus, liquidado o pendiente.
+        tarjeta = _tarjeta(partes, pendientes_abiertos(conn, fecha, bus_id).get(bus_id, []))
+        ultima = tarjeta[-1]
+        ya = ultima["orden"]
         if ya >= MAX_CONDUCTORES:
-            raise _Rechazo(f"El bus {bus['numero']} ya tiene {MAX_CONDUCTORES} conductores liquidados ese día.", 409)
+            raise _Rechazo(f"El bus {bus['numero']} ya tiene {MAX_CONDUCTORES} conductores ese día.", 409)
         conductores_in = data.get("conductores")
         if not isinstance(conductores_in, list) or not 1 <= len(conductores_in) <= MAX_CONDUCTORES - ya:
             raise _Rechazo(f"Al bus le caben {MAX_CONDUCTORES - ya} conductor(es) más "
-                           f"(ya tiene {ya} liquidado(s)).")
-        primero, ultima = ya + 1, partes[-1]
+                           f"(ya tiene {ya}).")
+        primero = ya + 1
         tarifa = int(partes[0]["tarifa"])   # la del día, la misma de lo ya liquidado
         sensores = partes[0]["registradora_inicio"] is None
 
@@ -1003,7 +1280,8 @@ def agregar_relevo():
             reg_fin = _entero(data.get("registradora_fin"), "La registradora final del bus")
             if reg_fin <= reg_inicio:
                 raise _Rechazo(f"La registradora final del bus debe ser mayor que {_miles(reg_inicio)}, "
-                               f"donde terminó el conductor {ya} (ya liquidado).")
+                               f"donde terminó el conductor {ya} "
+                               f"({'ya liquidado' if ultima['liquidado'] else 'pendiente por liquidar'}).")
 
         despacho = conn.execute(
             """SELECT id, estado, registradora_inicio, registradora_fin, viajes_realizados
@@ -1014,7 +1292,7 @@ def agregar_relevo():
         digitadas = [] if _es_admin() or sensores else _lecturas_relevo_agregado(
             conn, bus_id, fecha, despacho, ya, reg_inicio, reg_fin, conductores_in)
         gastos = _armar_gastos(conn, data.get("gastos"), len(conductores_in), primero=primero)
-        previos = [c["conductor_id"] for p in partes for c in p["conductores"]]
+        previos = [t["conductor_id"] for t in tarjeta]
         tramos = _armar_tramos(conn, conductores_in, reg_inicio, reg_fin, tarifa, gastos, pax_total,
                                primero=primero, previos=previos)
     except _Rechazo as e:
@@ -1086,7 +1364,7 @@ def agregar_relevo():
                 (reg_fin, viajes_nuevos, despacho["id"]),
             )
         if not sensores:
-            sync_pax_movilidad(conn, fecha, {bus_id: reg_fin - partes[0]["registradora_inicio"]})
+            sync_pax_movilidad(conn, fecha, {bus_id: reg_fin - tarjeta[0]["registradora_inicio"]})
 
         detalle = "; ".join(
             f"{t['orden']}) {t['conductor_nombre']}"
@@ -1097,7 +1375,10 @@ def agregar_relevo():
             for t in tramos)
         descripcion = (
             f"Agregó el relevo al bus {bus['numero']} ({bus['placa'] or 's/placa'}) del {fecha}, que ya "
-            f"estaba liquidado con {ya} conductor(es) (liquidación N° {str(partes[0]['id']).zfill(6)}). "
+            f"estaba liquidado con {ya} conductor(es)"
+            + (f", {sum(not t['liquidado'] for t in tarjeta)} de ellos pendiente(s)"
+               if not all(t["liquidado"] for t in tarjeta) else "")
+            + f" (liquidación N° {str(partes[0]['id']).zfill(6)}). "
             f"Conductores {detalle}. Total del relevo: {_miles(pasajeros)} pasajeros × "
             f"{auditoria.pesos(tarifa)} = producido {auditoria.pesos(producido)}; gastos "
             f"{auditoria.pesos(total_gastos)}; por entregar {auditoria.pesos(neto)}; recaudado "
@@ -1170,15 +1451,27 @@ def anular(recaudo_id):
         conn.close()
         return jsonify({"error": f"Esta liquidación está en la caja cerrada N° {r['cierre_id']}. "
                                  "Primero reabre esa caja en Recaudo › Cierre de caja."}), 409
-    despues = conn.execute(
+    # Un conductor que había quedado pendiente tiene su tramo fijo: su parte se anula cuando
+    # sea y él vuelve a quedar pendiente. Las demás partes, de la última hacia atrás.
+    de_pendiente = conn.execute(
+        """SELECT 1 FROM recaudo_pendientes p
+             JOIN recaudos o ON o.id = p.recaudo_id AND o.anulado_at IS NULL
+            WHERE p.bus_id = ? AND p.fecha = ? AND p.orden = ? AND p.recaudo_id <> ?""",
+        (r["bus_id"], r["fecha"], r.get("parte") or 1, recaudo_id),
+    ).fetchone()
+    despues = None if de_pendiente else conn.execute(
         """SELECT id FROM recaudos WHERE bus_id = ? AND fecha = ? AND parte > ? AND anulado_at IS NULL
          ORDER BY parte DESC LIMIT 1""",
         (r["bus_id"], r["fecha"], r.get("parte") or 1),
     ).fetchone()
     if despues:
         conn.close()
-        return jsonify({"error": f"Este bus tiene un relevo agregado después (liquidación N° "
-                                 f"{str(dict(despues)['id']).zfill(6)}): primero anula ese relevo."}), 409
+        return jsonify({"error": f"Este bus tiene otra parte liquidada después (liquidación N° "
+                                 f"{str(dict(despues)['id']).zfill(6)}): primero anula esa."}), 409
+    # Pendientes que dejó esta liquidación: al anularla ya no quedan pendientes.
+    sueltos = pendientes_abiertos(conn, r["fecha"], r["bus_id"]).get(r["bus_id"], [])
+    sueltos = [p for p in sueltos if p["recaudo_id"] == recaudo_id]
+    txt_sueltos = ", ".join(f"{p['orden']}) {p['conductor_nombre']}" for p in sueltos)
 
     relevo = (r.get("parte") or 1) > 1
     conn.execute(
@@ -1187,15 +1480,22 @@ def anular(recaudo_id):
     )
     auditoria.registrar(
         conn, "recaudo", "liquidacion", recaudo_id, "anular",
-        (f"Anuló {'el relevo agregado (conductores desde el ' + str(r['parte']) + ') de ' if relevo else ''}"
+        (f"Anuló {'la parte (conductores desde el ' + str(r['parte']) + ') de ' if relevo else ''}"
          f"la liquidación del bus {r['bus_numero']} ({r['bus_placa'] or 's/placa'}) del "
          f"{r['fecha']}: producido {auditoria.pesos(r['producido'])}, gastos "
          f"{auditoria.pesos(r['total_gastos'])}, por entregar {auditoria.pesos(r['neto'])}, "
          f"recaudado {auditoria.pesos(r['recaudado'])}, {_resultado(r['diferencia'])}. "
-         f"Motivo: {motivo}"),
+         + ((f"El conductor {r['conductores'][0]['orden']} vuelve a quedar pendiente por liquidar. "
+             if len(r["conductores"]) == 1 else
+             f"Los conductores {', '.join(str(c['orden']) for c in r['conductores'])} vuelven a quedar "
+             "pendientes por liquidar. ") if de_pendiente else "")
+         + (f"Ya no quedan pendientes: {txt_sueltos}. " if sueltos else "")
+         + f"Motivo: {motivo}"),
         {"fecha": r["fecha"], "bus": r["bus_numero"], "producido": r["producido"],
          "total_gastos": r["total_gastos"], "neto": r["neto"], "recaudado": r["recaudado"],
-         "diferencia": r["diferencia"], "motivo": motivo},
+         "diferencia": r["diferencia"], "motivo": motivo,
+         "vuelve_a_pendiente": bool(de_pendiente) or None,
+         "pendientes_cerrados": [p["orden"] for p in sueltos] or None},
     )
     conn.commit()
     conn.close()

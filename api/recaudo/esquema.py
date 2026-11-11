@@ -1,4 +1,4 @@
-"""Tablas del módulo Recaudo — SCHEMA_VERSION 27.
+"""Tablas del módulo Recaudo — SCHEMA_VERSION 28.
 
 - `recaudo_tarifas`: valor del pasaje por grupo de vehículo (A buses, B micros).
 - `recaudo_tipos_gasto`: gastos que el conductor puede reportar (ACPM, Taller…).
@@ -48,6 +48,11 @@
   2 o 3 el relevo agregado). Cada parte es una fila con su caja, su tirilla y su número;
   lo ya liquidado no se toca. Por eso la unicidad es (bus, fecha, parte) entre las no
   anuladas, y lo que se muestra por bus y día suma las partes.
+- Conductor pendiente (v28, pedido del usuario 2026-11-11): con relevo, se liquida a los
+  conductores que llegan y los demás quedan en `recaudo_pendientes` con su tramo de
+  registradora (fijo desde esa liquidación) hasta que entregan; entonces se liquidan
+  como otra parte. Un pendiente sigue abierto mientras la liquidación que lo dejó
+  (`recaudo_id`) esté vigente y ninguna parte vigente del bus en el día tenga su número.
 
 El dinero se guarda en pesos enteros (INTEGER): en Postgres un NUMERIC llega
 como Decimal y Flask lo serializa como texto. La tarifa se copia en cada
@@ -60,7 +65,7 @@ from .comun import (CONCEPTOS_INICIALES, CONFIG_CONTABLE_INICIAL, EMPRESA_POR_DE
 
 TABLAS_PROTEGIDAS = ("recaudo_tarifas", "recaudo_tipos_gasto", "recaudo_cierres", "recaudos",
                      "recaudo_conductores", "recaudo_gastos", "recaudo_conceptos", "recaudo_config",
-                     "recaudo_terceros", "recaudo_pagos")
+                     "recaudo_terceros", "recaudo_pagos", "recaudo_pendientes")
 
 
 def _sql_txt(v):
@@ -304,6 +309,22 @@ def _tablas(serial, ts, ts_default, ref_empresa):
         )""",
         "CREATE INDEX IF NOT EXISTS idx_recaudo_pagos_fecha ON recaudo_pagos(fecha)",
         "CREATE INDEX IF NOT EXISTS idx_recaudo_pagos_caja ON recaudo_pagos(usuario_id, cierre_id)",
+
+        f"""CREATE TABLE IF NOT EXISTS recaudo_pendientes (
+            id                   {serial},
+            empresa_id           INTEGER NOT NULL DEFAULT {EMPRESA_POR_DEFECTO}{ref_empresa},
+            recaudo_id           INTEGER NOT NULL REFERENCES recaudos(id) ON DELETE CASCADE,
+            fecha                DATE    NOT NULL,
+            bus_id               INTEGER NOT NULL REFERENCES buses(id),
+            orden                INTEGER NOT NULL CHECK (orden BETWEEN 1 AND 3),
+            conductor_id         INTEGER NOT NULL REFERENCES conductores(id),
+            ruta_id              INTEGER REFERENCES rutas(id),
+            viajes               INTEGER,
+            registradora_inicio  INTEGER,
+            registradora_fin     INTEGER,
+            UNIQUE (recaudo_id, orden)
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_recaudo_pendientes_bus ON recaudo_pendientes(bus_id, fecha)",
     ]
 
 

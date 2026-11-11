@@ -140,6 +140,16 @@
     .cond-tab .liq { font-size:10.5px; font-weight:800; letter-spacing:.3px; opacity:.75; }
     .liq-nota { font-size:12px; color:var(--txt2); background:#f6f6fa; border-radius:8px; padding:8px 10px;
       margin-bottom:10px; line-height:1.5; }
+    /* Conductor pendiente: todavía no entrega la plata y se liquida después (pedido del usuario 2026-11-11) */
+    .cond-tab .pend-tag { font-size:10.5px; font-weight:800; letter-spacing:.3px; color:#b45309; }
+    .cond-tab.on .pend-tag { color:#fcd34d; }
+    .pend-check { display:flex; align-items:flex-start; gap:10px; border:1.5px dashed #f59e0b; background:#fffbeb;
+      border-radius:10px; padding:10px 12px; margin-bottom:12px; cursor:pointer; font-size:13px; line-height:1.45; color:#92400e; }
+    .pend-check input { width:18px; height:18px; margin:1px 0 0; accent-color:#d97706; flex-shrink:0; cursor:pointer; }
+    .pend-check b { color:#78350f; }
+    .pend-nota { border:1px solid #fcd34d; background:#fffbeb; color:#92400e; border-radius:10px; padding:12px 14px;
+      font-size:13px; line-height:1.5; margin-bottom:14px; }
+    .resumen-bus tr.pendiente td { color:#b45309; background:#fffbeb; }
     .cond-panel[hidden] { display:none; }
     .tramo { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-top:12px; padding-top:12px;
       border-top:1px dashed var(--border2); }
@@ -617,17 +627,35 @@
     return partesDe(b).find(p => p.conductores.some(c => c.orden === orden)) || b.recaudo;
   }
   function puedeAgregarRelevo(b) {
-    return !!b.recaudo && D.editable && !SOLO_VER && nLiquidados(b) < 3
+    return !!b.recaudo && D.editable && !SOLO_VER && nLiquidados(b) < 3 && !hayPendientes(b)
       && (conSensores(b) || ultimaParte(b).registradora_fin != null);
   }
-  /* Relevos que anotó el despachador después de lo liquidado: quedan por liquidar */
+  /* Relevos que anotó el despachador después del último conductor del bus: quedan por liquidar */
   function relevosPendientes(b) {
-    return b.recaudo ? (b.relevos || []).filter(r => r.orden > nLiquidados(b)) : [];
+    if (!b.recaudo) return [];
+    const ultimo = Math.max(...b.recaudo.conductores.map(c => c.orden), ...pendientesDe(b).map(p => p.orden));
+    return (b.relevos || []).filter(r => r.orden > ultimo);
   }
   const numLiq = id => 'N° ' + String(id).padStart(6, '0');
 
+  /* ── Conductor pendiente (pedido del usuario 2026-11-11) ──
+     Con relevo, el conductor que todavía no entrega la plata se marca "Liquidar después":
+     se liquida a los demás y él queda pendiente en el bus, con su tramo de registradora
+     fijo. Cuando llega, se liquida desde el mismo bus y su plata entra a la caja de ese día. */
+  function pendientesDe(b)  { return b.pendientes || []; }
+  function hayPendientes(b) { return !!b.recaudo && pendientesDe(b).length > 0; }
+  const listaNums = nums => nums.length > 1 ? nums.slice(0, -1).join(', ') + ' y ' + nums[nums.length - 1] : String(nums[0] ?? '');
+  /* Números de los conductores que se liquidan ahora (sin los ya liquidados ni los que quedan para después) */
+  function numsALiquidar() { return form.conductores.map((c, i) => [c, i + 1]).filter(([c]) => !c.liq && !c.despues).map(([, k]) => k); }
+  /* Con sensores y algún pendiente no hay total del día del que repartir: cada conductor lleva sus pasajeros */
+  function paxPorConductor(b) { return conSensores(b) && (!!form.pendientes || form.conductores.some(c => c.despues)); }
+
   /* Estado del bus en la lista: [clase de la pill, texto, clave del filtro] */
   function estadoBus(b) {
+    if (hayPendientes(b)) {
+      const nums = pendientesDe(b).map(p => p.orden);
+      return ['pend', `Conductor${nums.length > 1 ? 'es' : ''} ${listaNums(nums)} por liquidar`, 'pendientes'];
+    }
     if (b.recaudo && relevosPendientes(b).length && puedeAgregarRelevo(b)) return ['pend', 'Relevo por liquidar', 'pendientes'];
     if (b.recaudo) {
       const dif = b.recaudo.diferencia;
@@ -763,7 +791,8 @@
      Cada conductor lleva sus propios gastos (relevo: hasta 3 conductores por bus). */
   function nuevoConductor(d = {}) {
     return { conductor_id: d.conductor_id ?? null, ruta_id: d.ruta_id ?? null, viajes: d.viajes ?? null,
-             registradora_fin: null, pasajeros: null, recaudado: null, observacion: '', gastos: {} };
+             registradora_fin: null, pasajeros: null, recaudado: null, observacion: '', gastos: {},
+             despues: false };   // despues = no ha entregado: queda pendiente y se liquida después
   }
 
   /* Buses que cuentan pasajeros con sensores (sin registradora): el recaudador digita los
@@ -794,12 +823,27 @@
         registradora_fin:    b.recaudo.registradora_fin,
         base: nLiquidados(b),      // conductores ya liquidados: no se tocan
         agregando: false,          // true = liquidando un relevo agregado
+        pendientes: false,         // true = liquidando conductores que quedaron pendientes
         conductores: b.recaudo.conductores.map(c => ({
           conductor_id: c.conductor_id, ruta_id: c.ruta_id, viajes: c.viajes,
           registradora_fin: c.registradora_fin, pasajeros: c.pasajeros, recaudado: c.recaudado, observacion: c.observacion || '',
           gastos: gastosGuardados((b.recaudo.gastos || []).filter(g => g.orden_conductor === c.orden)),
+          liq: true, orden: c.orden,
         })),
       };
+      // Conductores pendientes: el bus completo, por número, con los pendientes listos para liquidar
+      if (hayPendientes(b)) {
+        guardada.pendientes = true;
+        pendientesDe(b).forEach(p => guardada.conductores.push({
+          ...nuevoConductor({ conductor_id: p.conductor_id, ruta_id: p.ruta_id ?? b.ruta_id, viajes: p.viajes }),
+          registradora_fin: p.registradora_fin, orden: p.orden, pend: p,
+        }));
+        guardada.conductores.sort((x, y) => x.orden - y.orden);
+        const conLectura = guardada.conductores.map(c => c.liq ? b.recaudo.conductores.find(x => x.orden === c.orden) : c.pend);
+        guardada.registradora_inicio = conLectura[0].registradora_inicio;
+        guardada.registradora_fin = conLectura[conLectura.length - 1].registradora_fin;
+        return guardada;
+      }
       // El despachador anotó relevos después de lo liquidado: quedan listos para liquidar
       const pend = relevosPendientes(b);
       if (pend.length && puedeAgregarRelevo(b)) {
@@ -819,7 +863,7 @@
       registradora_inicio: b.registradora_inicio ?? b.ultima_reg_fin ?? null,
       registradora_fin:    b.registradora_fin ?? null,
     };
-    base.base = 0; base.agregando = false;
+    base.base = 0; base.agregando = false; base.pendientes = false;
     const rel = b.relevos || [];
     if (!rel.length) {
       return { ...base, conductores: [nuevoConductor({ conductor_id: b.conductor_id, ruta_id: b.ruta_id, viajes: b.viajes_realizados })] };
@@ -891,7 +935,10 @@
     if (!b) return;
     const mismo = selId === id;
     selId = id;
-    if (!(conservarEdicion && mismo && dirty)) { form = armarForm(b); dirty = false; tab = form.agregando ? form.base : 0; }
+    if (!(conservarEdicion && mismo && dirty)) {
+      form = armarForm(b); dirty = false;
+      tab = form.agregando ? form.base : form.pendientes ? form.conductores.findIndex(c => !c.liq) : 0;
+    }
     tab = Math.min(tab, form.conductores.length - 1);
     renderLista();
     renderForm();
@@ -935,7 +982,8 @@
     const bq = bloqueoReg(b);
     const cerrada = !!b.recaudo;   // una liquidación guardada no se modifica
     const agregando = cerrada && form.agregando;   // relevo agregado: solo los conductores nuevos
-    const editable = (!cerrada || agregando) && D.editable;
+    const pendMode = cerrada && form.pendientes;    // conductores pendientes: solo esos se liquidan
+    const editable = (!cerrada || agregando || pendMode) && D.editable;
     const ro = editable ? '' : 'disabled';
     const req = editable ? '<span class="req">*</span>' : '';
     const valEnt = v => v == null ? '' : v;
@@ -951,7 +999,13 @@
       : (ES_ADMIN ? 'Si tiene un error, anúlala y vuelve a liquidar.' : 'Si tiene un error, pide al administrador que la anule.');
     const conds = p => p.conductores.map(c => c.orden).join(p.conductores.length > 2 ? ', ' : ' y ');
     const lineaParte = p => `${varias ? `Conductor${p.conductores.length > 1 ? 'es' : ''} ${conds(p)}: liquidación` : 'Liquidación'} ${numLiq(p.id)} guardada el ${fmtHora(p.created_at)}${p.usuario_nombre ? ' por <b>' + esc(p.usuario_nombre) + '</b>' : ''}${varias || p.cierre_id ? ` · caja del ${fmtDiaCorto(p.caja_fecha)}${p.cierre_id ? ' (cerrada)' : ''}` : ''}.`;
-    const avisoCerrada = !cerrada ? '' : agregando
+    const pendTxt = pendientesDe(b).map(p => `<b>${p.orden} · ${esc(p.conductor_nombre || '')}</b>`);
+    const avisoCerrada = !cerrada ? '' : pendMode
+      ? `<div class="aviso">${pendTxt.length > 1 ? 'Los conductores ' + listaNums(pendTxt) + ' quedaron pendientes' : 'El conductor ' + pendTxt[0] + ' quedó pendiente'}:
+          no había${pendTxt.length > 1 ? 'n' : ''} entregado la plata cuando se liquidó a los demás. Cuando entregue${pendTxt.length > 1 ? 'n' : ''}, llena
+          su entrega y pulsa <b>Liquidar</b>: su plata entra a la <b>caja de hoy</b>. Su tramo de registradora ya quedó fijo y lo liquidado no se toca.
+          <br>${partesDe(b).map(lineaParte).join('<br>')}</div>`
+      : agregando
       ? `<div class="aviso info">Relevo agregado: ${n - form.base > 1 ? 'los conductores' : 'el conductor'} ${form.conductores.slice(form.base).map((_, k) => form.base + k + 1).join(' y ')}
           se liquida${n - form.base > 1 ? 'n' : ''} aparte y su plata entra a la <b>caja de hoy</b>. Lo ya liquidado no se toca
           (${partesDe(b).map(p => numLiq(p.id)).join(', ')}).</div>`
@@ -964,34 +1018,38 @@
     const puedeAgregar = n < 3 && (cerrada ? puedeAgregarRelevo(b) : editable);
     const pestanas = (n > 1 || editable || puedeAgregar) ? `<div class="cond-tabs">
         ${form.conductores.map((c, i) => `<button class="cond-tab ${i === tab ? 'on' : ''}" id="tab-${i}" onclick="verTab(${i})">
-          ${i + 1} · <span class="nom" id="tabNom-${i}">${esc(conductor(c.conductor_id)?.nombre || 'Sin conductor')}</span>${cerrada && i < form.base && agregando ? '<span class="liq">LIQUIDADO</span>' : ''}</button>`).join('')}
+          ${i + 1} · <span class="nom" id="tabNom-${i}">${esc(conductor(c.conductor_id)?.nombre || 'Sin conductor')}</span>${cerrada && c.liq && (agregando || pendMode) ? '<span class="liq">LIQUIDADO</span>' : ''}${!c.liq && (c.despues || pendMode) ? '<span class="pend-tag">PENDIENTE</span>' : ''}</button>`).join('')}
         ${puedeAgregar ? `<button class="cond-tab-add" onclick="agregarRelevo()">+ Agregar relevo</button>` : ''}
       </div>` : '';
-    const ayudaRelevo = editable && n > 1
+    const pendAyuda = !cerrada && editable && n > 1
+      ? ` Si un conductor todavía no ha entregado la plata, márcalo con <b>Liquidar después</b>: se liquida a los demás y él queda pendiente en este bus.` : '';
+    const ayudaRelevo = pendMode ? '' : editable && n > 1 && paxPorConductor(b)
+      ? `<div class="relevo-ayuda">Relevo con un conductor pendiente: escribe los <b>pasajeros</b> de cada conductor que se liquida. Reparte también los viajes y los gastos.${pendAyuda}</div>`
+      : editable && n > 1
       ? (sensores
         ? `<div class="relevo-ayuda">Relevo: cada conductor liquida su parte. Escribe los <b>pasajeros</b> de cada conductor;
-           el último se queda con lo que falta para el total del bus. Reparte también los viajes y los gastos.</div>`
+           el último se queda con lo que falta para el total del bus. Reparte también los viajes y los gastos.${pendAyuda}</div>`
         : `<div class="relevo-ayuda">Relevo: cada conductor liquida su parte. Escribe la <b>registradora al relevo</b> (la lectura cuando entregó el bus);
-           el último conductor termina en la registradora final del bus. Reparte también los viajes y los gastos.</div>`) : '';
+           el último conductor termina en la registradora final del bus. Reparte también los viajes y los gastos.${pendAyuda}</div>`) : '';
     const encabezado = sensores ? `
       <div class="sec-lbl">${agregando ? 'Pasajeros del relevo · sensores' : 'Pasajeros del día · sensores'}</div>
       <div class="campos">
-        ${editable
+        ${editable && !paxPorConductor(b)
           ? `<div class="campo"><label>${agregando ? 'Pasajeros de los conductores nuevos' : 'Pasajeros del día'}${req}</label>
                <input id="fPaxDia" inputmode="numeric" value="${valEnt(form.pasajeros)}" placeholder="Los que reporta el conductor"
                       oninput="setHeader('pasajeros', this)" /><div class="calc" id="cPax" hidden>—</div></div>`
-          : `<div class="campo"><label>Pas. liquidados</label><div class="calc" id="cPax">—</div></div>`}
+          : `<div class="campo"><label>${editable ? 'Pasajeros' : 'Pas. liquidados'}</label><div class="calc" id="cPax">—</div></div>`}
         <div class="campo"><label>Tarifa ${TIPO[b.grupo] ? TIPO[b.grupo].toLowerCase() : ''}</label><div class="calc">${fmtMoney(tarifaDe(b))}</div></div>
         <div class="campo"><label>Producido${n > 1 ? ' del bus' : ''}</label><div class="calc grande" id="cProd">—</div></div>
       </div>
       <div class="nota" id="notaReg"></div>` : `
       <div class="sec-lbl">Registradora del día</div>
       <div class="campos">
-        <div class="campo"><label>Reg. inicial${bq?.ini ? ` <small class="del-desp">${bq.iniOrigen}</small>` : req}</label>
-          <input id="fRegIni" inputmode="numeric" value="${valEnt(form.registradora_inicio)}" ${bq?.ini ? 'disabled' : ro}
+        <div class="campo"><label>Reg. inicial${pendMode ? ' <small class="del-desp">fija</small>' : bq?.ini ? ` <small class="del-desp">${bq.iniOrigen}</small>` : req}</label>
+          <input id="fRegIni" inputmode="numeric" value="${valEnt(form.registradora_inicio)}" ${bq?.ini || pendMode ? 'disabled' : ro}
                  oninput="setHeader('registradora_inicio', this)" /></div>
-        <div class="campo"><label>Reg. final${agregando ? ' del bus' : ''}${bq?.fin ? ' <small class="del-desp">del despacho</small>' : req}</label>
-          <input id="fRegFin" inputmode="numeric" value="${valEnt(form.registradora_fin)}" ${bq?.fin ? 'disabled' : ro}
+        <div class="campo"><label>Reg. final${agregando ? ' del bus' : ''}${pendMode ? ' <small class="del-desp">fija</small>' : bq?.fin ? ' <small class="del-desp">del despacho</small>' : req}</label>
+          <input id="fRegFin" inputmode="numeric" value="${valEnt(form.registradora_fin)}" ${bq?.fin || pendMode ? 'disabled' : ro}
                  placeholder="${agregando ? 'Mayor que ' + fmtNum(ult.registradora_fin) : ''}"
                  oninput="setHeader('registradora_fin', this)" /></div>
         <div class="campo"><label>Pas. movilizados</label><div class="calc" id="cPax">—</div></div>
@@ -1015,9 +1073,12 @@
           return `<button class="btn" onclick="imprimirTirilla(${p.id}, true)">${ES_ADMIN
             ? `Imprimir tirilla${k > 1 ? 's' : ''}${de}` : `Reimprimir tirilla${k > 1 ? 's' : ''}${de} (1 vez)`}</button>`;
         }).join('') : ''}
-        ${cerrada && !agregando && ES_ADMIN && !enCaja ? `<button class="btn danger" onclick="abrirAnular()">${varias ? 'Anular relevo agregado' : 'Anular liquidación'}</button>` : ''}
+        ${cerrada && !agregando && ES_ADMIN && !enCaja ? `<button class="btn danger" onclick="abrirAnular()">${varias ? `Anular conductor${ult.conductores.length > 1 ? 'es' : ''} ${conds(ult)}` : 'Anular liquidación'}</button>` : ''}
         ${agregando ? `<button class="btn" onclick="cancelarRelevo()">Cancelar</button>` : ''}
-        ${editable ? `<button class="btn-primary" id="btnGuardar" onclick="guardar()">${agregando ? 'Liquidar relevo' : 'Guardar liquidación'}</button>` : ''}
+        ${editable ? `<button class="btn-primary" id="btnGuardar" onclick="guardar()">${agregando ? 'Liquidar relevo'
+          : pendMode || form.conductores.some(c => c.despues)
+            ? `Liquidar conductor${numsALiquidar().length > 1 ? 'es' : ''} ${listaNums(numsALiquidar())}`
+            : 'Guardar liquidación'}</button>` : ''}
       </div>
       ${htmlAnuladas(b)}`;
     recalcular();
@@ -1028,19 +1089,30 @@
     const c = form.conductores[i];
     const n = form.conductores.length;
     const ultimo = i === n - 1;
-    // Relevo agregado: los conductores ya liquidados se ven, pero no se tocan
-    const liquidado = !!b.recaudo && i < form.base;
+    // Relevo agregado o conductor pendiente: los conductores ya liquidados se ven, pero no se tocan
+    const liquidado = !!b.recaudo && !!c.liq;
     const ed = editable && !liquidado;
     const ro = ed ? '' : 'disabled';
-    const req = ed ? '<span class="req">*</span>' : '';
+    // Un conductor que queda para después solo necesita el nombre (y su tramo de registradora)
+    const despues = !liquidado && c.despues;
+    const req = ed && !despues ? '<span class="req">*</span>' : '';
+    const pendFijo = !!c.pend;   // ya estaba pendiente: su tramo de registradora quedó fijo
     const entregaDesp = entregaDelDespacho(b, i);   // lo anotó el despachador: no se cambia ni se quita
     const parte = liquidado ? parteDe(b, i + 1) : null;
-    const notaLiq = liquidado && form.agregando
+    const notaLiq = liquidado && (form.agregando || form.pendientes)
       ? `<div class="liq-nota">Ya liquidado en la ${numLiq(parte.id)} (caja del ${fmtDiaCorto(parte.caja_fecha)}${parte.cierre_id ? ', cerrada' : ''}): no se modifica.</div>` : '';
+    // "Liquidar después": con relevo en una liquidación nueva, o entre varios pendientes
+    const sinLiquidar = form.conductores.filter(x => !x.liq).length;
+    const marcable = ed && ((!b.recaudo && n > 1) || (form.pendientes && sinLiquidar > 1));
+    const checkDespues = marcable ? `<label class="pend-check">
+        <input type="checkbox" id="fDespues-${i}" ${c.despues ? 'checked' : ''} onchange="marcarDespues(${i}, this.checked)" />
+        <span><b>Liquidar después:</b> este conductor todavía no ha entregado la plata. Se liquida a los demás y él queda
+        pendiente en este bus${b.recaudo ? '' : ', con su tramo de registradora fijo'}.</span></label>` : '';
     const rutasGrupo = D.rutas.filter(r => (r.activa && r.grupo === b.grupo) || r.id === c.ruta_id);
+    const paxPropio = paxPorConductor(b);
     const tramo = n > 1 && conSensores(b) ? `<div class="tramo">
-        ${ultimo
-          ? `<div class="campo"><label>Pasajeros <small class="del-desp">lo que falta del total</small></label><div class="calc" id="cPaxC-${i}">—</div></div>`
+        ${(paxPropio ? liquidado || despues : ultimo)
+          ? `<div class="campo"><label>Pasajeros${paxPropio ? '' : ' <small class="del-desp">lo que falta del total</small>'}</label><div class="calc" id="cPaxC-${i}">—</div></div>`
           : `<div class="campo"><label>Pasajeros de este conductor${req}</label>
                <input id="fPaxRel-${i}" inputmode="numeric" value="${valEnt(c.pasajeros)}" ${ro}
                       oninput="setCond(${i}, 'pasajeros', leerEntero(this.value))" /></div>`}
@@ -1049,17 +1121,37 @@
         <div class="campo"><label>Arranca en</label><div class="calc" id="cIni-${i}">—</div></div>
         ${ultimo
           ? `<div class="campo"><label>Termina en (reg. final)</label><div class="calc" id="cFin-${i}">—</div></div>`
-          : `<div class="campo"><label>Reg. al relevo${entregaDesp && ed ? ' <small class="del-desp">del despacho</small>' : req}</label>
-               <input id="fRelevo-${i}" inputmode="numeric" value="${valEnt(c.registradora_fin)}" ${entregaDesp ? 'disabled' : ro}
+          : `<div class="campo"><label>Reg. al relevo${pendFijo ? ' <small class="del-desp">fija</small>' : entregaDesp && ed ? ' <small class="del-desp">del despacho</small>' : ed ? '<span class="req">*</span>' : ''}</label>
+               <input id="fRelevo-${i}" inputmode="numeric" value="${valEnt(c.registradora_fin)}" ${entregaDesp || pendFijo ? 'disabled' : ro}
                       oninput="setCond(${i}, 'registradora_fin', leerEntero(this.value))" /></div>`}
         <div class="campo"><label>Pasajeros</label><div class="calc" id="cPaxC-${i}">—</div></div>
         <div class="campo"><label>Producido</label><div class="calc" id="cProdC-${i}">—</div></div>
       </div>` : '';
+    const entrega = despues ? `<div class="pend-nota"><b>Queda pendiente.</b> No se le liquida ahora: cuando entregue la plata,
+        abre este bus${b.recaudo ? '' : ' (en la lista sale «Conductor ' + (i + 1) + ' por liquidar»)'} y liquídalo con sus gastos y lo que entregó.
+        ${conSensores(b) ? 'Sus pasajeros se escriben ese día.' : 'Sus pasajeros ya quedan fijos con la registradora de arriba.'}</div>` : `
+      <div class="sec-lbl">Gastos ${n > 1 ? 'de este conductor' : 'del conductor'} ${ed ? '<span class="opcional">(opcional)</span>' : ''}</div>
+      <div class="gastos-box">${htmlGastos(b, i, !ed)}</div>
+
+      <div class="sec-lbl">Entrega${n > 1 ? ' de este conductor' : ''}</div>
+      <div class="campos">
+        <div class="campo"><label>Producido</label><div class="calc" id="cProdE-${i}">—</div></div>
+        <div class="campo"><label>− Gastos</label><div class="calc" id="cGastosE-${i}">—</div></div>
+        <div class="campo"><label>Por entregar</label><div class="calc grande" id="cNeto-${i}">—</div></div>
+        <div class="campo"><label>Recaudo entregado${req}</label>
+          <input id="fRec-${i}" inputmode="numeric" placeholder="$0" value="${c.recaudado == null ? '' : fmtNum(c.recaudado)}" ${ro}
+                 oninput="formatearDinero(this); setCond(${i}, 'recaudado', leerEntero(this.value))" /></div>
+        <div class="campo"><label>Diferencia</label><div class="calc" id="cDif-${i}">—</div></div>
+        <div class="campo ancho"><label>Observación</label>
+          <input id="fObs-${i}" maxlength="500" value="${esc(c.observacion || '')}" ${ro} placeholder="Opcional"
+                 oninput="setCond(${i}, 'observacion', this.value)" /></div>
+      </div>
+      <div class="nota cambio" id="notaGastos-${i}"></div>`;
     return `<div class="cond-panel" id="panel-${i}" ${i === tab ? '' : 'hidden'}>
-      ${notaLiq}
+      ${notaLiq}${checkDespues}
       <div class="cond-box">
         <div class="campos" style="margin-bottom:0">
-          <div class="campo ancho"><label>Nombre${req}</label>
+          <div class="campo ancho"><label>Nombre${ed ? '<span class="req">*</span>' : ''}</label>
             <div class="combo" id="combo-${i}">
               <input class="combo-input" id="fCond-${i}" placeholder="Buscar conductor…" autocomplete="off" ${ro}
                      value="${esc(c.conductor_id ? conductor(c.conductor_id)?.nombre || '' : '')}"
@@ -1077,25 +1169,8 @@
         </div>
         ${tramo}
       </div>
-
-      <div class="sec-lbl">Gastos ${n > 1 ? 'de este conductor' : 'del conductor'} ${ed ? '<span class="opcional">(opcional)</span>' : ''}</div>
-      <div class="gastos-box">${htmlGastos(b, i, !ed)}</div>
-
-      <div class="sec-lbl">Entrega${n > 1 ? ' de este conductor' : ''}</div>
-      <div class="campos">
-        <div class="campo"><label>Producido</label><div class="calc" id="cProdE-${i}">—</div></div>
-        <div class="campo"><label>− Gastos</label><div class="calc" id="cGastosE-${i}">—</div></div>
-        <div class="campo"><label>Por entregar</label><div class="calc grande" id="cNeto-${i}">—</div></div>
-        <div class="campo"><label>Recaudo entregado${req}</label>
-          <input id="fRec-${i}" inputmode="numeric" placeholder="$0" value="${c.recaudado == null ? '' : fmtNum(c.recaudado)}" ${ro}
-                 oninput="formatearDinero(this); setCond(${i}, 'recaudado', leerEntero(this.value))" /></div>
-        <div class="campo"><label>Diferencia</label><div class="calc" id="cDif-${i}">—</div></div>
-        <div class="campo ancho"><label>Observación</label>
-          <input id="fObs-${i}" maxlength="500" value="${esc(c.observacion || '')}" ${ro} placeholder="Opcional"
-                 oninput="setCond(${i}, 'observacion', this.value)" /></div>
-      </div>
-      <div class="nota cambio" id="notaGastos-${i}"></div>
-      ${ed && i > 0 && ultimo && !relevoDelDespacho(b, i) ? `<button class="btn danger quitar-relevo" onclick="quitarRelevo(${i})">Quitar este relevo</button>` : ''}
+      ${entrega}
+      ${ed && i > 0 && ultimo && !form.pendientes && !relevoDelDespacho(b, i) ? `<button class="btn danger quitar-relevo" onclick="quitarRelevo(${i})">Quitar este relevo</button>` : ''}
       ${ES_ADMIN && liquidado && n > 1 ? `<button class="btn" onclick="imprimirTirilla(${parte.id}, true, ${i + 1})">Imprimir tirilla de este conductor</button>` : ''}
     </div>`;
   }
@@ -1104,7 +1179,7 @@
      rápido; los demás se agregan desde "+ Agregar otro gasto". Si ya está guardada, los
      gastos tal como se liquidaron (con el nombre que tenían ese día). */
   function htmlGastos(b, i, soloLectura) {
-    if (b.recaudo && i < form.base) {
+    if (b.recaudo && form.conductores[i].liq) {
       const lista = b.recaudo.gastos.filter(g => g.orden_conductor === i + 1);
       if (!lista.length) return `<div class="sin-gastos">Sin gastos reportados.</div>`;
       return lista.map(g => `<div class="gasto-row">
@@ -1223,6 +1298,19 @@
       document.getElementById(`tab-${k}`)?.classList.toggle('on', k === i);
     });
   }
+  /* "Liquidar después": el conductor no ha entregado. Queda pendiente con su tramo de
+     registradora; sus gastos y su entrega se llenan cuando llegue. */
+  function marcarDespues(i, valor) {
+    form.conductores[i].despues = valor;
+    if (valor && form.conductores.every(c => c.liq || c.despues)) {
+      form.conductores[i].despues = false;
+      document.getElementById(`fDespues-${i}`).checked = false;
+      return toast('Tiene que quedar al menos un conductor para liquidar ahora', true);
+    }
+    dirty = true;
+    tab = i;
+    renderForm();
+  }
   function agregarRelevo() {
     if (form.conductores.length >= 3) return;
     const b = bus(selId);
@@ -1291,6 +1379,7 @@
      arranca donde terminó el anterior y el último termina en la lectura final.
      Si ya está guardada, los valores son los que calculó el servidor. */
   function calcularTramos(b) {
+    if (b.recaudo && form.pendientes) return tramosConPendientes(b);
     if (b.recaudo && !form.agregando) return b.recaudo.conductores;
     if (b.recaudo) {
       // Relevo agregado: lo liquidado tal cual y los nuevos desde donde terminó lo liquidado
@@ -1300,35 +1389,43 @@
     }
     return calcularNuevos(b, 0, paxDelDia(b), form.registradora_inicio);
   }
+  /* Lo que entrega un conductor según sus pasajeros y sus gastos (el servidor lo recalcula).
+     Uno que queda para después todavía no lleva gastos ni entrega: sale como pendiente. */
+  function entregaDe(b, i, c, pasajeros, extra) {
+    const producido = pasajeros != null && pasajeros >= 0 ? pasajeros * tarifaDe(b) : null;
+    const total_gastos = c.despues ? 0 : gastosDe(i).reduce((t, g) => t + g.valor, 0);
+    const neto = producido != null ? aproximarMil(producido - total_gastos) : null;
+    const recaudado = c.despues ? null : c.recaudado;
+    return { ...extra, pendiente: !!c.despues, pasajeros, producido, total_gastos, neto, recaudado,
+             diferencia: neto != null && recaudado != null ? recaudado - porEntregar(neto) : null };
+  }
+  /* Bus con conductores pendientes: los liquidados tal cual y los pendientes con su tramo fijo */
+  function tramosConPendientes(b) {
+    return form.conductores.map((c, i) => c.liq
+      ? b.recaudo.conductores.find(x => x.orden === c.orden)
+      : entregaDe(b, i, c, conSensores(b) ? c.pasajeros : c.pend.registradora_fin - c.pend.registradora_inicio,
+                  { registradora_inicio: c.pend.registradora_inicio, registradora_fin: c.pend.registradora_fin }));
+  }
   /* Tramos de los conductores en edición, desde el índice `desde`: con sensores reparten
-     `total` (el último se queda con lo que falta); con registradora arrancan en `inicio`. */
+     `total` (el último se queda con lo que falta; con un pendiente, cada uno lleva los suyos);
+     con registradora arrancan en `inicio`. */
   function calcularNuevos(b, desde, total, inicio) {
-    const tarifa = tarifaDe(b);
-    const entrega = (i, c, pasajeros, extra) => {
-      const producido = pasajeros != null && pasajeros >= 0 ? pasajeros * tarifa : null;
-      const total_gastos = gastosDe(i).reduce((t, g) => t + g.valor, 0);
-      const neto = producido != null ? aproximarMil(producido - total_gastos) : null;
-      return { ...extra, pasajeros, producido, total_gastos, neto, recaudado: c.recaudado,
-               diferencia: neto != null && c.recaudado != null ? c.recaudado - porEntregar(neto) : null };
-    };
     const enEdicion = form.conductores.map((c, i) => [c, i]).slice(desde);
     if (conSensores(b)) {
+      const propio = paxPorConductor(b);
       let repartidos = 0;
       return enEdicion.map(([c, i]) => {
         const ultimo = i === form.conductores.length - 1;
-        const pasajeros = ultimo ? (total != null ? total - repartidos : null) : c.pasajeros;
+        const pasajeros = propio ? (c.despues ? null : c.pasajeros)
+          : ultimo ? (total != null ? total - repartidos : null) : c.pasajeros;
         if (!ultimo) repartidos += c.pasajeros || 0;
-        return entrega(i, c, pasajeros, { registradora_inicio: null, registradora_fin: null });
+        return entregaDe(b, i, c, pasajeros, { registradora_inicio: null, registradora_fin: null });
       });
     }
     return enEdicion.map(([c, i]) => {
       const fin = i === form.conductores.length - 1 ? form.registradora_fin : c.registradora_fin;
       const pasajeros = inicio != null && fin != null ? fin - inicio : null;
-      const producido = pasajeros != null && pasajeros >= 0 ? pasajeros * tarifa : null;
-      const total_gastos = gastosDe(i).reduce((t, g) => t + g.valor, 0);
-      const neto = producido != null ? aproximarMil(producido - total_gastos) : null;
-      const t = { registradora_inicio: inicio, registradora_fin: fin, pasajeros, producido, total_gastos, neto,
-                  recaudado: c.recaudado, diferencia: neto != null && c.recaudado != null ? c.recaudado - porEntregar(neto) : null };
+      const t = entregaDe(b, i, c, pasajeros, { registradora_inicio: inicio, registradora_fin: fin });
       inicio = fin;
       return t;
     });
@@ -1345,13 +1442,16 @@
     const finLiq = agregando ? ultimaParte(b).registradora_fin : null;   // donde terminó lo liquidado
     const hayLecturas = sensores || (ini != null && fin != null);
     const valida = sensores || (hayLecturas && (agregando ? fin > finLiq : fin >= ini));
-    const pax = sensores ? (agregando ? b.recaudo.pasajeros + (form.pasajeros || 0) : paxDelDia(b)) : (valida ? fin - ini : null);
+    const tramos = calcularTramos(b);
+    // Con sensores y un conductor pendiente, los pasajeros son la suma de los que ya se saben
+    const paxSuma = paxPorConductor(b) ? tramos.reduce((t, x) => t + (x.pasajeros || 0), 0) : null;
+    const pax = sensores ? (paxSuma != null ? paxSuma : agregando ? b.recaudo.pasajeros + (form.pasajeros || 0) : paxDelDia(b))
+                         : (valida ? fin - ini : null);
 
     document.getElementById('fRegFin')?.classList.toggle('err', hayLecturas && !valida);
     set('cPax', pax != null ? fmtNum(pax) : (hayLecturas ? 'Lectura inválida' : '—'));
     set('cProd', pax != null ? fmtMoney(pax * tarifaDe(b)) : '—');
 
-    const tramos = calcularTramos(b);
     tramos.forEach((t, i) => {
       const ok = t.pasajeros != null && t.pasajeros >= 0;
       set(`cIni-${i}`, t.registradora_inicio != null ? fmtNum(t.registradora_inicio) : '—');
@@ -1380,20 +1480,26 @@
     // Resumen del bus cuando hay relevo
     const res = document.getElementById('resumenBus');
     if (tramos.length > 1) {
-      const suma = k => tramos.every(t => t[k] != null) ? tramos.reduce((s, t) => s + t[k], 0) : null;
+      // Los que quedan para después no suman: todavía no tienen gastos ni entrega
+      const cuentan = tramos.filter(t => !t.pendiente);
+      const suma = k => cuentan.every(t => t[k] != null) ? cuentan.reduce((s, t) => s + t[k], 0) : null;
       const m = v => v != null ? fmtMoney(v) : '—';
       const clsDif = v => v == null ? '' : v < 0 ? 'bad' : v > 0 ? 'warn' : 'ok';
-      const fila = (nombre, t, cls = '') => `<tr class="${cls}"><td>${nombre}</td>
+      const fila = (nombre, t, cls = '') => t.pendiente
+        ? `<tr class="pendiente"><td>${nombre}</td>
+          <td>${t.pasajeros != null && t.pasajeros >= 0 ? fmtNum(t.pasajeros) : '—'}</td><td>${m(t.producido)}</td>
+          <td colspan="4" style="text-align:center">Pendiente: se liquida cuando entregue</td></tr>`
+        : `<tr class="${cls}"><td>${nombre}</td>
           <td>${t.pasajeros != null && t.pasajeros >= 0 ? fmtNum(t.pasajeros) : '—'}</td><td>${m(t.producido)}</td>
           <td>${m(t.total_gastos)}</td><td>${m(porEntregar(t.neto))}</td><td>${m(t.recaudado)}</td>
           <td class="${clsDif(t.diferencia)}">${t.diferencia != null ? textoDif(t.diferencia) : '—'}</td></tr>`;
       const total = { pasajeros: suma('pasajeros'), producido: suma('producido'), total_gastos: suma('total_gastos'),
-                      neto: tramos.every(t => t.neto != null) ? tramos.reduce((s, t) => s + porEntregar(t.neto), 0) : null,
+                      neto: cuentan.every(t => t.neto != null) ? cuentan.reduce((s, t) => s + porEntregar(t.neto), 0) : null,
                       recaudado: suma('recaudado'), diferencia: suma('diferencia') };
       res.innerHTML = `<div class="sec-lbl">Resumen del bus</div><div class="resumen-wrap"><table class="resumen-bus">
           <thead><tr><th>Conductor</th><th>Pasajeros</th><th>Producido</th><th>Gastos</th><th>Por entregar</th><th>Entregó</th><th>Resultado</th></tr></thead>
           <tbody>${tramos.map((t, i) => fila(`${i + 1} · ${esc(conductor(form.conductores[i].conductor_id)?.nombre || 'Sin conductor')}`, t)).join('')}
-          ${fila('Total del bus', total, 'total')}</tbody></table></div>`;
+          ${fila(cuentan.length < tramos.length ? 'Total sin el pendiente' : 'Total del bus', total, 'total')}</tbody></table></div>`;
     } else {
       res.innerHTML = '';
     }
@@ -1411,6 +1517,11 @@
           : `El relevo arranca en ${fmtNum(finLiq)}, donde terminó lo liquidado. `
             + (desp ? 'La registradora final viene del despacho.'
                     : 'El despacho no trae la registradora final: la que escribas queda anotada en el despacho y en el historial de modificaciones.');
+    } else if (form.pendientes) {
+      nota.className = 'nota';
+      nota.textContent = sensores
+        ? 'Bus con sensores: escribe los pasajeros que reporta el conductor pendiente. Lo ya liquidado no cambia.'
+        : 'La registradora del bus y el tramo de cada conductor quedaron fijos cuando se liquidó a los demás.';
     } else if (sensores) {
       nota.className = 'nota';
       nota.textContent = b.recaudo ? textoSensores(b)
@@ -1548,13 +1659,19 @@
     const n = form.conductores.length;
     // Relevo agregado a un bus ya liquidado: solo se revisan y se envían los conductores nuevos
     const agregando = !!b.recaudo && form.agregando;
+    // Conductores pendientes: solo se revisan y se envían los que se liquidan ahora
+    const pendMode = !!b.recaudo && form.pendientes;
     const base = agregando ? form.base : 0;
     const finLiq = agregando ? ultimaParte(b).registradora_fin : null;
     // Obligatorio todo menos los gastos: no se liquidan pasajeros sin viajes, ruta o conductor.
     const faltan = [];   // [id del campo, qué falta, pestaña o null]
     const sensores = conSensores(b);
-    if (sensores && !(form.pasajeros >= 1)) faltan.push(['fPaxDia', agregando ? 'pasajeros de los conductores nuevos' : 'pasajeros del día', null]);
-    if (!sensores && agregando) {
+    const propio = paxPorConductor(b);   // sensores con un pendiente: cada uno lleva sus pasajeros
+    const hayDespues = form.conductores.some(c => !c.liq && c.despues);
+    if (sensores && !propio && !(form.pasajeros >= 1)) faltan.push(['fPaxDia', agregando ? 'pasajeros de los conductores nuevos' : 'pasajeros del día', null]);
+    if (pendMode) {
+      // La registradora y los tramos ya quedaron fijos al liquidar a los demás
+    } else if (!sensores && agregando) {
       if (fin == null) faltan.push(['fRegFin', 'registradora final del bus', null]);
       else if (fin <= finLiq) faltan.push(['fRegFin', `registradora final del bus mayor que ${fmtNum(finLiq)} (donde terminó lo liquidado)`, null]);
     } else if (!sensores) {
@@ -1563,25 +1680,31 @@
       else if (ini != null && fin < ini) faltan.push(['fRegFin', 'registradora final mayor que la inicial', null]);
       else if (ini != null && fin === ini) faltan.push(['fRegFin', 'pasajeros (la registradora final es igual a la inicial)', null]);
     }
+    if (!numsALiquidar().length) faltan.push(['', 'al menos un conductor para liquidar ahora (quítale «Liquidar después» a alguno)', null]);
     const tramos = calcularTramos(b);
     form.conductores.forEach((c, k) => {
-      if (k < base) return;   // ya liquidado
+      if (k < base || c.liq) return;   // ya liquidado
       const cual = n > 1 ? ` del conductor ${k + 1}` : '';
       if (!c.conductor_id) faltan.push([`fCond-${k}`, 'conductor' + cual, k]);
+      // Relevo: la lectura al entregar el bus va entre el inicio de su tramo y la final del bus.
+      // También para el que queda pendiente: su tramo queda fijo desde ya.
+      if (!sensores && !pendMode && k < n - 1) {
+        const t = tramos[k];
+        if (c.registradora_fin == null) faltan.push([`fRelevo-${k}`, 'registradora al relevo' + cual, k]);
+        else if (t.pasajeros == null || t.pasajeros < 1) faltan.push([`fRelevo-${k}`, 'pasajeros' + cual + ' (el relevo debe ser mayor que donde arrancó)', k]);
+        else if (fin != null && c.registradora_fin >= fin) faltan.push([`fRelevo-${k}`, 'registradora al relevo' + cual + ' menor que la final del bus', k]);
+      }
+      if (c.despues) return;   // queda pendiente: lo demás se llena cuando entregue
       if (!c.ruta_id) faltan.push([`fRuta-${k}`, 'ruta' + cual, k]);
       if (!c.viajes) faltan.push([`fViajes-${k}`, 'viajes' + cual, k]);
-      if (sensores && n > 1) {
+      if (sensores && propio) {
+        if (!(c.pasajeros >= 1)) faltan.push([`fPaxRel-${k}`, 'pasajeros' + cual, k]);
+      } else if (sensores && n > 1) {
         // Relevo con sensores: cada conductor sus pasajeros; el último, lo que falta (al menos 1)
         if (k < n - 1 && !(c.pasajeros >= 1)) faltan.push([`fPaxRel-${k}`, 'pasajeros' + cual, k]);
         if (k === n - 1 && !(tramos[k].pasajeros >= 1) && k - 1 >= base) {
           faltan.push([`fPaxRel-${k - 1}`, `pasajeros repartidos (el total ${agregando ? 'de los nuevos' : 'del bus'} es ${fmtNum(agregando ? form.pasajeros : paxDelDia(b))})`, k - 1]);
         }
-      } else if (k < n - 1) {
-        // Relevo: la lectura al entregar el bus va entre el inicio de su tramo y la final del bus
-        const t = tramos[k];
-        if (c.registradora_fin == null) faltan.push([`fRelevo-${k}`, 'registradora al relevo' + cual, k]);
-        else if (t.pasajeros == null || t.pasajeros < 1) faltan.push([`fRelevo-${k}`, 'pasajeros' + cual + ' (el relevo debe ser mayor que donde arrancó)', k]);
-        else if (fin != null && c.registradora_fin >= fin) faltan.push([`fRelevo-${k}`, 'registradora al relevo' + cual + ' menor que la final del bus', k]);
       }
       if (c.recaudado == null) faltan.push([`fRec-${k}`, 'recaudo entregado' + cual, k]);
       // Gastos que piden descripción (p. ej. "Otros"): con valor, hay que decir qué fue
@@ -1597,27 +1720,34 @@
     document.querySelectorAll('#formCard .err, .cond-tab.con-err').forEach(e => e.classList.remove('err', 'con-err'));
     if (faltan.length) {
       faltan.forEach(([id, , k]) => {
-        document.getElementById(id)?.classList.add('err');
+        if (id) document.getElementById(id)?.classList.add('err');
         if (k != null) document.getElementById(`tab-${k}`)?.classList.add('con-err');
       });
       const primera = faltan.find(f => f[2] != null);
       if (primera && faltan[0][2] != null) verTab(primera[2]);
       toast('Falta llenar: ' + faltan.map(f => f[1]).join(', '), true);
-      document.getElementById(faltan[0][0])?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      if (faltan[0][0]) document.getElementById(faltan[0][0])?.scrollIntoView({ block: 'center', behavior: 'smooth' });
       return;
     }
 
     const tarifa = tarifaDe(b);
-    const nuevos = tramos.slice(base);   // con relevo agregado, solo lo que se va a liquidar
+    // Solo lo que se va a liquidar ahora: sin lo ya liquidado ni los que quedan pendientes
+    const idxNuevos = tramos.map((t, k) => k).filter(k => k >= base && !form.conductores[k].liq && !tramos[k].pendiente);
+    const nuevos = idxNuevos.map(k => tramos[k]);
     const suma = k => nuevos.reduce((t, x) => t + x[k], 0);
     const producido = suma('producido'), totalGastos = suma('total_gastos');
     const neto = nuevos.reduce((s, t) => s + porEntregar(t.neto), 0);
     const rec = suma('recaudado'), dif = suma('diferencia');
     const clsDif = d => d < 0 ? 'bad' : d > 0 ? 'warn' : 'ok';
     const nombre = k => esc(conductor(form.conductores[k].conductor_id)?.nombre || '');
+    const lineaTramo = t => sensores ? (t.pasajeros != null ? fmtNum(t.pasajeros) + ' pasajeros' : 'pasajeros cuando entregue')
+                                     : `${fmtNum(t.registradora_inicio)} → ${fmtNum(t.registradora_fin)}`;
     // Con relevo: el detalle de cada conductor y al final el total del bus
-    const bloque = (t, k) => `
-      ${n > 1 ? `<div class="sub"><span>Conductor ${k + 1} · ${nombre(k)}</span><span>${sensores ? fmtNum(t.pasajeros) + ' pasajeros' : `${fmtNum(t.registradora_inicio)} → ${fmtNum(t.registradora_fin)}`}</span></div>` : ''}
+    const bloque = (t, k) => t.pendiente ? `
+      <div class="sub"><span>Conductor ${k + 1} · ${nombre(k)}</span><span>${lineaTramo(t)}</span></div>
+      <div><span>Queda pendiente</span><span class="warn">se liquida cuando entregue</span></div>
+      ${t.pasajeros != null ? `<div><span>Pasajeros × tarifa</span><span>${fmtNum(t.pasajeros)} × ${fmtMoney(tarifa)} = ${fmtMoney(t.producido)}</span></div>` : ''}` : `
+      ${n > 1 ? `<div class="sub"><span>Conductor ${k + 1} · ${nombre(k)}</span><span>${lineaTramo(t)}</span></div>` : ''}
       <div><span>Pasajeros × tarifa</span><span>${fmtNum(t.pasajeros)} × ${fmtMoney(tarifa)}</span></div>
       <div><span>Producido</span><span>${fmtMoney(t.producido)}</span></div>
       ${gastosDe(k).map(g => `<div><span>− ${esc(g.nombre)}${g.observacion ? ` <small style="color:var(--txt3)">(${esc(g.observacion)})</small>` : ''}</span><span>${fmtMoney(g.valor)}</span></div>`).join('')}
@@ -1626,6 +1756,28 @@
       ${debeConductor(t.neto) ? `<div><span>La empresa le debe al conductor</span><span class="warn">${fmtMoney(debeConductor(t.neto))}</span></div>` : ''}
       <div><span>Recaudo entregado</span><span>${fmtMoney(t.recaudado)}</span></div>
       <div><span>Diferencia</span><span class="${clsDif(t.diferencia)}">${fmtMoney(t.diferencia)} · ${textoDif(t.diferencia)}</span></div>`;
+    const totales = titulo => `<div class="sub"><span>${titulo}</span><span>${fmtNum(suma('pasajeros'))} pasajeros</span></div>
+          <div><span>Producido</span><span>${fmtMoney(producido)}</span></div>
+          <div><span>Gastos</span><span>${fmtMoney(totalGastos)}</span></div>
+          <div><span>Por entregar</span><span>${fmtMoney(neto)}</span></div>
+          <div><span>Recaudado</span><span>${fmtMoney(rec)}</span></div>
+          <div><span>Diferencia</span><span class="${clsDif(dif)}">${fmtMoney(dif)} · ${textoDif(dif)}</span></div>`;
+    if (pendMode) {
+      const nums = numsALiquidar();
+      const yaLiq = b.recaudo.conductores.map(c => `${c.orden} · ${esc(c.conductor_nombre || '')}`).join(', ');
+      const siguen = form.conductores.map((c, k) => [c, k]).filter(([c]) => !c.liq && c.despues);
+      document.getElementById('confTitulo').textContent =
+        `Confirmar conductor${nums.length > 1 ? 'es' : ''} pendiente${nums.length > 1 ? 's' : ''} — ${TIPO[b.grupo] || 'Bus'} ${b.numero}`;
+      document.getElementById('confResumen').innerHTML = `
+        <div><span>Fecha de la tarjeta</span><span>${fmtDia(fecha)}</span></div>
+        <div><span>Ya liquidado (no cambia)</span><span>${yaLiq}</span></div>
+        ${idxNuevos.map(k => bloque(tramos[k], k)).join('')}
+        ${nuevos.length > 1 ? totales('Total que se liquida') : ''}
+        ${siguen.length ? `<div><span>Sigue${siguen.length > 1 ? 'n' : ''} pendiente${siguen.length > 1 ? 's' : ''}</span><span class="warn">${siguen.map(([, k]) => `${k + 1} · ${nombre(k)}`).join(', ')}</span></div>` : ''}
+        <div class="sub"><span>Entra a la caja de</span><span>hoy, ${fmtDia(D.hoy)}</span></div>`;
+      document.getElementById('btnConfirmar').disabled = false;
+      return abrirModal('modalConfirmar');
+    }
     if (agregando) {
       const yaLiq = b.recaudo.conductores.map(c => `${c.orden} · ${esc(c.conductor_nombre || '')}`).join(', ');
       document.getElementById('confTitulo').textContent = `Confirmar relevo — ${TIPO[b.grupo] || 'Bus'} ${b.numero}`;
@@ -1636,12 +1788,7 @@
           : `<div><span>Registradora del relevo</span><span>${fmtNum(finLiq)} → ${fmtNum(fin)}</span></div>`}
         ${lecturasDigitadas(b).length ? `<div><span>Digitado en recaudo (no venía del despacho)</span><span class="warn">registradora ${lecturasDigitadas(b).join(', ')}</span></div>` : ''}
         ${nuevos.map((t, j) => bloque(t, base + j)).join('')}
-        ${nuevos.length > 1 ? `<div class="sub"><span>Total del relevo</span><span>${fmtNum(suma('pasajeros'))} pasajeros</span></div>
-          <div><span>Producido</span><span>${fmtMoney(producido)}</span></div>
-          <div><span>Gastos</span><span>${fmtMoney(totalGastos)}</span></div>
-          <div><span>Por entregar</span><span>${fmtMoney(neto)}</span></div>
-          <div><span>Recaudado</span><span>${fmtMoney(rec)}</span></div>
-          <div><span>Diferencia</span><span class="${clsDif(dif)}">${fmtMoney(dif)} · ${textoDif(dif)}</span></div>` : ''}
+        ${nuevos.length > 1 ? totales('Total del relevo') : ''}
         <div class="sub"><span>Entra a la caja de</span><span>hoy, ${fmtDia(D.hoy)}</span></div>`;
       document.getElementById('btnConfirmar').disabled = false;
       return abrirModal('modalConfirmar');
@@ -1650,11 +1797,11 @@
     document.getElementById('confResumen').innerHTML = `
       <div><span>Fecha de la tarjeta</span><span>${fmtDia(fecha)}</span></div>
       ${n === 1 ? `<div><span>Conductor</span><span>${nombre(0)}</span></div>` : ''}
-      ${sensores ? `<div><span>Pasajeros${n > 1 ? ' del bus' : ''}</span><span>${fmtNum(paxDelDia(b))} · digitados (bus con sensores)</span></div>`
+      ${sensores ? `<div><span>Pasajeros${n > 1 ? (hayDespues ? ' que se liquidan' : ' del bus') : ''}</span><span>${fmtNum(propio ? suma('pasajeros') : paxDelDia(b))} · digitados (bus con sensores)</span></div>`
         : `<div><span>Registradora${n > 1 ? ' del bus' : ''}</span><span>${fmtNum(ini)} → ${fmtNum(fin)}</span></div>`}
       ${lecturasDigitadas(b).length ? `<div><span>Digitado en recaudo (no venía del despacho)</span><span class="warn">registradora ${lecturasDigitadas(b).join(', ')}</span></div>` : ''}
       ${tramos.map(bloque).join('')}
-      ${n > 1 ? `<div class="sub"><span>Total del bus</span><span>${fmtNum(sensores ? paxDelDia(b) : fin - ini)} pasajeros</span></div>
+      ${n > 1 && hayDespues ? totales('Se liquida ahora') : n > 1 ? `<div class="sub"><span>Total del bus</span><span>${fmtNum(sensores ? paxDelDia(b) : fin - ini)} pasajeros</span></div>
         <div><span>Producido</span><span>${fmtMoney(producido)}</span></div>
         <div><span>Gastos</span><span>${fmtMoney(totalGastos)}</span></div>
         <div><span>Por entregar</span><span>${fmtMoney(neto)}</span></div>
@@ -1667,19 +1814,24 @@
   async function confirmarGuardar() {
     const b = bus(selId);
     if (b.recaudo && form.agregando) return confirmarRelevo(b);
+    if (b.recaudo && form.pendientes) return confirmarPendiente(b);
     const n = form.conductores.length;
     const sensores = conSensores(b);   // sin registradora: los pasajeros del día los digita el recaudador
+    const propio = paxPorConductor(b);  // con un pendiente, cada conductor lleva sus pasajeros
     const body = {
-      fecha, bus_id: b.id, pasajeros: sensores ? form.pasajeros : null,
+      fecha, bus_id: b.id, pasajeros: sensores && !propio ? form.pasajeros : null,
       registradora_inicio: sensores ? null : form.registradora_inicio, registradora_fin: sensores ? null : form.registradora_fin,
       conductores: form.conductores.map((c, k) => ({
         conductor_id: c.conductor_id, ruta_id: c.ruta_id, viajes: c.viajes,
         registradora_fin: !sensores && k < n - 1 ? c.registradora_fin : null,
-        pasajeros: sensores && k < n - 1 ? c.pasajeros : null,
-        recaudado: c.recaudado, observacion: c.observacion,
+        pasajeros: sensores && (propio ? !c.despues : k < n - 1) ? c.pasajeros : null,
+        recaudado: c.despues ? null : c.recaudado, observacion: c.despues ? '' : c.observacion,
+        pendiente: !!c.despues,   // no ha entregado: queda pendiente y se liquida después
       })),
-      gastos: gastosDelForm().map(g => ({ orden_conductor: g.orden_conductor, tipo_gasto_id: g.tipo_gasto_id,
-                                          valor: g.valor, observacion: g.observacion })),
+      // Los gastos de un pendiente se escriben cuando se liquide
+      gastos: gastosDelForm().filter(g => !form.conductores[g.orden_conductor - 1].despues)
+        .map(g => ({ orden_conductor: g.orden_conductor, tipo_gasto_id: g.tipo_gasto_id,
+                     valor: g.valor, observacion: g.observacion })),
     };
     const btn = document.getElementById('btnConfirmar');
     btn.disabled = true;
@@ -1688,9 +1840,40 @@
       dirty = false;
       cerrarModal('modalConfirmar');
       const dif = r.recaudo.diferencia;
-      toast(`Bus ${b.numero} liquidado` + (dif ? ' — ' + textoDif(dif).toLowerCase() : ''));
+      const pend = form.conductores.map((c, k) => c.despues ? k + 1 : null).filter(Boolean);
+      toast(`Bus ${b.numero} liquidado` + (dif ? ' — ' + textoDif(dif).toLowerCase() : '')
+        + (pend.length ? ` · conductor${pend.length > 1 ? 'es' : ''} ${listaNums(pend)} pendiente${pend.length > 1 ? 's' : ''}` : ''));
       await cargar();
-      imprimirTirilla(r.recaudo.id, false);   // una tirilla (copia empresa) por conductor
+      imprimirNuevas(r.nuevas || [r.recaudo.id]);   // una tirilla (copia empresa) por conductor
+    } catch (e) {
+      toast(e.message, true);
+      btn.disabled = false;
+    }
+  }
+
+  /* Conductores que quedaron pendientes: se envían solo los que se liquidan ahora, con su número */
+  async function confirmarPendiente(b) {
+    const sensores = conSensores(b);
+    const ahora = form.conductores.map((c, k) => [c, k]).filter(([c]) => !c.liq && !c.despues);
+    const body = {
+      fecha, bus_id: b.id,
+      conductores: ahora.map(([c, k]) => ({
+        orden: k + 1, conductor_id: c.conductor_id, ruta_id: c.ruta_id, viajes: c.viajes,
+        pasajeros: sensores ? c.pasajeros : null, recaudado: c.recaudado, observacion: c.observacion,
+      })),
+      gastos: ahora.flatMap(([, k]) => gastosDe(k))
+        .map(g => ({ orden_conductor: g.orden_conductor, tipo_gasto_id: g.tipo_gasto_id, valor: g.valor, observacion: g.observacion })),
+    };
+    const btn = document.getElementById('btnConfirmar');
+    btn.disabled = true;
+    try {
+      const r = await apiFetch('/api/recaudo/pendiente', { method: 'POST', body: JSON.stringify(body) });
+      dirty = false;
+      cerrarModal('modalConfirmar');
+      const nums = ahora.map(([, k]) => k + 1);
+      toast(`Bus ${b.numero}: conductor${nums.length > 1 ? 'es' : ''} ${listaNums(nums)} liquidado${nums.length > 1 ? 's' : ''}`);
+      await cargar();
+      imprimirNuevas(r.nuevas || []);
     } catch (e) {
       toast(e.message, true);
       btn.disabled = false;
@@ -1734,12 +1917,15 @@
   /* ── Anular (solo Administrador): la liquidación queda como historial ── */
   function abrirAnular() {
     const b = bus(selId);
-    // Con relevo agregado se anula la última parte (el relevo); lo liquidado antes queda igual
+    // Con varias partes (relevo agregado o conductor pendiente) se anula la última; lo demás queda igual
     const p = ultimaParte(b), relevo = partesDe(b).length > 1;
+    const nums = listaNums(p.conductores.map(c => c.orden));
     document.getElementById('anularSub').innerHTML =
-      `${TIPO[b.grupo] || 'Bus'} ${b.numero} · ${fmtDia(fecha)}${relevo ? ` · relevo agregado ${numLiq(p.id)} (conductores ${p.conductores.map(c => c.orden).join(' y ')})` : ''} · Producido ${fmtMoney(p.producido)} · Gastos ${fmtMoney(p.total_gastos)} · Recaudado ${fmtMoney(p.recaudado)}.<br>
-       ${relevo ? 'El relevo no se borra: queda en el historial como anulado y esos conductores vuelven a quedar por liquidar. Lo liquidado antes no cambia.'
-                : 'La liquidación no se borra: queda en el historial como anulada y el bus vuelve a quedar por liquidar.'}`;
+      `${TIPO[b.grupo] || 'Bus'} ${b.numero} · ${fmtDia(fecha)}${relevo ? ` · ${numLiq(p.id)} (conductor${p.conductores.length > 1 ? 'es' : ''} ${nums})` : ''} · Producido ${fmtMoney(p.producido)} · Gastos ${fmtMoney(p.total_gastos)} · Recaudado ${fmtMoney(p.recaudado)}.<br>
+       ${relevo ? 'Esa parte no se borra: queda en el historial como anulada y esos conductores vuelven a quedar por liquidar. Lo demás no cambia.'
+                : hayPendientes(b)
+                  ? 'La liquidación no se borra: queda en el historial como anulada y el bus vuelve a quedar por liquidar completo (con el conductor que estaba pendiente).'
+                  : 'La liquidación no se borra: queda en el historial como anulada y el bus vuelve a quedar por liquidar.'}`;
     document.getElementById('anularMotivo').value = '';
     document.getElementById('btnAnular').disabled = false;
     abrirModal('modalAnular');
@@ -1816,6 +2002,17 @@
       ${reimpresion ? `<div>Reimprimió: ${esc((CU.nombre || CU.name || '').toUpperCase())}</div>` : ''}
       <div class="t-firma">Firma del conductor</div>
     </div>`;
+  }
+
+  /* Las tirillas de lo que se acaba de liquidar (una o varias partes: con un conductor
+     pendiente en medio, los demás quedan en partes separadas), en una sola impresión. */
+  function imprimirNuevas(ids) {
+    const partes = ids.map(liquidacionPorId).filter(Boolean);
+    if (!partes.length) return;
+    const cont = document.getElementById('tirilla');
+    cont.className = 'papel-' + papel;
+    cont.innerHTML = partes.flatMap(r => r.conductores.map(c => htmlCopia(r, c, false))).join('');
+    window.print();
   }
 
   /* Una tirilla por conductor (la copia de la empresa, con la firma del conductor), cada
