@@ -34,6 +34,7 @@
     .chip-papel select { padding:3px 6px; border:1px solid var(--border2); border-radius:8px; font-family:inherit;
       font-size:12.5px; background:var(--white); color:var(--txt); }
 
+    .cabecera-acciones { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
     .fecha-nav { display:flex; align-items:center; gap:6px; }
     .fecha-nav input[type=date] { padding:8px 10px; border:1.5px solid var(--border2); border-radius:var(--radius-s);
       font-family:inherit; font-size:14px; font-weight:700; background:var(--white); color:var(--txt); }
@@ -214,6 +215,10 @@
         </label>
       </div>
     </div>
+    <div class="cabecera-acciones">
+      <button class="btn" onclick="irAReporte()" title="Consultar los pagos de un periodo y exportarlos a Excel">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" style="vertical-align:-2px;margin-right:4px"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="13" y="8" width="3" height="10"/></svg>
+        Ver reporte</button>
     <div class="fecha-nav">
       <button class="nav-btn" onclick="moverDia(-1)" title="Día anterior">
         <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
@@ -222,6 +227,7 @@
       <button class="nav-btn" id="btnSig" onclick="moverDia(1)" title="Día siguiente">
         <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
       </button>
+    </div>
     </div>
   </div>
 
@@ -465,6 +471,12 @@
     if (p.bus_numero != null) partes.push(`Vehículo ${p.bus_numero}${p.bus_placa ? ' · ' + p.bus_placa : ''}`);
     if (p.tercero_nombre) partes.push(p.tercero_nombre);
     return partes.join(' — ');
+  }
+
+  /* Ir al Reporte de pagos: dentro de la shell se pide el cambio de vista; suelta, por URL. */
+  function irAReporte() {
+    if (window.parent !== window) window.parent.postMessage({ type: 'IR_A_VISTA', view: 'recaudo-reportes' }, window.location.origin);
+    else window.location.href = 'recaudo-reportes.html';
   }
 
   /* ── KPIs y lista del día ── */

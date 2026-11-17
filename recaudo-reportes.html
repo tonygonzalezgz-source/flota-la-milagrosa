@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <link rel="icon" type="image/png" href="favicon.png" />
+  <link rel="apple-touch-icon" href="favicon.png" />
+  <script>
+    (function() {
+      if (window.location === window.parent.location) {
+        const token = localStorage.getItem('authToken');
+        if (!token) { window.location.href = '/index.html'; }
+      }
+    })();
+  </script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BusControl — Reporte de pagos</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg:#f4f4f6; --white:#fff; --border:#e5e5eb; --border2:#d0d0d8;
+      --txt:#111; --txt2:#555; --txt3:#888; --primary:#6366f1; --green:#22c55e;
+      --red:#ef4444; --yellow:#f59e0b; --radius:12px; --radius-s:8px;
+      --shadow:0 1px 4px rgba(0,0,0,.07);
+    }
+    body {
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+      background:var(--bg); color:var(--txt); padding:24px; font-size:14px;
+    }
+    .page-header { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
+    .page-title { font-size:22px; font-weight:800; letter-spacing:-.4px; }
+    .page-sub   { font-size:13px; color:var(--txt2); margin-top:3px; max-width:720px; line-height:1.5; }
+
+    /* Barra de filtros */
+    .toolbar { background:var(--white); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow);
+      padding:14px 16px; margin-bottom:14px; display:grid; gap:10px;
+      grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); align-items:end; }
+    .campo label { display:block; font-size:11.5px; font-weight:700; color:var(--txt2); margin-bottom:5px; }
+    .campo input, .campo select { width:100%; padding:9px 10px; border:1.5px solid var(--border2); border-radius:var(--radius-s);
+      font-family:inherit; font-size:15px; background:var(--white); color:var(--txt); }
+    .campo input:focus, .campo select:focus { outline:none; border-color:var(--primary); }
+    .acciones { display:flex; gap:8px; align-items:end; flex-wrap:wrap; }
+    .atajos { grid-column:1/-1; display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+    .atajos .et { font-size:11.5px; font-weight:700; color:var(--txt3); text-transform:uppercase; letter-spacing:.4px; }
+
+    .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:14px; }
+    .kpi { background:var(--white); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); padding:12px 14px; min-width:0; }
+    .kpi-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; color:var(--txt3); }
+    .kpi-val { font-size:22px; font-weight:800; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .kpi-val.ok { color:#16a34a; } .kpi-val.bad { color:#dc2626; }
+    .kpi-sub { font-size:11px; color:var(--txt3); margin-top:2px; }
+
+    .estado-bar { font-size:12.5px; color:var(--txt2); margin-bottom:12px; line-height:1.5; }
+    .aviso { background:#fffbeb; border:1px solid #fcd34d; color:#92400e; border-radius:10px; padding:10px 12px;
+      font-size:12.5px; line-height:1.5; margin-bottom:12px; }
+    .nota { font-size:11.5px; color:var(--txt3); line-height:1.6; margin-top:12px; }
+
+    .tabs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+    .tab { border:1px solid var(--border2); background:var(--white); border-radius:999px; padding:6px 13px;
+      font-family:inherit; font-size:12.5px; font-weight:700; color:var(--txt2); cursor:pointer; }
+    .tab.on { background:var(--txt); border-color:var(--txt); color:#fff; }
+    .tab .n { font-weight:800; opacity:.75; margin-left:4px; }
+
+    .card { background:var(--white); border:1px solid var(--border); border-radius:var(--radius);
+      box-shadow:var(--shadow); padding:16px 18px; min-width:0; }
+    .tabla-wrap { overflow-x:auto; border:1px solid var(--border); border-radius:10px; }
+    table { width:100%; border-collapse:collapse; }
+    th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.4px; color:var(--txt3);
+      padding:8px 10px; border-bottom:1px solid var(--border); white-space:nowrap; background:#fafafc; }
+    td { padding:9px 10px; border-bottom:1px solid var(--border); font-size:13px; vertical-align:middle; }
+    tr:last-child td { border-bottom:none; }
+    td.num, th.num { text-align:right; white-space:nowrap; }
+    td.nw { white-space:nowrap; }
+    tr.total td { font-weight:800; background:#fafafc; }
+    tr.anulado td { color:var(--txt3); }
+    tr.anulado td.money { text-decoration:line-through; }
+    .sub { font-size:11.5px; color:var(--txt3); }
+    .c-in { color:#15803d; font-weight:700; } .c-out { color:#b91c1c; font-weight:700; }
+    .pill { display:inline-flex; align-items:center; gap:6px; border-radius:999px; padding:3px 9px;
+      font-size:11px; font-weight:700; white-space:nowrap; }
+    .pill.in  { background:rgba(34,197,94,.12); color:#16a34a; }
+    .pill.out { background:rgba(239,68,68,.12); color:#dc2626; }
+    .pill.off { background:rgba(136,136,136,.15); color:var(--txt3); }
+    .vacio { text-align:center; color:var(--txt3); padding:34px 10px; font-size:13.5px; line-height:1.6; }
+
+    .btn { border:1px solid var(--border2); background:var(--white); color:var(--txt); border-radius:var(--radius-s);
+      padding:9px 13px; font-family:inherit; font-size:12.5px; font-weight:700; cursor:pointer; white-space:nowrap; }
+    .btn:hover { border-color:var(--primary); color:var(--primary); }
+    .btn.sm { padding:5px 9px; font-size:12px; }
+    .btn-primary { border:none; background:var(--primary); color:#fff; border-radius:var(--radius-s); padding:10px 18px;
+      font-family:inherit; font-size:14px; font-weight:700; cursor:pointer; white-space:nowrap; }
+    .btn-primary:disabled, .btn:disabled { opacity:.5; cursor:default; }
+    .btn.excel { border-color:#15803d; color:#15803d; }
+    .btn.excel:hover:not(:disabled) { background:#f0fdf4; }
+
+    .toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#111; color:#fff;
+      border-radius:var(--radius-s); padding:11px 20px; font-size:13px; font-weight:600; z-index:2000;
+      box-shadow:0 4px 16px rgba(0,0,0,.25); transition:opacity .25s; max-width:90vw; }
+    .toast.error { background:#b91c1c; }
+    .toast.hidden { opacity:0; pointer-events:none; }
+
+    /* Móvil: tabla en tarjetas apiladas; sin tapar el menú de la shell */
+    @media (max-width:760px) {
+      body { padding:16px; padding-top:64px; }
+      input, select { font-size:16px !important; }   /* evita el auto-zoom de iOS */
+      .toolbar { grid-template-columns:minmax(0,1fr); }
+      .acciones .btn, .acciones .btn-primary { flex:1; }
+      .kpis { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .kpi-val { font-size:18px; }
+      .card { padding:12px; }
+      .tabla-wrap { border:none; overflow:visible; }
+      table.resp thead { display:none; }
+      table.resp, table.resp tbody, table.resp tr, table.resp td { display:block; width:100%; }
+      table.resp tr { border:1px solid var(--border); border-radius:10px; margin-bottom:8px; padding:6px 10px; background:var(--white); }
+      table.resp td { border:none; padding:5px 0; display:flex; justify-content:space-between; gap:12px; text-align:right; }
+      table.resp td::before { content:attr(data-label); font-size:11px; font-weight:700; text-transform:uppercase; color:var(--txt3); text-align:left; }
+      table.resp td.num { white-space:normal; }
+      table.resp tr.anulado td.money::before { text-decoration:none; }
+      table.resp tr.total { background:#fafafc; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page-header">
+    <div>
+      <div class="page-title">Reporte de pagos</div>
+      <div class="page-sub">Cada entrada y salida de caja de los Pagos diarios en un periodo: pago de admon, locales,
+        servicios, parqueos, abonos, anticipos, reembolsos… Se puede filtrar por conductor, propietario, vehículo o
+        concepto, y exportar a Excel.</div>
+    </div>
+    <button class="btn" onclick="irAPagos()">← Pagos diarios</button>
+  </div>
+
+  <div class="toolbar">
+    <div class="campo"><label for="fDesde">Desde</label><input type="date" id="fDesde" /></div>
+    <div class="campo"><label for="fHasta">Hasta</label><input type="date" id="fHasta" /></div>
+    <div class="campo"><label for="fConductor">Conductor</label>
+      <select id="fConductor"><option value="">Todos</option></select></div>
+    <div class="campo"><label for="fPropietario">Propietario</label>
+      <select id="fPropietario"><option value="">Todos</option></select></div>
+    <div class="campo"><label for="fBus">Vehículo</label>
+      <select id="fBus"><option value="">Todos</option></select></div>
+    <div class="campo"><label for="fConcepto">Concepto</label>
+      <select id="fConcepto"><option value="">Todos</option></select></div>
+    <div class="campo"><label for="fSigno">Movimiento</label>
+      <select id="fSigno">
+        <option value="">Entradas y salidas</option>
+        <option value="2">Solo entradas</option>
+        <option value="1">Solo salidas</option>
+      </select></div>
+    <div class="campo"><label for="fEstado">Estado</label>
+      <select id="fEstado">
+        <option value="vigentes">Vigentes</option>
+        <option value="anulados">Anulados</option>
+        <option value="todos">Todos</option>
+      </select></div>
+    <div class="acciones">
+      <button class="btn-primary" id="btnBuscar" onclick="buscar()">Buscar</button>
+      <button class="btn excel" id="btnExcel" onclick="exportarExcel()" disabled>Exportar Excel</button>
+    </div>
+    <div class="atajos">
+      <span class="et">Periodo</span>
+      <button class="btn sm" onclick="atajo('hoy')">Hoy</button>
+      <button class="btn sm" onclick="atajo('semana')">Últimos 7 días</button>
+      <button class="btn sm" onclick="atajo('mes')">Este mes</button>
+      <button class="btn sm" onclick="atajo('mesPasado')">Mes pasado</button>
+    </div>
+  </div>
+
+  <div id="avisoBox"></div>
+  <div class="estado-bar" id="estadoBar">Elige un periodo y pulsa <b>Buscar</b>.</div>
+
+  <div class="kpis" id="kpis" hidden>
+    <div class="kpi"><div class="kpi-label">Entradas</div><div class="kpi-val ok" id="kIn">—</div><div class="kpi-sub" id="kInN"></div></div>
+    <div class="kpi"><div class="kpi-label">Salidas</div><div class="kpi-val bad" id="kOut">—</div><div class="kpi-sub" id="kOutN"></div></div>
+    <div class="kpi"><div class="kpi-label">Neto</div><div class="kpi-val" id="kNeto">—</div><div class="kpi-sub">entradas − salidas</div></div>
+    <div class="kpi"><div class="kpi-label">Pagos</div><div class="kpi-val" id="kN">—</div><div class="kpi-sub">vigentes en el periodo</div></div>
+    <div class="kpi"><div class="kpi-label">Anulados</div><div class="kpi-val" id="kAnul">—</div><div class="kpi-sub">no suman</div></div>
+  </div>
+
+  <div class="tabs" id="tabs" hidden>
+    <button class="tab on" data-tab="detalle"  onclick="verTab('detalle')">Detalle<span class="n" id="nDetalle"></span></button>
+    <button class="tab"    data-tab="dia"      onclick="verTab('dia')">Por día<span class="n" id="nDia"></span></button>
+    <button class="tab"    data-tab="concepto" onclick="verTab('concepto')">Por concepto<span class="n" id="nConcepto"></span></button>
+    <button class="tab"    data-tab="bus"      onclick="verTab('bus')">Por vehículo<span class="n" id="nBus"></span></button>
+  </div>
+
+  <div class="card">
+    <div id="panel"><div class="vacio">Cargando…</div></div>
+    <div class="nota" id="notaRelacion" hidden>
+      Cómo se relaciona cada pago: por <b>conductor</b>, con la cédula que tiene hoy en Catálogo › Conductores
+      (el pago guarda el documento de quien pagó). Por <b>propietario</b>, con su cédula o NIT y además con los
+      vehículos que son suyos. Si se corrige una cédula en el catálogo, los pagos viejos pueden dejar de aparecer;
+      y un vehículo que cambió de dueño trae también los pagos del dueño anterior.
+    </div>
+  </div>
+
+  <div class="toast hidden" id="toast"></div>
+
+<script>
+  const API = (window.location.port === '3030') ? 'http://localhost:8001' : window.location.origin;
+  const CU = (() => { try { return JSON.parse(localStorage.getItem('currentUser') || '{}'); } catch (_) { return {}; } })();
+  const TIPO = { A: 'Bus', B: 'Micro' };
+  const $ = id => document.getElementById(id);
+
+  async function apiFetch(path, opts = {}) {
+    const token = localStorage.getItem('authToken');
+    const res = await fetch(API + path, {
+      ...opts,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+        ...(opts.headers || {}),
+      },
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error || 'Error del servidor');
+    return json;
+  }
+
+  /* Fecha calendario en Colombia (no UTC: toISOString corre el día después de las 7pm) */
+  function hoyBogota() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota' }).format(new Date()); }
+  function shiftIso(iso, delta) {
+    const d = new Date(iso + 'T12:00:00Z');
+    d.setUTCDate(d.getUTCDate() + delta);
+    return d.toISOString().slice(0, 10);
+  }
+  function esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+  }
+  function fmtNum(n)   { return Number(n).toLocaleString('es-CO'); }
+  function fmtMoney(n) { return (n < 0 ? '-$' : '$') + Math.abs(Math.round(n)).toLocaleString('es-CO'); }
+  function fmtDiaCorto(iso) {
+    if (!iso) return '—';
+    return new Date(String(iso).slice(0, 10) + 'T12:00:00Z').toLocaleDateString('es-CO',
+      { timeZone: 'UTC', day: '2-digit', month: '2-digit', year: 'numeric' });
+  }
+  function fmtDiaLargo(iso) {
+    if (!iso) return '—';
+    return new Date(String(iso).slice(0, 10) + 'T12:00:00Z').toLocaleDateString('es-CO',
+      { timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short' });
+  }
+  /* created_at llega en UTC ('…Z'): la hora se muestra en Bogotá */
+  function fmtHoraCorta(d) {
+    if (!d) return '';
+    return new Date(d).toLocaleTimeString('es-CO', { timeZone: 'America/Bogota', hour: 'numeric', minute: '2-digit' });
+  }
+  function fmtFechaHora(d) {
+    return new Date(d).toLocaleString('es-CO', { timeZone: 'America/Bogota', day: '2-digit', month: '2-digit',
+      year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).replace(',', '');
+  }
+  const docConDv = (doc, dv) => doc ? (dv ? `${doc}-${dv}` : doc) : '';
+  const docCompleto = (tipo, doc, dv) => doc ? `${tipo ? tipo + ' ' : ''}${docConDv(doc, dv)}` : '';
+
+  let toastTimer = null;
+  function toast(msg, error = false) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.className = 'toast' + (error ? ' error' : '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.add('hidden'), 3200);
+  }
+
+  /* ── Estado ── */
+  let D = null;          // última respuesta del reporte
+  let tab = 'detalle';
+  let listasCargadas = false;
+
+  /* ── Navegación entre vistas (la shell escucha IR_A_VISTA) ── */
+  function irAVista(view, archivo) {
+    if (window.parent !== window) window.parent.postMessage({ type: 'IR_A_VISTA', view }, window.location.origin);
+    else window.location.href = archivo;
+  }
+  const irAPagos = () => irAVista('recaudo-pagos', 'recaudo-pagos.html');
+
+  /* ── Periodo ── */
+  function atajo(cual) {
+    const hoy = hoyBogota();
+    const [y, m] = hoy.split('-').map(Number);
+    const finDeMes = (yy, mm) => new Date(Date.UTC(yy, mm, 0)).toISOString().slice(0, 10);
+    let desde = hoy, hasta = hoy;
+    if (cual === 'semana')    { desde = shiftIso(hoy, -6); }
+    if (cual === 'mes')       { desde = `${hoy.slice(0, 7)}-01`; }
+    if (cual === 'mesPasado') {
+      const ym = m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
+      desde = `${ym}-01`;
+      hasta = finDeMes(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)));
+    }
+    $('fDesde').value = desde;
+    $('fHasta').value = hasta;
+    buscar();
+  }
+
+  /* ── Llenar los filtros con lo que trae el reporte ── */
+  function llenarListas(listas) {
+    if (listasCargadas) return;
+    const opt = (v, t) => `<option value="${v}">${esc(t)}</option>`;
+    const inact = x => x.activo ? '' : ' (inactivo)';
+    $('fConductor').innerHTML = '<option value="">Todos los conductores</option>' +
+      listas.conductores.map(c => opt(c.id, c.nombre + inact(c))).join('');
+    $('fPropietario').innerHTML = '<option value="">Todos los propietarios</option>' +
+      listas.propietarios.map(p => opt(p.id, p.nombre + inact(p))).join('');
+    $('fBus').innerHTML = '<option value="">Todos los vehículos</option>' +
+      listas.buses.map(b => opt(b.id, `${TIPO[b.grupo] || 'Bus'} ${b.numero}${b.placa ? ' · ' + b.placa : ''}`)).join('');
+    $('fConcepto').innerHTML = '<option value="">Todos los conceptos</option>' +
+      listas.conceptos.map(c => opt(c.id, `${c.nombre} · ${c.signo === 2 ? 'entrada' : 'salida'}`)).join('');
+    listasCargadas = true;
+  }
+
+  /* ── Buscar ── */
+  async function buscar() {
+    const desde = $('fDesde').value, hasta = $('fHasta').value;
+    if (!desde || !hasta) return toast('Elige las dos fechas', true);
+    if (desde > hasta)    return toast('La fecha inicial no puede ser mayor que la final', true);
+
+    const qs = new URLSearchParams({ desde, hasta, estado: $('fEstado').value });
+    for (const [campo, el] of [['conductor_id', 'fConductor'], ['propietario_id', 'fPropietario'],
+                               ['bus_id', 'fBus'], ['concepto_id', 'fConcepto'], ['signo', 'fSigno']]) {
+      if ($(el).value) qs.set(campo, $(el).value);
+    }
+    const btn = $('btnBuscar');
+    btn.disabled = true; btn.textContent = 'Buscando…';
+    $('panel').innerHTML = '<div class="vacio">Buscando…</div>';
+    try {
+      D = await apiFetch('/api/recaudo/pagos/reporte?' + qs.toString());
+      llenarListas(D.listas);
+      render();
+    } catch (e) {
+      D = null;
+      $('kpis').hidden = true; $('tabs').hidden = true; $('notaRelacion').hidden = true;
+      $('estadoBar').innerHTML = '';
+      $('panel').innerHTML = `<div class="vacio">${esc(e.message)}<br><br>
+        <button class="btn" onclick="buscar()">Reintentar</button></div>`;
+    } finally {
+      btn.disabled = false; btn.textContent = 'Buscar';
+    }
+  }
+
+  /* ── Pintar ── */
+  function render() {
+    const t = D.totales;
+    $('avisoBox').innerHTML = D.aviso ? `<div class="aviso">${esc(D.aviso)}</div>` : '';
+    $('kpis').hidden = false;
+    $('tabs').hidden = false;
+    $('notaRelacion').hidden = false;
+    $('kIn').textContent = fmtMoney(t.ingresos);
+    $('kOut').textContent = fmtMoney(t.egresos);
+    $('kInN').textContent = `${fmtNum(D.pagos.filter(p => p.signo === 2 && !p.anulado_at).length)} pagos`;
+    $('kOutN').textContent = `${fmtNum(D.pagos.filter(p => p.signo === 1 && !p.anulado_at).length)} pagos`;
+    const kN = $('kNeto');
+    kN.textContent = fmtMoney(t.neto);
+    kN.className = 'kpi-val ' + (t.neto < 0 ? 'bad' : t.neto > 0 ? 'ok' : '');
+    $('kN').textContent = fmtNum(t.pagos);
+    $('kAnul').textContent = fmtNum(t.anulados);
+
+    const f = D.filtros;
+    const detalles = [];
+    if (f.conductor)   detalles.push(`conductor <b>${esc(f.conductor.nombre)}</b>`);
+    if (f.propietario) detalles.push(`propietario <b>${esc(f.propietario.nombre)}</b>`);
+    if ($('fBus').value)      detalles.push(`vehículo <b>${esc($('fBus').selectedOptions[0].textContent)}</b>`);
+    if ($('fConcepto').value) detalles.push(`concepto <b>${esc($('fConcepto').selectedOptions[0].textContent)}</b>`);
+    if ($('fSigno').value)    detalles.push($('fSigno').value === '2' ? 'solo <b>entradas</b>' : 'solo <b>salidas</b>');
+    if (f.estado !== 'vigentes') detalles.push(`estado <b>${f.estado}</b>`);
+    $('estadoBar').innerHTML = `${fmtNum(D.pagos.length)} ${D.pagos.length === 1 ? 'pago' : 'pagos'} del `
+      + `<b>${fmtDiaCorto(D.desde)}</b> al <b>${fmtDiaCorto(D.hasta)}</b>`
+      + (detalles.length ? ' · ' + detalles.join(' · ') : '')
+      + (t.anulados ? ` · ${fmtNum(t.anulados)} anulado${t.anulados > 1 ? 's' : ''}, que no suman` : '');
+
+    $('nDetalle').textContent = fmtNum(D.pagos.length);
+    $('nDia').textContent = fmtNum(D.por_dia.length);
+    $('nConcepto').textContent = fmtNum(D.por_concepto.length);
+    $('nBus').textContent = fmtNum(D.por_bus.length);
+    $('btnExcel').disabled = !D.pagos.length;
+    verTab(tab);
+  }
+
+  function verTab(cual) {
+    tab = cual;
+    document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.tab === cual));
+    if (!D) return;
+    const panel = $('panel');
+    if (!D.pagos.length) {
+      panel.innerHTML = '<div class="vacio">No hay pagos con estos filtros.<br>Prueba con otro periodo o quita algún filtro.</div>';
+      return;
+    }
+    panel.innerHTML = cual === 'detalle'  ? tablaDetalle()
+                    : cual === 'dia'      ? tablaDia()
+                    : cual === 'concepto' ? tablaConcepto()
+                                          : tablaBus();
+  }
+
+  const dinero = (v, cls) => v ? `<span class="${cls}">${fmtMoney(v)}</span>` : '<span class="sub">—</span>';
+
+  /* Detalle: una fila por pago. El número del vehículo y la placa van en columnas distintas. */
+  function tablaDetalle() {
+    const filas = D.pagos.map(p => {
+      const anul = p.anulado_at ? ' anulado' : '';
+      const docT = docCompleto(p.tercero_tipo_documento, p.tercero_documento, p.tercero_dv);
+      const docP = docCompleto(p.pagador_tipo_documento, p.pagador_documento, p.pagador_dv);
+      const estado = p.anulado_at
+        ? `<span class="pill off" title="${esc(p.motivo_anulacion || '')}">Anulado</span>`
+        : p.cierre_id ? `<span class="pill off">Caja N° ${String(p.cierre_id).padStart(6, '0')}</span>`
+                      : '<span class="pill in">Vigente</span>';
+      return `<tr class="${anul.trim()}">
+        <td data-label="N°" class="nw">${esc(p.numero)}</td>
+        <td data-label="Fecha" class="nw">${fmtDiaCorto(p.fecha)}</td>
+        <td data-label="Hora" class="nw">${fmtHoraCorta(p.created_at)}</td>
+        <td data-label="Movimiento">${p.signo === 2 ? '<span class="pill in">Entrada</span>' : '<span class="pill out">Salida</span>'}</td>
+        <td data-label="Concepto">${esc(p.concepto_nombre)}</td>
+        <td data-label="Cuenta" class="nw sub">${esc(p.cuenta || '')}</td>
+        <td data-label="Vehículo" class="num">${p.bus_numero ?? '<span class="sub">—</span>'}</td>
+        <td data-label="Placa" class="nw">${esc(p.bus_placa || '') || '<span class="sub">—</span>'}</td>
+        <td data-label="Tercero">${esc(p.tercero_nombre || '') || '<span class="sub">—</span>'}
+          ${docT ? `<div class="sub">${esc(docT)}</div>` : ''}</td>
+        <td data-label="Quién pagó">${esc(p.pagador_nombre || '') || '<span class="sub">—</span>'}
+          ${docP ? `<div class="sub">${esc(docP)}</div>` : ''}</td>
+        <td data-label="Entrada" class="num money">${p.signo === 2 ? dinero(p.valor, 'c-in') : '<span class="sub">—</span>'}</td>
+        <td data-label="Salida"  class="num money">${p.signo === 1 ? dinero(p.valor, 'c-out') : '<span class="sub">—</span>'}</td>
+        <td data-label="Observación">${esc(p.observacion || '') || '<span class="sub">—</span>'}</td>
+        <td data-label="Registró">${esc(p.usuario_nombre || '')}</td>
+        <td data-label="Estado">${estado}</td>
+      </tr>`;
+    }).join('');
+    const t = D.totales;
+    return `<div class="tabla-wrap"><table class="resp">
+      <thead><tr>
+        <th>N°</th><th>Fecha</th><th>Hora</th><th>Movimiento</th><th>Concepto</th><th>Cuenta</th>
+        <th class="num">Vehículo</th><th>Placa</th><th>Tercero</th><th>Quién pagó</th>
+        <th class="num">Entrada</th><th class="num">Salida</th><th>Observación</th><th>Registró</th><th>Estado</th>
+      </tr></thead>
+      <tbody>${filas}
+        <tr class="total">
+          <td data-label="Total" colspan="10">Total de ${fmtNum(t.pagos)} pagos vigentes</td>
+          <td data-label="Entradas" class="num">${fmtMoney(t.ingresos)}</td>
+          <td data-label="Salidas"  class="num">${fmtMoney(t.egresos)}</td>
+          <td colspan="3" data-label="Neto">${fmtMoney(t.neto)}</td>
+        </tr>
+      </tbody></table></div>`;
+  }
+
+  function tablaDia() {
+    const filas = D.por_dia.map(d => `<tr>
+      <td data-label="Fecha" class="nw">${fmtDiaLargo(d.fecha)}</td>
+      <td data-label="Pagos" class="num">${fmtNum(d.pagos)}</td>
+      <td data-label="Entradas" class="num">${dinero(d.ingresos, 'c-in')}</td>
+      <td data-label="Salidas"  class="num">${dinero(d.egresos, 'c-out')}</td>
+      <td data-label="Neto" class="num">${fmtMoney(d.neto)}</td>
+    </tr>`).join('');
+    const t = D.totales;
+    return `<div class="tabla-wrap"><table class="resp">
+      <thead><tr><th>Fecha</th><th class="num">Pagos</th><th class="num">Entradas</th><th class="num">Salidas</th><th class="num">Neto</th></tr></thead>
+      <tbody>${filas}
+        <tr class="total"><td data-label="Total">Total</td><td data-label="Pagos" class="num">${fmtNum(t.pagos)}</td>
+        <td data-label="Entradas" class="num">${fmtMoney(t.ingresos)}</td>
+        <td data-label="Salidas" class="num">${fmtMoney(t.egresos)}</td>
+        <td data-label="Neto" class="num">${fmtMoney(t.neto)}</td></tr>
+      </tbody></table></div>`;
+  }
+
+  function tablaConcepto() {
+    const filas = D.por_concepto.map(c => `<tr>
+      <td data-label="Concepto">${esc(c.concepto_nombre)}</td>
+      <td data-label="Cuenta" class="nw sub">${esc(c.cuenta || '')}</td>
+      <td data-label="Movimiento">${c.signo === 2 ? '<span class="pill in">Entrada</span>' : '<span class="pill out">Salida</span>'}</td>
+      <td data-label="Pagos" class="num">${fmtNum(c.pagos)}</td>
+      <td data-label="Total" class="num"><span class="${c.signo === 2 ? 'c-in' : 'c-out'}">${fmtMoney(c.total)}</span></td>
+    </tr>`).join('');
+    return `<div class="tabla-wrap"><table class="resp">
+      <thead><tr><th>Concepto</th><th>Cuenta</th><th>Movimiento</th><th class="num">Pagos</th><th class="num">Total</th></tr></thead>
+      <tbody>${filas}</tbody></table></div>`;
+  }
+
+  function tablaBus() {
+    if (!D.por_bus.length)
+      return '<div class="vacio">Ningún pago del periodo está atado a un vehículo.<br>Solo los conceptos de propietario o con referencia de vehículo lo piden.</div>';
+    const filas = D.por_bus.map(b => `<tr>
+      <td data-label="Vehículo" class="num">${b.numero ?? ''}</td>
+      <td data-label="Placa" class="nw">${esc(b.placa || '') || '<span class="sub">—</span>'}</td>
+      <td data-label="Propietario">${esc(b.propietario || '') || '<span class="sub">—</span>'}</td>
+      <td data-label="Pagos" class="num">${fmtNum(b.pagos)}</td>
+      <td data-label="Entradas" class="num">${dinero(b.ingresos, 'c-in')}</td>
+      <td data-label="Salidas"  class="num">${dinero(b.egresos, 'c-out')}</td>
+    </tr>`).join('');
+    return `<div class="tabla-wrap"><table class="resp">
+      <thead><tr><th class="num">Vehículo</th><th>Placa</th><th>Propietario</th><th class="num">Pagos</th>
+      <th class="num">Entradas</th><th class="num">Salidas</th></tr></thead>
+      <tbody>${filas}</tbody></table></div>`;
+  }
+
+  /* ── Excel (ExcelJS desde CDN, igual que el informe de Recaudo diario) ── */
+  const LIB_EXCELJS = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
+  const _libs = {};
+  function cargarLibreria(src) {
+    if (!_libs[src]) {
+      _libs[src] = new Promise((ok, fail) => {
+        const s = document.createElement('script');
+        s.src = src; s.onload = ok;
+        s.onerror = () => { delete _libs[src]; fail(new Error('No se pudo descargar la librería. Revisa tu conexión.')); };
+        document.head.appendChild(s);
+      });
+    }
+    return _libs[src];
+  }
+
+  async function exportarExcel() {
+    if (!D || !D.pagos.length) return toast('No hay pagos para exportar', true);
+    const btn = $('btnExcel');
+    btn.disabled = true; btn.textContent = 'Generando…';
+    try {
+      await cargarLibreria(LIB_EXCELJS);
+      const buf = await armarExcel().xlsx.writeBuffer();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([buf],
+        { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+      a.download = `reporte_pagos_${D.desde}_a_${D.hasta}.xlsx`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      toast('Excel generado');
+    } catch (e) {
+      toast(e.message || 'No se pudo generar el Excel', true);
+    } finally {
+      btn.textContent = 'Exportar Excel';
+      btn.disabled = !D || !D.pagos.length;
+    }
+  }
+
+  function armarExcel() {
+    const AZUL = 'FF1F3A5F', AMARILLO = 'FFFFF4D6', BLANCO = 'FFFFFFFF', GRIS = 'FF999999';
+    const linea = { style: 'thin', color: { argb: 'FFC9CED6' } };
+    const BORDES = { top: linea, left: linea, bottom: linea, right: linea };
+    const DINERO = '$#,##0;[Red]-$#,##0;"-"', NUM = '#,##0;-#,##0;"-"', TEXTO = '@';
+    const FT = 5;   // fila de los títulos de columna
+    const relleno = argb => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
+    const arial = (extra = {}) => ({ name: 'Arial', size: 10, ...extra });
+    const letra = n => { let s = ''; for (; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + (n - 1) % 26) + s; return s; };
+    // Excel no maneja zonas horarias: las fechas se escriben con la hora de Bogotá como si fuera UTC.
+    const diaExcel = iso => { const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number); return new Date(Date.UTC(y, m - 1, d)); };
+    const horaExcel = utc => utc ? new Date(Date.parse(utc) - 5 * 3600e3) : null;
+    const vehiculo = n => (n == null || n === '') ? '' : (/^\d+$/.test(String(n)) ? Number(n) : n);
+
+    const f = D.filtros;
+    const trozos = [];
+    if (f.conductor)   trozos.push('Conductor: ' + f.conductor.nombre);
+    if (f.propietario) trozos.push('Propietario: ' + f.propietario.nombre);
+    if ($('fBus').value)      trozos.push('Vehículo: ' + $('fBus').selectedOptions[0].textContent);
+    if ($('fConcepto').value) trozos.push('Concepto: ' + $('fConcepto').selectedOptions[0].textContent);
+    if ($('fSigno').value)    trozos.push($('fSigno').value === '2' ? 'Solo entradas' : 'Solo salidas');
+    trozos.push('Estado: ' + f.estado);
+    const sub = `Periodo del ${fmtDiaCorto(D.desde)} al ${fmtDiaCorto(D.hasta)} · ${trozos.join(' · ')}`;
+    const generado = `Generado el ${fmtFechaHora(new Date())} por ${(D.generado_por || CU.nombre || '').toUpperCase()} · `
+      + 'Los pagos anulados no suman en los totales';
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'BusControl';
+    wb.calcProperties.fullCalcOnLoad = true;
+
+    function hoja(nombre, titulo, cols, congelar = 0) {
+      const ws = wb.addWorksheet(nombre, { views: [{ state: 'frozen', xSplit: congelar, ySplit: FT, showGridLines: false }] });
+      ws.columns = cols.map(c => ({ width: c.w }));
+      [[titulo, { bold: true, size: 14, color: { argb: AZUL } }], [sub, { color: { argb: 'FF555555' } }],
+       [generado, { size: 9, color: { argb: 'FF777777' } }]].forEach(([texto, fu], i) => {
+        ws.mergeCells(i + 1, 1, i + 1, cols.length);
+        Object.assign(ws.getCell(i + 1, 1), { value: texto, font: arial(fu) });
+      });
+      const hr = ws.getRow(FT);
+      hr.values = cols.map(c => c.t);
+      hr.height = 30;
+      hr.eachCell(c => Object.assign(c, { font: arial({ bold: true, color: { argb: BLANCO } }), fill: relleno(AZUL),
+        border: BORDES, alignment: { horizontal: 'center', vertical: 'middle', wrapText: true } }));
+      ws.pageSetup = { paperSize: 1, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0,
+        printTitlesRow: `${FT}:${FT}`, margins: { left: 0.4, right: 0.4, top: 0.5, bottom: 0.5, header: 0.3, footer: 0.3 } };
+      return ws;
+    }
+    // c: centrado · f: formato · s: se suma en los totales · wrap: texto en varias líneas
+    function estilo(cell, col, fuente = arial(), fondo = col.fill) {
+      cell.font = fuente;
+      cell.border = BORDES;
+      if (fondo) cell.fill = relleno(fondo);
+      if (col.f) cell.numFmt = col.f;
+      if (col.c) cell.alignment = { horizontal: 'center' };
+      if (col.wrap) cell.alignment = { wrapText: true, vertical: 'top' };
+    }
+    function pintar(ws, cols, filas, fuenteDe) {
+      filas.forEach(fila => {
+        const r = ws.addRow(cols.map(c => c.v(fila)));
+        const fuente = fuenteDe ? fuenteDe(fila) : arial();
+        cols.forEach((c, i) => estilo(r.getCell(i + 1), c, fuente));
+      });
+      return ws.rowCount;
+    }
+    function filaTotal(ws, cols, etiqueta, hastaCol, valores) {
+      const r = ws.rowCount + 1;
+      ws.mergeCells(r, 1, r, hastaCol);
+      ws.getCell(r, 1).value = etiqueta;
+      cols.forEach((col, i) => {
+        const cell = ws.getCell(r, i + 1);
+        if (col.s) cell.value = valores(col, i + 1);
+        estilo(cell, col.s ? { f: col.f } : {}, arial({ bold: true }), AMARILLO);
+      });
+      return r;
+    }
+
+    /* Hoja 1 — Detalle: una fila por pago (vehículo y placa en columnas distintas) */
+    const COLS = [
+      { t: 'N° pago', w: 10, c: true, v: p => p.numero },
+      { t: 'Fecha', w: 11, c: true, f: 'dd/mm/yyyy', v: p => diaExcel(p.fecha) },
+      { t: 'Hora', w: 8, c: true, f: 'hh:mm', v: p => horaExcel(p.created_at) },
+      { t: 'Movimiento', w: 11, c: true, v: p => p.tipo },
+      { t: 'Concepto', w: 26, v: p => p.concepto_nombre },
+      { t: 'Cuenta', w: 12, c: true, f: TEXTO, v: p => p.cuenta || '' },
+      { t: 'Centro de costo', w: 9, c: true, f: TEXTO, v: p => p.centro_costo || '' },
+      { t: 'Vehículo', w: 9, c: true, v: p => vehiculo(p.bus_numero) },
+      { t: 'Placa', w: 10, c: true, f: TEXTO, v: p => p.bus_placa || '' },
+      { t: 'Tercero (a nombre de)', w: 28, v: p => p.tercero_nombre || '' },
+      { t: 'Tipo doc.', w: 8, c: true, v: p => p.tercero_tipo_documento || '' },
+      { t: 'Documento', w: 14, c: true, f: TEXTO, v: p => docConDv(p.tercero_documento, p.tercero_dv) },
+      { t: 'Quién pagó', w: 28, v: p => p.pagador_nombre || '' },
+      { t: 'Tipo doc.', w: 8, c: true, v: p => p.pagador_tipo_documento || '' },
+      { t: 'Documento', w: 14, c: true, f: TEXTO, v: p => docConDv(p.pagador_documento, p.pagador_dv) },
+      { t: 'Entrada', w: 14, f: DINERO, s: true, v: p => (p.signo === 2 && !p.anulado_at) ? p.valor : null },
+      { t: 'Salida', w: 14, f: DINERO, s: true, v: p => (p.signo === 1 && !p.anulado_at) ? p.valor : null },
+      { t: 'Observación', w: 32, wrap: true, v: p => p.observacion || '' },
+      { t: 'Registró', w: 20, v: p => p.usuario_nombre || '' },
+      { t: 'Estado', w: 10, c: true, v: p => p.estado },
+      { t: 'Anulado por', w: 18, v: p => p.anulado_por_nombre || '' },
+      { t: 'Fecha anulación', w: 16, c: true, f: 'dd/mm/yyyy hh:mm', v: p => horaExcel(p.anulado_at) },
+      { t: 'Motivo de la anulación', w: 30, wrap: true, v: p => p.motivo_anulacion || '' },
+      { t: 'Cierre de caja', w: 12, c: true, v: p => p.cierre_id ? 'N° ' + String(p.cierre_id).padStart(6, '0') : '' },
+    ];
+    const ws = hoja('Detalle', 'REPORTE DE PAGOS DIARIOS', COLS, 2);
+    const primera = FT + 1;
+    const ultima = pintar(ws, COLS, D.pagos, p => arial(p.anulado_at ? { strike: true, color: { argb: GRIS } } : {}));
+    filaTotal(ws, COLS, `Total de ${D.totales.pagos} pagos vigentes`, 15, (col, n) => ({
+      formula: `SUM(${letra(n)}${primera}:${letra(n)}${ultima})`,
+      result: col.t === 'Entrada' ? D.totales.ingresos : D.totales.egresos,
+    }));
+    ws.autoFilter = { from: { row: FT, column: 1 }, to: { row: ultima, column: COLS.length } };
+
+    /* Hoja 2 — Por día */
+    const C_DIA = [
+      { t: 'Fecha', w: 13, c: true, f: 'dd/mm/yyyy', v: d => diaExcel(d.fecha) },
+      { t: 'Pagos', w: 9, c: true, f: NUM, s: true, v: d => d.pagos },
+      { t: 'Entradas', w: 15, f: DINERO, s: true, v: d => d.ingresos },
+      { t: 'Salidas', w: 15, f: DINERO, s: true, v: d => d.egresos },
+      { t: 'Neto', w: 15, f: DINERO, s: true, v: d => d.neto },
+    ];
+    const wsDia = hoja('Por día', 'PAGOS POR DÍA', C_DIA, 1);
+    const pDia = FT + 1, uDia = pintar(wsDia, C_DIA, D.por_dia);
+    if (D.por_dia.length) filaTotal(wsDia, C_DIA, 'Total', 1, (col, n) => ({
+      formula: `SUM(${letra(n)}${pDia}:${letra(n)}${uDia})`,
+      result: { 2: D.totales.pagos, 3: D.totales.ingresos, 4: D.totales.egresos, 5: D.totales.neto }[n],
+    }));
+
+    /* Hoja 3 — Por concepto */
+    const C_CON = [
+      { t: 'Concepto', w: 30, v: c => c.concepto_nombre },
+      { t: 'Cuenta', w: 13, c: true, f: TEXTO, v: c => c.cuenta || '' },
+      { t: 'Movimiento', w: 11, c: true, v: c => c.signo === 2 ? 'Entrada' : 'Salida' },
+      { t: 'Pagos', w: 9, c: true, f: NUM, s: true, v: c => c.pagos },
+      { t: 'Total', w: 16, f: DINERO, s: true, v: c => c.total },
+    ];
+    const wsCon = hoja('Por concepto', 'PAGOS POR CONCEPTO', C_CON, 1);
+    const pCon = FT + 1, uCon = pintar(wsCon, C_CON, D.por_concepto);
+    if (D.por_concepto.length) filaTotal(wsCon, C_CON, 'Total', 3, (col, n) => ({
+      formula: `SUM(${letra(n)}${pCon}:${letra(n)}${uCon})`,
+      result: n === 4 ? D.totales.pagos : D.totales.ingresos + D.totales.egresos,
+    }));
+
+    /* Hoja 4 — Por vehículo (número y placa en columnas distintas) */
+    const C_BUS = [
+      { t: 'Vehículo', w: 10, c: true, v: b => vehiculo(b.numero) },
+      { t: 'Placa', w: 11, c: true, f: TEXTO, v: b => b.placa || '' },
+      { t: 'Propietario', w: 30, v: b => b.propietario || '' },
+      { t: 'Pagos', w: 9, c: true, f: NUM, s: true, v: b => b.pagos },
+      { t: 'Entradas', w: 15, f: DINERO, s: true, v: b => b.ingresos },
+      { t: 'Salidas', w: 15, f: DINERO, s: true, v: b => b.egresos },
+    ];
+    const wsBus = hoja('Por vehículo', 'PAGOS POR VEHÍCULO', C_BUS, 2);
+    const pBus = FT + 1, uBus = pintar(wsBus, C_BUS, D.por_bus);
+    if (D.por_bus.length) filaTotal(wsBus, C_BUS, 'Total de los pagos atados a un vehículo', 3, (col, n) => ({
+      formula: `SUM(${letra(n)}${pBus}:${letra(n)}${uBus})`,
+      result: D.por_bus.reduce((s, b) => s + (n === 4 ? b.pagos : n === 5 ? b.ingresos : b.egresos), 0),
+    }));
+
+    return wb;
+  }
+
+  /* ── Arranque: el mes en curso ── */
+  (function inicio() {
+    const hoy = hoyBogota();
+    $('fDesde').value = `${hoy.slice(0, 7)}-01`;
+    $('fHasta').value = hoy;
+    $('fDesde').max = hoy;
+    $('fHasta').max = hoy;
+    ['fConductor', 'fPropietario', 'fBus', 'fConcepto', 'fSigno', 'fEstado', 'fDesde', 'fHasta']
+      .forEach(id => $(id).addEventListener('change', buscar));
+    buscar();
+  })();
+</script>
+</body>
+</html>

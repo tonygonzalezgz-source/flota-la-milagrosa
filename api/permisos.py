@@ -119,6 +119,10 @@ VISTA_API = {
                         "POST /api/recaudo/<int:recaudo_id>/reimpresion",
                         "POST /api/recaudo/despacho/trabajo"),
     },
+    # Reporte de pagos: solo consulta (el Excel lo arma la pantalla con lo que trae este GET).
+    "recaudo-reportes": {
+        VER: _api("GET /api/recaudo/pagos/reporte"),
+    },
     "recaudo-pagos": {
         VER: _api("GET /api/recaudo/pagos", "GET /api/recaudo/terceros", "GET /api/recaudo/conceptos"),
         MODIFICAR: _api("POST /api/recaudo/pagos", "POST /api/recaudo/pagos/<int:pago_id>/reimpresion",
@@ -163,6 +167,7 @@ GRUPOS = (
         ("recaudo-diario", "Recaudo diario", "Modificar: liquidar y reimprimir tirillas (anular es del administrador)"),
         ("recaudo-pagos", "Pagos diarios", "Modificar: registrar pagos y terceros (anular es del administrador)"),
         ("recaudo-caja", "Cierre de caja", "Modificar: cerrar su caja (reabrir es del administrador)"),
+        ("recaudo-reportes", "Reporte de pagos", "Consultar y exportar a Excel los pagos diarios de un periodo"),
     )),
     ("Monitoreo GPS", (
         ("mb-mapa", "Mapa en vivo", ""),
@@ -220,6 +225,7 @@ PLANTILLAS = {
                      "relojes": VER},
     "Conductor": {"alistamiento": MODIFICAR},
     "Recaudador": {"recaudo-diario": MODIFICAR, "recaudo-pagos": MODIFICAR, "recaudo-caja": MODIFICAR,
+                   "recaudo-reportes": VER,
                    "historial": VER, "despacho": VER, "historial-despacho": VER, "chequeo": VER,
                    "alistamiento": VER},
 }
