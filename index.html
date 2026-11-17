@@ -1279,6 +1279,20 @@
               Cierre de caja
             </button>
           </li>
+          <!-- Reporte de pagos -->
+          <li>
+            <button class="sb-link" id="nav-recaudo-reportes" data-view="recaudo-reportes" data-src="recaudo-reportes.html" onclick="switchView(this)">
+              <span class="sb-icon">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                  <path d="M3 3v18h18"/>
+                  <rect x="7" y="12" width="3" height="6"/>
+                  <rect x="13" y="8" width="3" height="10"/>
+                  <path d="M19 5v13"/>
+                </svg>
+              </span>
+              Reporte de pagos
+            </button>
+          </li>
         </ul>
       </li>
 
@@ -1809,6 +1823,15 @@
               onload="iframeLoaded('recaudo-caja')"></iframe>
     </div>
 
+    <div class="view-panel" id="view-recaudo-reportes">
+      <div class="iframe-loader" id="loader-recaudo-reportes">
+        <div class="loader-ring"></div>
+        <div class="loader-text">Cargando Reporte de pagos…</div>
+      </div>
+      <iframe id="iframe-recaudo-reportes" src="" title="Reporte de pagos"
+              onload="iframeLoaded('recaudo-reportes')"></iframe>
+    </div>
+
     <div class="view-panel" id="view-auditoria">
       <div class="iframe-loader" id="loader-auditoria">
         <div class="loader-ring"></div>
@@ -1897,6 +1920,7 @@
     'recaudo-diario':     { label: 'Recaudo diario',         icon: 'receipt', src: 'recaudo-diario.html' },
     'recaudo-pagos':      { label: 'Pagos diarios',          icon: 'receipt', src: 'recaudo-pagos.html' },
     'recaudo-caja':       { label: 'Cierre de caja',         icon: 'receipt', src: 'recaudo-caja.html' },
+    'recaudo-reportes':   { label: 'Reporte de pagos',       icon: 'receipt', src: 'recaudo-reportes.html' },
     auditoria:            { label: 'Historial de modificaciones', icon: 'book', src: 'auditoria.html' },
   };
 
@@ -2378,6 +2402,7 @@
     'mb-equipos':         { bg: '#2a0f0f', svg: `<svg width="18" height="18" fill="none" stroke="#f87171" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="2" y="14" width="20" height="7" rx="2"/><path d="M6 17.5h.01M10 17.5h.01"/><path d="M8.5 10.5a5 5 0 0 1 7 0M6 8a8.5 8.5 0 0 1 12 0"/></svg>` },
     auditoria:            { bg: '#1f1530', svg: `<svg width="18" height="18" fill="none" stroke="#c084fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><polyline points="3 3 3 8 8 8"/><polyline points="12 7 12 12 15 14"/></svg>` },
     'recaudo-caja':       { bg: '#2a2508', svg: `<svg width="18" height="18" fill="none" stroke="#facc15" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/><line x1="12" y1="15" x2="12" y2="17"/></svg>` },
+    'recaudo-reportes':   { bg: '#2a2508', svg: `<svg width="18" height="18" fill="none" stroke="#facc15" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="13" y="8" width="3" height="10"/><path d="M19 5v13"/></svg>` },
     'recaudo-pagos':      { bg: '#2a2508', svg: `<svg width="18" height="18" fill="none" stroke="#facc15" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>` },
     'recaudo-diario':     { bg: '#2a2508', svg: `<svg width="18" height="18" fill="none" stroke="#facc15" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>` },
   };
@@ -2410,6 +2435,14 @@
   /* ═══════════════════════════════════════
      7. NAVEGACIÓN ENTRE VISTAS
   ═══════════════════════════════════════ */
+  // Una pantalla pide abrir otra vista (p. ej. el botón "Ver reporte" de Pagos diarios).
+  // switchView ya valida los permisos, marca el botón y abre el grupo del menú.
+  window.addEventListener('message', (e) => {
+    if (e.data?.type !== 'IR_A_VISTA' || e.origin !== window.location.origin) return;
+    const btn = document.getElementById('nav-' + String(e.data.view || ''));
+    if (btn) switchView(btn);
+  });
+
   // Propagar cambios del Catálogo a todos los iframes cargados
   window.addEventListener('message', (e) => {
     if (e.data?.type !== 'CATALOG_UPDATED') return;

@@ -26,6 +26,7 @@ parqueos, abonos, anticipos, reembolsos…).
   y al archivo plano (contable.py).
 """
 import re
+from datetime import date
 
 from flask import jsonify, request
 
@@ -35,7 +36,9 @@ from . import bp
 from .comun import EMPRESA_POR_DEFECTO, ROLES_RECAUDO, db, hoy_bogota, rol
 from .endpoints import (_ahora, _entero, _fecha_iso, _fecha_valida, _hora_utc, _Rechazo, _texto,
                         autorizar_reimpresion, dia_sin_cerrar, reimpresiones)
-from .terceros import TIPOS_DOCUMENTO, documento_con_dv, pagadores, tercero_de_pagador
+from .informe import MAX_DIAS, _orden_bus
+from .terceros import (TIPOS_DOCUMENTO, _documento_catalogo, documento_con_dv, pagadores,
+                       tercero_de_pagador)
 
 ADMIN = ("Administrador",)
 _PAGO_MAXIMO = 50_000_000
@@ -381,3 +384,199 @@ def anular_pago(pago_id):
     conn.commit()
     conn.close()
     return jsonify({"ok": True})
+
+
+# ──────────────────────────────────────────
+#  Reporte de pagos (pantalla Reporte de pagos): un periodo, con filtros y Excel
+# ──────────────────────────────────────────
+#
+# Un pago no guarda conductor_id ni propietario_id: solo copia el nombre y el documento
+# de a quién va la factura (`tercero_*`) y de quién puso la plata (`pagador_*`). Por eso
+# los filtros por persona se resuelven cruzando documentos NORMALIZADOS (los mismos que
+# guarda el pago) contra el catálogo de hoy, y los del propietario además por sus buses.
+# Límites conocidos, avisados en la pantalla: si cambian una cédula en el catálogo, los
+# pagos viejos dejan de cruzar; y un bus que cambió de dueño arrastra los pagos del dueño
+# anterior.
+
+def _solo_digitos(valor):
+    return re.sub(r"\D", "", str(valor or ""))
+
+
+def _documentos_de(crudo, puede_ser_nit=False):
+    """Documentos con los que puede estar guardado ese número en un pago: el normalizado
+    del catálogo y, por si acaso, los dígitos tal cual (un NIT con el DV pegado, por
+    ejemplo: `_documento_catalogo` lo devuelve sin DV y los pagos de concepto PROPIETARIO
+    copian lo que diga la tarjeta de propiedad)."""
+    _tipo, doc = _documento_catalogo(crudo, puede_ser_nit=puede_ser_nit)
+    return {d for d in (doc, _solo_digitos(crudo)) if d}
+
+
+def _marcadores(n):
+    return ",".join("?" * n)
+
+
+def _buses_del_propietario(conn, propietario_id, documentos):
+    """Buses de ese propietario: los del catálogo (`propietario_id`) y los que lo tengan
+    en la tarjeta de propiedad (`tp_propietario_documento`), que no siempre coinciden."""
+    ids = {r["id"] for r in conn.execute(
+        "SELECT id FROM buses WHERE propietario_id = ?", (propietario_id,)).fetchall()}
+    if documentos:
+        for r in conn.execute("SELECT id, tp_propietario_documento FROM buses").fetchall():
+            if _solo_digitos(dict(r)["tp_propietario_documento"]) in documentos:
+                ids.add(dict(r)["id"])
+    return sorted(ids)
+
+
+def _listas_reporte(conn):
+    """Lo que llena los filtros de la pantalla. Van los inactivos también (marcados): un
+    pago viejo puede ser de un conductor que ya no está."""
+    conductores = [dict(r) for r in conn.execute(
+        "SELECT id, nombre, cedula, activo FROM conductores ORDER BY activo DESC, nombre").fetchall()]
+    propietarios = [dict(r) for r in conn.execute(
+        "SELECT id, nombre, cedula, activo FROM propietarios ORDER BY activo DESC, nombre").fetchall()]
+    buses = sorted(
+        (dict(r) for r in conn.execute("SELECT id, numero, placa, grupo FROM buses").fetchall()),
+        key=lambda b: _orden_bus(b["numero"]))
+    return {"conductores": conductores, "propietarios": propietarios, "buses": buses,
+            "conceptos": conceptos_pago(conn)}
+
+
+def _resumenes(pagos):
+    """Los tres cortes que ve la pantalla y que van al Excel, solo con los vigentes."""
+    dias, conceptos, buses = {}, {}, {}
+    for p in pagos:
+        if p.get("anulado_at"):
+            continue
+        entra = p["signo"] == 2
+        valor = int(p["valor"])
+        d = dias.setdefault(p["fecha"], {"fecha": p["fecha"], "pagos": 0, "ingresos": 0, "egresos": 0})
+        c = conceptos.setdefault(p["concepto_id"], {
+            "concepto_id": p["concepto_id"], "concepto_nombre": p["concepto_nombre"],
+            "cuenta": p["cuenta"], "signo": p["signo"], "pagos": 0, "total": 0})
+        for x in (d, c):
+            x["pagos"] += 1
+        c["total"] += valor
+        d["ingresos" if entra else "egresos"] += valor
+        if p.get("bus_id"):
+            b = buses.setdefault(p["bus_id"], {
+                "bus_id": p["bus_id"], "numero": p.get("bus_numero"), "placa": p.get("bus_placa"),
+                "propietario": p.get("tercero_nombre") if p["concepto_tercero"] == "PROPIETARIO" else None,
+                "pagos": 0, "ingresos": 0, "egresos": 0})
+            b["pagos"] += 1
+            b["ingresos" if entra else "egresos"] += valor
+            if not b["propietario"] and p["concepto_tercero"] == "PROPIETARIO":
+                b["propietario"] = p.get("tercero_nombre")
+    for d in dias.values():
+        d["neto"] = d["ingresos"] - d["egresos"]
+    return (sorted(dias.values(), key=lambda d: d["fecha"]),
+            sorted(conceptos.values(), key=lambda c: (-c["signo"], c["concepto_nombre"])),
+            sorted(buses.values(), key=lambda b: _orden_bus(b["numero"])))
+
+
+@bp.route("/api/recaudo/pagos/reporte", methods=["GET"])
+@rol(*ROLES_RECAUDO)
+def reporte_pagos():
+    """Pagos diarios de un periodo con filtros, para la pantalla Reporte de pagos (el Excel
+    lo arma recaudo-reportes.html). A diferencia del listado del día, aquí el Recaudador ve
+    los pagos de todos (decisión del usuario 2026-11-17): el reporte es para cuadrar la caja
+    del periodo, no para operar."""
+    a = request.args
+    desde, hasta = _fecha_valida(a.get("desde")), _fecha_valida(a.get("hasta"))
+    if not desde or not hasta:
+        return jsonify({"error": "Fechas inválidas (use AAAA-MM-DD)"}), 400
+    if desde > hasta:
+        return jsonify({"error": "La fecha inicial no puede ser mayor que la final"}), 400
+    if (date.fromisoformat(hasta) - date.fromisoformat(desde)).days >= MAX_DIAS:
+        return jsonify({"error": f"El reporte abarca máximo {MAX_DIAS} días"}), 400
+
+    estado = (a.get("estado") or "vigentes").lower()
+    if estado not in ("vigentes", "anulados", "todos"):
+        return jsonify({"error": "Estado inválido (vigentes, anulados o todos)"}), 400
+
+    conn = db()
+    try:
+        where = ["p.fecha BETWEEN ? AND ?", "p.empresa_id = ?"]
+        params = [desde, hasta, EMPRESA_POR_DEFECTO]
+        if estado == "vigentes":
+            where.append("p.anulado_at IS NULL")
+        elif estado == "anulados":
+            where.append("p.anulado_at IS NOT NULL")
+        for campo, etiqueta in (("concepto_id", "El concepto"), ("bus_id", "El vehículo")):
+            if a.get(campo):
+                where.append(f"p.{campo} = ?")
+                params.append(_entero(a.get(campo), etiqueta))
+        if a.get("signo"):
+            signo = _entero(a.get("signo"), "El tipo de movimiento")
+            if signo not in (1, 2):
+                raise _Rechazo("El tipo de movimiento debe ser 1 (salida) o 2 (entrada)")
+            where.append("p.signo = ?")
+            params.append(signo)
+
+        aviso, conductor, propietario = None, None, None
+        if a.get("conductor_id"):
+            cid = _entero(a.get("conductor_id"), "El conductor")
+            fila = conn.execute("SELECT id, nombre, cedula FROM conductores WHERE id = ?", (cid,)).fetchone()
+            if not fila:
+                raise _Rechazo("El conductor no existe", 404)
+            conductor = dict(fila)
+            docs = sorted(_documentos_de(conductor["cedula"]))
+            if not docs:
+                aviso = (f"{conductor['nombre']} no tiene cédula en el catálogo, así que sus pagos "
+                         "no se pueden relacionar. Complétala en Catálogo › Conductores.")
+                where.append("1 = 0")
+            else:
+                where.append(f"(p.pagador_documento IN ({_marcadores(len(docs))}) "
+                             f"OR p.tercero_documento IN ({_marcadores(len(docs))}))")
+                params.extend(docs + docs)
+
+        if a.get("propietario_id"):
+            pid = _entero(a.get("propietario_id"), "El propietario")
+            fila = conn.execute("SELECT id, nombre, cedula FROM propietarios WHERE id = ?", (pid,)).fetchone()
+            if not fila:
+                raise _Rechazo("El propietario no existe", 404)
+            propietario = dict(fila)
+            docs = sorted(_documentos_de(propietario["cedula"], puede_ser_nit=True))
+            buses_suyos = _buses_del_propietario(conn, pid, docs)
+            ramas, vals = [], []
+            if docs:
+                ramas.append(f"p.tercero_documento IN ({_marcadores(len(docs))})")
+                vals.extend(docs)
+                ramas.append(f"p.pagador_documento IN ({_marcadores(len(docs))})")
+                vals.extend(docs)
+            if buses_suyos:
+                ramas.append(f"p.bus_id IN ({_marcadores(len(buses_suyos))})")
+                vals.extend(buses_suyos)
+            if not ramas:
+                aviso = (f"{propietario['nombre']} no tiene cédula ni buses asignados, así que sus "
+                         "pagos no se pueden relacionar. Complétalo en Catálogo.")
+                where.append("1 = 0")
+            else:
+                where.append("(" + " OR ".join(ramas) + ")")
+                params.extend(vals)
+    except _Rechazo as e:
+        conn.close()
+        return jsonify({"error": str(e)}), e.status
+
+    pagos = cargar_pagos(conn, " AND ".join(where), params)
+    pagos.sort(key=lambda p: (p["fecha"], p.get("created_at") or "", p["id"]))
+    for p in pagos:
+        p["numero"] = numero_pago(p["id"])
+        p["tipo"] = "Entrada" if p["signo"] == 2 else "Salida"
+        p["estado"] = "Anulado" if p.get("anulado_at") else "Vigente"
+    totales = totales_pagos(pagos)
+    totales["neto"] = totales["ingresos"] - totales["egresos"]
+    totales["anulados"] = sum(1 for p in pagos if p.get("anulado_at"))
+    por_dia, por_concepto, por_bus = _resumenes(pagos)
+    uid = getattr(request, "jwt_user_id", None)
+    quien_pide = conn.execute("SELECT nombre FROM usuarios WHERE id = ?", (uid,)).fetchone() if uid else None
+    listas = _listas_reporte(conn)
+    conn.close()
+    return jsonify({
+        "desde": desde, "hasta": hasta, "hoy": hoy_bogota(),
+        "generado_por": dict(quien_pide)["nombre"] if quien_pide else None,
+        "aviso": aviso,
+        "filtros": {"conductor": conductor, "propietario": propietario, "estado": estado},
+        "pagos": pagos, "totales": totales,
+        "por_dia": por_dia, "por_concepto": por_concepto, "por_bus": por_bus,
+        "listas": listas,
+    })
