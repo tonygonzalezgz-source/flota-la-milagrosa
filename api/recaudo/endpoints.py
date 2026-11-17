@@ -810,6 +810,64 @@ def _vigente(conn, bus_id, fecha):
     ).fetchone()
 
 
+@bp.route("/api/recaudo/despacho/trabajo", methods=["POST"])
+@rol(*ROLES_RECAUDO)
+def corregir_estado_despacho():
+    """El despacho dejó el bus en taller o descanso, pero sí trabajó: lo pasa a
+    «trabajando» para poder liquidarlo (pedido del usuario 2026-11-17). Pasa sobre
+    todo con los domingos, que se liquidan días después, cuando la pantalla de
+    Despacho ya no sirve (solo maneja el día de hoy). No toca conductor, ruta ni
+    registradora: el despacho los borró al pasar el bus a descanso y se llenan aquí
+    al liquidar. Queda en el historial de modificaciones."""
+    data = request.get_json(silent=True) or {}
+    fecha = _fecha_valida(data.get("fecha"))
+    if not fecha:
+        return jsonify({"error": "Fecha inválida (use AAAA-MM-DD)"}), 400
+    permitido, motivo = _puede_liquidar(fecha)
+    if not permitido:
+        return jsonify({"error": motivo}), 403
+
+    conn = db()
+    try:
+        bus_id = _entero(data.get("bus_id"), "El vehículo")
+    except _Rechazo as e:
+        conn.close()
+        return jsonify({"error": str(e)}), e.status
+
+    fila = conn.execute(
+        """SELECT d.id, d.estado, b.numero, b.placa
+             FROM despacho_diario d JOIN buses b ON b.id = d.bus_id
+            WHERE d.bus_id = ? AND d.fecha = ?""",
+        (bus_id, fecha),
+    ).fetchone()
+    if not fila:
+        conn.close()
+        return jsonify({"error": "Ese día el bus no tiene despacho: liquídalo y el despacho "
+                                 "se crea solo."}), 404
+    fila = dict(fila)
+    antes = fila["estado"] or "trabajando"
+    if antes == "trabajando":   # alguien más lo corrigió: la pantalla se recarga y ya
+        conn.close()
+        return jsonify({"ok": True, "estado": "trabajando", "antes": antes})
+    if _vigente(conn, bus_id, fecha):
+        conn.close()
+        return jsonify({"error": f"El bus {fila['numero']} ya está liquidado ese día."}), 409
+
+    conn.execute(
+        "UPDATE despacho_diario SET estado = 'trabajando', updated_at = CURRENT_TIMESTAMP "
+        "WHERE id = ?", (fila["id"],))
+    auditoria.registrar(
+        conn, "despacho", "despacho", fila["id"], "editar",
+        f"Pasó el bus {fila['numero']} ({fila['placa'] or 's/placa'}) del {fecha} de {antes} a "
+        "trabajando desde Recaudo diario: el despacho lo marcó mal y el bus sí trabajó",
+        {"fecha": fecha, "bus": fila["numero"], "estado": [antes, "trabajando"],
+         "desde": "recaudo-diario"},
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({"ok": True, "estado": "trabajando", "antes": antes})
+
+
 @bp.route("/api/recaudo", methods=["POST"])
 @rol(*ROLES_RECAUDO)
 def liquidar():
