@@ -51,6 +51,7 @@
     .aviso { background:#fef3c7; border:1px solid #fcd34d; color:#92400e; border-radius:var(--radius-s);
       padding:10px 12px; font-size:12.5px; line-height:1.5; margin-bottom:14px; }
     .aviso.info { background:#eef2ff; border-color:#c7d2fe; color:#3730a3; }
+    .aviso-acciones { margin-top:10px; }
     .aviso.bad  { background:#fef2f2; border-color:#fecaca; color:#991b1b; }
 
     .layout { display:grid; grid-template-columns:minmax(280px,360px) minmax(0,1fr); gap:16px; align-items:start; }
@@ -408,6 +409,18 @@
     </div>
   </div>
 
+  <!-- Modal: el despacho marcó el bus en taller o descanso, pero sí trabajó -->
+  <div class="modal-bg hidden" id="modalTrabajo">
+    <div class="modal">
+      <h3>¿Este bus sí trabajó?</h3>
+      <div class="modal-sub" id="trabajoSub"></div>
+      <div class="modal-actions">
+        <button class="btn" onclick="cerrarModal('modalTrabajo')">Cancelar</button>
+        <button class="btn-primary" id="btnTrabajo" onclick="confirmarTrabajo()">Sí, trabajó</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal: anular liquidación (solo Administrador) -->
   <div class="modal-bg hidden" id="modalAnular">
     <div class="modal">
@@ -476,6 +489,7 @@
   const SOLO_VER = (CU.soloLectura || []).includes('recaudo-diario');
   const GRUPOS = { A: 'Buses', B: 'Micros' };
   const TIPO   = { A: 'Bus', B: 'Micro' };
+  const ESTADO_TXT = { taller: 'taller', descanso: 'descanso' };
 
   async function apiFetch(path, opts = {}) {
     const token = localStorage.getItem('authToken');
@@ -973,8 +987,14 @@
     </div>`;
 
     if (noTrabajo(b)) {
-      card.innerHTML = head + `<div class="aviso">El despacho marca este bus en <b>${b.estado}</b>, así que no se liquida.
-        Si en realidad trabajó, primero hay que corregir su estado en el despacho.</div>`;
+      /* El despacho lo dejó en taller o descanso. Si en realidad trabajó (pasa sobre todo con
+         los domingos, que se liquidan días después, cuando la pantalla de Despacho ya no sirve
+         porque solo maneja el día de hoy), aquí mismo se corrige el estado. */
+      card.innerHTML = head + `<div class="aviso">El despacho marca este bus en <b>${ESTADO_TXT[b.estado] || b.estado}</b>, así que no se liquida.
+        ${D.editable && !SOLO_VER
+          ? `Si en realidad trabajó, corrige el estado y podrás liquidarlo enseguida.
+             <div class="aviso-acciones"><button class="btn" onclick="abrirTrabajo()">Sí trabajó: pasarlo a Trabajando</button></div>`
+          : 'Si en realidad trabajó, primero hay que corregir su estado en el despacho.'}</div>`;
       return;
     }
 
@@ -1943,6 +1963,44 @@
       cerrarModal('modalAnular');
       dirty = false;
       toast(`Liquidación del bus ${b.numero} anulada`);
+      await cargar();
+    } catch (e) {
+      toast(e.message, true);
+      btn.disabled = false;
+    }
+  }
+
+  /* ── El despacho marcó el bus en taller o descanso, pero sí trabajó (pedido del usuario
+     2026-11-17) ── La pantalla de Despacho solo maneja el día de hoy, así que un domingo que
+     se liquida el martes ya no se puede corregir allá. Aquí se pasa a Trabajando y queda en
+     el historial de modificaciones; conductor, ruta y registradora se llenan al liquidar. */
+  function abrirTrabajo() {
+    const b = bus(selId);
+    if (!b || !noTrabajo(b) || !D.editable || SOLO_VER) return;
+    document.getElementById('trabajoSub').innerHTML =
+      `El despacho dejó el <b>${TIPO[b.grupo] || 'Bus'} ${esc(b.numero)}</b> en <b>${ESTADO_TXT[b.estado] || esc(b.estado)}</b> el ${fmtDiaCorto(fecha)}.
+       Si en realidad trabajó, se corrige a <b>Trabajando</b> y podrás liquidarlo enseguida.
+       Conductor, ruta y registradora los llenas en la liquidación. El cambio queda en el historial de modificaciones.`;
+    document.getElementById('btnTrabajo').disabled = false;
+    abrirModal('modalTrabajo');
+  }
+
+  async function confirmarTrabajo() {
+    const b = bus(selId);
+    if (!b) return;
+    const btn = document.getElementById('btnTrabajo');
+    btn.disabled = true;
+    try {
+      await apiFetch('/api/recaudo/despacho/trabajo', {
+        method: 'POST',
+        body: JSON.stringify({ fecha, bus_id: b.id }),
+      });
+      cerrarModal('modalTrabajo');
+      dirty = false;
+      // El bus sale del filtro "No trabajaron": para que no desaparezca de la lista, se pasa
+      // al de pendientes, que es donde queda.
+      if (filtro === 'notrabajo') filtro = 'pendientes';
+      toast(`Bus ${b.numero} corregido a Trabajando: ya se puede liquidar`);
       await cargar();
     } catch (e) {
       toast(e.message, true);
