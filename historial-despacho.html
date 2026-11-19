@@ -192,9 +192,31 @@
       border-radius: 12px;
       overflow-x: auto;
       -webkit-overflow-scrolling: touch;
+      position: relative;
+      scrollbar-width: thin;
     }
+    .table-wrap::-webkit-scrollbar { height: 9px; }
+    .table-wrap::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 6px; }
 
-    table { width: 100%; min-width: 600px; border-collapse: collapse; }
+    table { width: 100%; min-width: 600px; border-collapse: separate; border-spacing: 0; }
+
+    /* La columna de acciones viaja con el scroll horizontal: siempre a la vista */
+    th.col-acciones, td.col-corregir {
+      position: sticky; right: 0; z-index: 2;
+      background: var(--surface);
+      box-shadow: -8px 0 9px -8px rgba(0,0,0,.28);
+    }
+    thead th.col-acciones { background: var(--card); z-index: 3; }
+    tbody tr:hover td.col-corregir { background: #fafafb; }
+
+    /* El nombre del conductor puede ir en 2 líneas sin empujar la tabla */
+    td.col-conductor { min-width: 132px; max-width: 220px; }
+    .conductor-nombre { display: inline; white-space: normal; overflow-wrap: anywhere; line-height: 1.35; }
+
+    /* Datos que se juntan en una sola columna compacta en pantallas angostas */
+    .tipo-inline { display: none; margin-top: 4px; }
+    .compacto    { display: none; }
+    .th-mini     { display: none; }
 
     thead th {
       background: var(--card);
@@ -209,14 +231,14 @@
       white-space: nowrap;
     }
 
-    tbody tr {
-      border-bottom: 1px solid var(--border);
-      transition: background .1s;
-    }
-    tbody tr:last-child { border-bottom: none; }
+    tbody tr { transition: background .1s; }
     tbody tr:hover { background: #fafafb; }
 
-    tbody td { padding: 9px 14px; font-size: 13px; vertical-align: middle; }
+    tbody td {
+      padding: 9px 14px; font-size: 13px; vertical-align: middle;
+      border-bottom: 1px solid var(--border);
+    }
+    tbody tr:last-child td { border-bottom: none; }
 
     .bus-num {
       font-size: 17px;
@@ -323,6 +345,7 @@
       transition: all .13s;
     }
     .btn-corregir:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-corregir svg { flex-shrink: 0; }
     .pax-invalida {
       display: inline-block; padding: 2px 7px; border-radius: 6px;
       background: rgba(239,68,68,.12); color: #b91c1c; font-size: 10px; font-weight: 800;
@@ -423,6 +446,44 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    /* ── PANTALLAS MEDIANAS O CON ZOOM (menos de 1400px de ancho útil) ──
+       Más densidad y los botones de acción solo con ícono (el texto queda en
+       el tooltip), para que la columna de acciones ocupe lo mínimo. */
+    @media (max-width: 1400px) {
+      .topbar { padding: 0 14px; gap: 10px; }
+      .table-area { padding: 14px 14px 20px; }
+      thead th { padding: 8px 9px; font-size: 9.5px; letter-spacing: .4px; }
+      tbody td { padding: 7px 9px; font-size: 12px; }
+      .bus-num { font-size: 15px; }
+      .bus-placa { font-size: 10px; }
+      .ruta-nombre, .ruta-vacia, .conductor-vacio { font-size: 11.5px; }
+      .acciones-adm { flex-wrap: nowrap; gap: 5px; }
+      .btn-corregir { padding: 6px 8px; gap: 0; }
+      .btn-corregir .btn-txt { display: none; }
+    }
+
+    /* ── PANTALLAS ANGOSTAS (menos de 1200px de ancho útil) ──
+       REG Fin, Pax y Viajes se juntan bajo la registradora inicial y el tipo
+       baja como badge debajo del número de la unidad. */
+    @media (max-width: 1200px) {
+      th.col-tipo, td.col-tipo,
+      th.col-regfin, td.col-regfin,
+      th.col-pax, td.col-pax,
+      th.col-viajes, td.col-viajes { display: none; }
+
+      .tipo-inline { display: inline-block; }
+      .compacto {
+        display: block; margin-top: 2px;
+        font-size: 10.5px; font-weight: 600; color: var(--txt2);
+        white-space: nowrap; letter-spacing: .1px;
+      }
+      .compacto .pax-invalida { font-size: 9px; padding: 1px 5px; }
+      .th-full { display: none; }
+      .th-mini { display: inline; }
+      td.col-conductor { min-width: 120px; max-width: 170px; }
+      tbody td { padding: 7px 8px; }
+    }
+
     /* ── RESPONSIVE MÓVIL ── */
     @media (max-width: 720px) {
       .rel-grid { grid-template-columns: 1fr; }
@@ -467,16 +528,23 @@
         margin-bottom: 2px;
       }
       .table-wrap { background: transparent; border: none; border-radius: 0; overflow: visible; }
+      td.col-corregir { position: static; box-shadow: none; background: transparent; }
+      tbody td { border-bottom: none; }
       table { min-width: unset; }
       tbody td.col-corregir { width: 100%; }
       tbody td.col-corregir::before { display: none; }
-      .btn-corregir { width: 100%; justify-content: center; padding: 8px; font-size: 12px; }
+      .btn-corregir { flex: 1; justify-content: center; padding: 8px; font-size: 12px; gap: 5px; }
+      .btn-corregir .btn-txt { display: inline; }   /* en tarjeta sí cabe el texto */
+      .acciones-adm { flex-wrap: wrap; width: 100%; }
       .modal-bg { align-items: flex-end; padding: 0; }
       .modal { max-width: none; border-radius: 16px 16px 0 0; max-height: 92vh; }
       .modal-foot { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 18px); }
       .modal-foot button { flex: 1; }
     }
   </style>
+  <!-- Ajustes de pantalla comunes (scroll de tablas y densidad) -->
+  <link rel="stylesheet" href="bc-pantalla.css" />
+  <script defer src="bc-pantalla.js"></script>
 </head>
 <body>
 <div class="page">
@@ -732,16 +800,16 @@
             <table>
               <thead>
                 <tr>
-                  <th>Unidad</th>
-                  <th>Tipo</th>
-                  <th>Conductor</th>
-                  <th>Ruta</th>
-                  <th style="text-align:right">REG Ini</th>
-                  <th style="text-align:right">REG Fin</th>
-                  <th style="text-align:right">Pax</th>
-                  <th>Estado</th>
-                  <th style="text-align:right">Viajes</th>
-                  ${esAdmin ? '<th></th>' : ''}
+                  <th class="col-unidad">Unidad</th>
+                  <th class="col-tipo">Tipo</th>
+                  <th class="col-conductor">Conductor</th>
+                  <th class="col-ruta">Ruta</th>
+                  <th class="col-regini" style="text-align:right"><span class="th-full">REG Ini</span><span class="th-mini">REG</span></th>
+                  <th class="col-regfin" style="text-align:right">REG Fin</th>
+                  <th class="col-pax"    style="text-align:right">Pax</th>
+                  <th class="col-estado">Estado</th>
+                  <th class="col-viajes" style="text-align:right">Viajes</th>
+                  ${esAdmin ? '<th class="col-acciones"></th>' : ''}
                 </tr>
               </thead>
               <tbody>`;
@@ -760,38 +828,44 @@
         const relevos  = b.relevos || [];
         const corregir = esAdmin && b.estado === 'trabajando'
           ? `<div class="acciones-adm">
-             <button class="btn-corregir" onclick="abrirCorreccion('${fecha}', ${b.bus_id})">
+             <button class="btn-corregir" title="Corregir registradora" aria-label="Corregir registradora" onclick="abrirCorreccion('${fecha}', ${b.bus_id})">
                <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-               Corregir REG</button>
-             ${b.conductor_id ? `<button class="btn-corregir" onclick="abrirRelevo('${fecha}', ${b.bus_id})">
-               ${relevos.length ? 'Editar relevo' : '+ Relevo'}</button>` : ''}
+               <span class="btn-txt">Corregir REG</span></button>
+             ${b.conductor_id ? `<button class="btn-corregir" title="${relevos.length ? 'Editar relevo de conductor' : 'Agregar relevo de conductor'}" aria-label="${relevos.length ? 'Editar relevo' : 'Agregar relevo'}" onclick="abrirRelevo('${fecha}', ${b.bus_id})">
+               <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/></svg>
+               <span class="btn-txt">${relevos.length ? 'Editar relevo' : '+ Relevo'}</span></button>` : ''}
              </div>` : '';
         const listaRelevo = relevos.length ? `<div class="rel-lista">${relevos.map(r =>
             `→ ${r.orden}. ${esc(r.conductor_nombre || 'Conductor ' + r.orden)} <small>desde ${fmtN(r.registradora)}</small>`).join('<br>')}</div>` : '';
         html += `
                 <tr id="fila-${fecha}-${b.bus_id}">
-                  <td data-label="Unidad">
+                  <td data-label="Unidad" class="col-unidad">
                     <div class="bus-num">${b.numero}</div>
                     <div class="bus-placa">${b.placa || '—'}</div>
+                    <span class="badge-grupo ${grupoCls} tipo-inline">${grupoLbl}</span>
                   </td>
-                  <td data-label="Tipo">
+                  <td data-label="Tipo" class="col-tipo">
                     <span class="badge-grupo ${grupoCls}">${grupoLbl}</span>
                   </td>
-                  <td data-label="Conductor">
+                  <td data-label="Conductor" class="col-conductor">
                     ${b.conductor_nombre
                       ? `<span class="conductor-nombre">${relevos.length ? '1. ' : ''}${b.conductor_nombre}</span>${relevos.length ? `<span class="tag-relevo">${relevos.length + 1} conductores</span>` : ''}${listaRelevo}`
                       : `<span class="conductor-vacio">Sin asignar</span>`}
                   </td>
-                  <td data-label="Ruta">
+                  <td data-label="Ruta" class="col-ruta">
                     ${b.ruta_nombre
                       ? `<span class="ruta-nombre">${b.ruta_nombre}</span>`
                       : `<span class="ruta-vacia">Sin ruta</span>`}
                   </td>
-                  <td data-label="REG Ini" class="viajes-cell">${regIni}</td>
-                  <td data-label="REG Fin" class="viajes-cell">${regFin}</td>
-                  <td data-label="Pax"     class="viajes-cell">${pax}</td>
-                  <td data-label="Estado">${estadoBadge(b.estado)}</td>
-                  <td data-label="Viajes" class="viajes-cell">${viajes}</td>
+                  <td data-label="Registradora" class="viajes-cell col-regini">
+                    ${regIni}
+                    <div class="compacto">&rarr; ${regFin}</div>
+                    <div class="compacto">${pax} pax &middot; ${viajes} viajes</div>
+                  </td>
+                  <td data-label="REG Fin" class="viajes-cell col-regfin">${regFin}</td>
+                  <td data-label="Pax"     class="viajes-cell col-pax">${pax}</td>
+                  <td data-label="Estado"  class="col-estado">${estadoBadge(b.estado)}</td>
+                  <td data-label="Viajes"  class="viajes-cell col-viajes">${viajes}</td>
                   ${esAdmin ? `<td class="col-corregir">${corregir}</td>` : ''}
                 </tr>`;
       }

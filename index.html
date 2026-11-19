@@ -31,6 +31,7 @@
     :root {
       --bg-dark:    #0a0a0c;
       --sidebar-w:  230px;
+      --sidebar-mini: 64px;
       --sidebar-bg: #0f0f11;
       --border-d:   #1e1e22;
       --card-d:     #141416;
@@ -315,6 +316,7 @@
       display: none;
       height: 100vh; width: 100%;
       flex-direction: row;
+      position: relative;
       opacity: 0;
       transition: opacity .35s ease;
     }
@@ -336,12 +338,26 @@
     }
 
     /* Logo */
+    .sb-top {
+      display: flex; align-items: center;
+      border-bottom: 1px solid var(--border-d);
+      padding-right: 8px;
+    }
     .sb-logo {
       display: flex; align-items: center; gap: 10px;
-      padding: 20px 16px 18px;
-      border-bottom: 1px solid var(--border-d);
+      padding: 20px 10px 18px 16px;
       text-decoration: none;
+      flex: 1; min-width: 0;
     }
+
+    /* Botón para plegar el menú a solo íconos */
+    .sb-collapse {
+      background: none; border: 1px solid var(--border-d); color: #8a8a94;
+      width: 28px; height: 28px; border-radius: 8px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; transition: color .15s, border-color .15s, background .15s;
+    }
+    .sb-collapse:hover { color: #fff; border-color: #3a3a44; background: #1a1a1e; }
 
     .sb-logo-box {
       width: 42px; height: 42px; background: #fff;
@@ -667,6 +683,59 @@
     .hidden { display: none !important; }
 
     /* ═══════════════════════════════════════════════
+       ░░  MENÚ PLEGADO (solo íconos)  ░░
+       Gana ~165px de ancho para la vista. Al pasar el mouse por encima se
+       abre sobre el contenido (sin moverlo) para poder navegar.
+    ═══════════════════════════════════════════════ */
+    @media (min-width: 769px) {
+      #sidebar { transition: width .18s ease; }
+
+      #appShell.sb-collapsed #sidebar {
+        position: absolute; top: 0; left: 0; bottom: 0;
+        width: var(--sidebar-mini);
+        overflow: hidden;
+        z-index: 60;
+      }
+      #appShell.sb-collapsed #mainContent { margin-left: var(--sidebar-mini); }
+
+      /* Plegado y sin mouse encima: solo los íconos */
+      #appShell.sb-collapsed #sidebar:not(:hover) .sb-logo-text,
+      #appShell.sb-collapsed #sidebar:not(:hover) .sb-section,
+      #appShell.sb-collapsed #sidebar:not(:hover) .sb-chevron,
+      #appShell.sb-collapsed #sidebar:not(:hover) .sb-access,
+      #appShell.sb-collapsed #sidebar:not(:hover) .sb-collapse,
+      #appShell.sb-collapsed #sidebar:not(:hover) .sb-divider,
+      #appShell.sb-collapsed #sidebar:not(:hover) .sb-uname,
+      #appShell.sb-collapsed #sidebar:not(:hover) .sb-urole,
+      #appShell.sb-collapsed #sidebar:not(:hover) .sb-logout { display: none; }
+
+      /* El texto de los enlaces va suelto dentro del botón: se apaga con font-size */
+      #appShell.sb-collapsed #sidebar:not(:hover) .sb-link,
+      #appShell.sb-collapsed #sidebar:not(:hover) .sb-group-toggle {
+        font-size: 0; justify-content: center; padding: 10px 0; gap: 0;
+      }
+      #appShell.sb-collapsed #sidebar:not(:hover) .sb-submenu { display: none; }
+      #appShell.sb-collapsed #sidebar:not(:hover) .sb-nav { padding: 6px 8px; }
+      #appShell.sb-collapsed #sidebar:not(:hover) .sb-logo { padding: 14px 0; justify-content: center; }
+      #appShell.sb-collapsed #sidebar:not(:hover) .sb-top { padding-right: 0; }
+      #appShell.sb-collapsed #sidebar:not(:hover) .sb-logo-box { width: 34px; height: 34px; }
+      #appShell.sb-collapsed #sidebar:not(:hover) .sb-user { justify-content: center; padding: 12px 0; }
+      #appShell.sb-collapsed #sidebar:not(:hover) .sb-user > div { display: none; }
+
+      /* Con el mouse encima vuelve a su ancho completo, montado sobre la vista */
+      #appShell.sb-collapsed #sidebar:hover {
+        width: var(--sidebar-w);
+        overflow-y: auto;
+        box-shadow: 6px 0 28px rgba(0,0,0,.45);
+      }
+
+      /* El botón apunta al otro lado cuando está plegado */
+      #appShell.sb-collapsed .sb-collapse svg { transform: rotate(180deg); }
+
+      #appShell.sb-collapsed #toast { left: calc(var(--sidebar-mini) + 20px); }
+    }
+
+    /* ═══════════════════════════════════════════════
        ░░  RESPONSIVE — MOBILE  ░░
     ═══════════════════════════════════════════════ */
 
@@ -721,6 +790,11 @@
 
       /* Botón hamburguesa visible */
       #menuToggle { display: flex; }
+
+      /* En móvil no existe el modo plegado */
+      #appShell.sb-collapsed #sidebar { width: var(--sidebar-w); }
+      #appShell.sb-collapsed #mainContent { margin-left: 0; }
+      .sb-collapse { display: none; }
 
       /* El contenido principal ocupa todo el ancho */
       #appShell { flex-direction: column; }
@@ -905,6 +979,9 @@
       background: var(--yellow); color: #1f1407; font-weight: 700; font-size: 14px;
     }
   </style>
+  <!-- Ajustes de pantalla comunes (scroll de tablas y densidad) -->
+  <link rel="stylesheet" href="bc-pantalla.css" />
+  <script defer src="bc-pantalla.js"></script>
 </head>
 <body>
 
@@ -1092,15 +1169,24 @@
   <!-- ── SIDEBAR ── -->
   <aside id="sidebar">
 
-    <a class="sb-logo" href="#">
-      <div class="sb-logo-box">
-        <img src="logo-milagrosa.png" alt="Flota La Milagrosa" />
-      </div>
-      <div class="sb-logo-text">
-        <strong>La Milagrosa</strong>
-        <span>Sistema · Flota</span>
-      </div>
-    </a>
+    <div class="sb-top">
+      <a class="sb-logo" href="#">
+        <div class="sb-logo-box">
+          <img src="logo-milagrosa.png" alt="Flota La Milagrosa" />
+        </div>
+        <div class="sb-logo-text">
+          <strong>La Milagrosa</strong>
+          <span>Sistema · Flota</span>
+        </div>
+      </a>
+      <button id="sbCollapse" class="sb-collapse" onclick="toggleCollapse()"
+              title="Plegar menú" aria-label="Plegar menú">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2"
+             stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+          <polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/>
+        </svg>
+      </button>
+    </div>
 
     <div class="sb-section">Vistas principales</div>
 
@@ -2454,6 +2540,44 @@
       }
     });
   });
+
+  /* ═══════════════════════════════════════
+     MENÚ PLEGADO (solo íconos)
+     La preferencia queda en localStorage; si el usuario nunca la ha tocado,
+     el menú se pliega solo en pantallas de menos de 1280px.
+  ═══════════════════════════════════════ */
+  const SB_PREF = 'sidebarPlegado';
+
+  function aplicarPlegado(plegado) {
+    const shell = document.getElementById('appShell');
+    if (!shell) return;
+    shell.classList.toggle('sb-collapsed', plegado);
+    const btn = document.getElementById('sbCollapse');
+    if (btn) {
+      btn.title = plegado ? 'Desplegar menú' : 'Plegar menú';
+      btn.setAttribute('aria-label', btn.title);
+    }
+  }
+
+  function toggleCollapse() {
+    const plegado = !document.getElementById('appShell').classList.contains('sb-collapsed');
+    try { localStorage.setItem(SB_PREF, plegado ? '1' : '0'); } catch (_) { /* modo privado */ }
+    aplicarPlegado(plegado);
+  }
+
+  function plegadoAutomatico() {
+    let pref = null;
+    try { pref = localStorage.getItem(SB_PREF); } catch (_) { /* modo privado */ }
+    if (pref === null) aplicarPlegado(window.innerWidth < 1280);
+    else aplicarPlegado(pref === '1');
+  }
+
+  let tmrPlegado;
+  window.addEventListener('resize', () => {
+    clearTimeout(tmrPlegado);
+    tmrPlegado = setTimeout(plegadoAutomatico, 150);
+  });
+  plegadoAutomatico();
 
   /* ═══════════════════════════════════════
      SIDEBAR MÓVIL — toggle hamburguesa

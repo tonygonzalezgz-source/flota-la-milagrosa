@@ -1,0 +1,40 @@
+/* ════════════════════════════════════════════════════════════════
+   BusControl — ajustes de pantalla comunes a todas las vistas
+   Se enlaza DESPUÉS del <style> de cada página para poder ganarle
+   en los empates de especificidad. Solo presentación: ninguna regla
+   cambia datos ni comportamiento.
+   ════════════════════════════════════════════════════════════════ */
+
+/* Contenedor que bc-pantalla.js le pone a las tablas que no caben:
+   la tabla no se corta, se desplaza a los lados. */
+.bc-scroll-x {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+.bc-scroll-x > table { margin: 0; }
+.bc-scroll-x::-webkit-scrollbar { height: 9px; }
+.bc-scroll-x::-webkit-scrollbar-thumb { background: rgba(130, 130, 150, .45); border-radius: 6px; }
+.bc-scroll-x::-webkit-scrollbar-track { background: transparent; }
+
+/* ── Pantallas de menos de 1400px de ancho útil (resoluciones bajas,
+      escala de Windows al 125/150 % o zoom del navegador): misma
+      información, con celdas más compactas. En móvil no aplica: cada
+      vista ya tiene su propio modo de tarjetas. ── */
+@media (min-width: 721px) and (max-width: 1400px) {
+  table th, table td {
+    padding-top: 7px; padding-bottom: 7px;
+    padding-left: 10px; padding-right: 10px;
+    font-size: 12px;
+  }
+}
+
+@media (min-width: 721px) and (max-width: 1200px) {
+  table th, table td {
+    padding-left: 8px; padding-right: 8px;
+    font-size: 11.5px;
+  }
+}
