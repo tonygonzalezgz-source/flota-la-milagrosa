@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Estilo "Cabina Neón" (propuesta A elegida para el login y la apertura):
 /// azul casi negro con cuadrícula, cian y violeta luminosos.

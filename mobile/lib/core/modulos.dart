@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Catálogo de módulos. La `clave` es la misma vista que usa el backend en
 /// `ROLE_VIEWS` (api/app.py): el menú de cada usuario se arma con su

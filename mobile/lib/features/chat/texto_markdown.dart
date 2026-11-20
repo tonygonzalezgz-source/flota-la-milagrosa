@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Markdown mínimo del asistente, igual al de la web: párrafos, viñetas,
 /// listas numeradas, títulos (como negrita), **negrita**, *cursiva* y `código`.

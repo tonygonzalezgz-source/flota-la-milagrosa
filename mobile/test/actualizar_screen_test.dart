@@ -1,6 +1,6 @@
 import 'package:buscontrol/features/auth/actualizar_screen.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// El aviso de "actualiza la app" no puede nombrar la Play Store en iPhone:

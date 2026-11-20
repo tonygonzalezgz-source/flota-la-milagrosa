@@ -40,7 +40,7 @@ test/                    pruebas unitarias
 
 ## Requisitos
 
-- Flutter 3.47 o superior (`flutter --version`)
+- Flutter 3.50 o superior (`flutter --version`); la versión fija de CI es 3.50.1
 - Android: Android Studio con un emulador o un celular con depuración USB
 - iOS: una Mac con Xcode (o compilar en la nube, ver más abajo)
 
