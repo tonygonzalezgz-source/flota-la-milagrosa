@@ -32,6 +32,10 @@ class _TratamientoScreenState extends ConsumerState<TratamientoScreen> {
   @override
   Widget build(BuildContext context) {
     const h = TextStyle(fontWeight: FontWeight.w700, fontSize: 15);
+    // Responsable del tratamiento: la empresa que manda el servidor. Si por lo
+    // que sea no llega, se usa un texto genérico en vez de nombrar a nadie.
+    final empresa = ref.watch(sessionProvider).value?.empresa ?? '';
+    final responsable = empresa.isEmpty ? 'la empresa de transporte para la que trabaja' : empresa;
     Widget item(String t) => Padding(
           padding: const EdgeInsets.only(left: 8, bottom: 4),
           child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -50,9 +54,9 @@ class _TratamientoScreenState extends ConsumerState<TratamientoScreen> {
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
               const Text('Ley 1581 de 2012 · Habeas Data'),
               const SizedBox(height: 14),
-              const Text(
+              Text(
                   'En cumplimiento de la Ley Estatutaria 1581 de 2012 y el Decreto 1377 de 2013 '
-                  'de la República de Colombia, Flota La Milagrosa, responsable del tratamiento, '
+                  'de la República de Colombia, $responsable, responsable del tratamiento, '
                   'le informa que los datos personales que suministra a la plataforma BusControl '
                   'serán tratados con las finalidades, alcances y garantías que se describen a continuación.'),
               const SizedBox(height: 14),
@@ -78,16 +82,16 @@ class _TratamientoScreenState extends ConsumerState<TratamientoScreen> {
                   'un deber legal o contractual que lo impida.'),
               const SizedBox(height: 10),
               const Text('Canales de atención', style: h),
-              const Text(
+              Text(
                   'Para consultas, reclamos o para ejercer sus derechos como titular, puede contactarnos '
-                  'a través de los canales oficiales de Flota La Milagrosa. Su solicitud será atendida '
+                  'a través de los canales oficiales de $responsable. Su solicitud será atendida '
                   'en los términos de la Ley 1581 de 2012.'),
               const SizedBox(height: 14),
-              const Text(
+              Text(
                   'Al aceptar, usted declara que ha leído y comprendido este aviso y autoriza expresamente '
-                  'a Flota La Milagrosa para el tratamiento de sus datos personales conforme a lo aquí '
+                  'a $responsable para el tratamiento de sus datos personales conforme a lo aquí '
                   'descrito. Su autorización queda registrada con fecha y hora en el sistema.',
-                  style: TextStyle(fontStyle: FontStyle.italic)),
+                  style: const TextStyle(fontStyle: FontStyle.italic)),
               Align(
                 alignment: Alignment.centerLeft,
                 child: TextButton.icon(

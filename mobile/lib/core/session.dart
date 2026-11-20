@@ -22,6 +22,11 @@ class Usuario {
   final List<int> busIds;
   final bool tratamientoAceptado;
 
+  /// Empresa de transporte dueña de los datos, como la manda el servidor.
+  /// Es la responsable del tratamiento en el aviso de la Ley 1581; BusControl
+  /// es multicliente, así que el nombre nunca va escrito en la app.
+  final String empresa;
+
   const Usuario({
     required this.id,
     required this.username,
@@ -33,6 +38,7 @@ class Usuario {
     this.soloLectura = const [],
     required this.busIds,
     required this.tratamientoAceptado,
+    this.empresa = '',
   });
 
   bool get esAdmin => rol == 'Administrador';
@@ -55,6 +61,7 @@ class Usuario {
         soloLectura: ((j['soloLectura'] ?? const []) as List).cast<String>(),
         busIds: ((j['bus_ids'] ?? const []) as List).cast<int>(),
         tratamientoAceptado: j['tratamiento_aceptado'] == true,
+        empresa: ((j['empresa'] ?? '') as String).trim(),
       );
 
   Map<String, dynamic> toJson() => {
@@ -68,6 +75,7 @@ class Usuario {
         'soloLectura': soloLectura,
         'bus_ids': busIds,
         'tratamiento_aceptado': tratamientoAceptado,
+        'empresa': empresa,
       };
 
   Usuario copyWith({bool? tratamientoAceptado, List<String>? allowedViews, List<String>? soloLectura}) =>
@@ -82,6 +90,7 @@ class Usuario {
         soloLectura: soloLectura ?? this.soloLectura,
         busIds: busIds,
         tratamientoAceptado: tratamientoAceptado ?? this.tratamientoAceptado,
+        empresa: empresa,
       );
 }
 

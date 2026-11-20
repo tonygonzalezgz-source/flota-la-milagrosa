@@ -1466,6 +1466,25 @@ def _anotar_sesion(db, accion, username, user, descripcion):
         print(f"[login] no se pudo anotar en el historial: {e}")
 
 
+def _empresa_responsable(db):
+    """Nombre de la empresa de transporte dueña de los datos (tabla `empresas`),
+    que el aviso de la Ley 1581 muestra como responsable del tratamiento.
+    BusControl es multicliente: el nombre nunca va escrito en la app ni en la
+    web. Cadena vacía si la tabla todavía no existe; el aviso usa entonces un
+    texto genérico."""
+    try:
+        fila = db.execute("SELECT nombre FROM empresas ORDER BY id LIMIT 1").fetchone()
+        return (fila["nombre"] or "").strip() if fila else ""
+    except Exception:
+        # En Postgres una consulta fallida aborta la transacción: hay que
+        # limpiarla para que siga sirviendo la petición.
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return ""
+
+
 @app.route("/api/login", methods=["POST"])
 def login():
     ip = request.remote_addr or "unknown"
@@ -1550,6 +1569,7 @@ def login():
         ).fetchall()
         bus_ids = [r["bus_id"] for r in rows]
     allowed_views, solo_lectura = _vistas_de_cuenta(db, user["id"], rol)
+    empresa = _empresa_responsable(db)
 
     db.close()
 
@@ -1572,6 +1592,7 @@ def login():
         "color":        user["color"],
         "allowedViews": allowed_views,
         "soloLectura":  solo_lectura,
+        "empresa":      empresa,
         "bus_ids":      bus_ids,
         "tratamiento_aceptado": tratamiento_aceptado,
     })
@@ -1651,6 +1672,7 @@ def get_current_user():
     rol = user["rol"]
     try:
         allowed_views, solo_lectura = _vistas_de_cuenta(db, user["id"], rol)
+        empresa = _empresa_responsable(db)
     finally:
         db.close()
 
@@ -1668,6 +1690,7 @@ def get_current_user():
         "color": user["color"],
         "allowedViews": allowed_views,
         "soloLectura": solo_lectura,
+        "empresa": empresa,
         "tratamiento_aceptado": tratamiento_aceptado,
         # Feature flag del chatbot (Fase 1): off salvo que FEATURE_CHATBOT sea true.
         "chatbot_enabled": _feature_chatbot_enabled(),
