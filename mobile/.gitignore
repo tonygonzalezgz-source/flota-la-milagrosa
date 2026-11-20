@@ -31,6 +31,9 @@ migrate_working_dir/
 .pub-cache/
 .pub/
 /build/
+# En el Mac del usuario, build/ es un enlace a una carpeta fuera de iCloud
+# (ver CLAUDE.md: codesign y com.apple.FinderInfo), y así no se rastrea.
+/build
 /coverage/
 
 # Symbolication related

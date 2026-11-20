@@ -74,5 +74,9 @@
 	<string>BusControl accede a tus fotos para adjuntar evidencias y comprobantes.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>BusControl registra tu ubicación al marcar llegada y salida del puesto de trabajo.</string>
+	<!-- La app solo usa HTTPS estándar: queda exenta del cuestionario de
+	     exportación de Apple y no lo pregunta en cada subida. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>

@@ -102,6 +102,19 @@ misma API; los permisos salen de `ROLE_VIEWS` → `allowedViews`.
   `APP_VERSION_MINIMA` de Vercel; la app conoce su número por `APP_BUILD`) y
   cuenta demo para los revisores. Falta: restringir la clave de Maps por paquete
   + SHA-1 de la firma de Play.
+- **App Store (iOS):** el proyecto `mobile/ios` ya está listo — bundle id
+  `net.buscontrol.app`, íconos, pantalla de carga, permisos en español,
+  manifiesto de privacidad (`Runner/PrivacyInfo.xcprivacy`), exención del
+  cuestionario de exportación (`ITSAppUsesNonExemptEncryption`), la tienda y el
+  aviso de actualizar según la plataforma (`AppConfig.nombreTienda`/`urlTienda`,
+  con `--dart-define=APP_STORE_ID`) y versión mínima aparte para iPhone
+  (`APP_VERSION_MINIMA_IOS` en Vercel; la app manda `?plataforma=ios`).
+  Falta, todo fuera del código: cuenta en el Apple Developer Program (99 USD/año,
+  D-U-N-S si va como empresa), ficha en App Store Connect (capturas, URL de
+  soporte —no existe aún—, etiquetas de privacidad), clave de Maps para iOS
+  restringida por bundle id y las notas de revisión con la cuenta demo.
+  El detalle está en `mobile/README.md`; el riesgo conocido es la guía 4.2 de
+  Apple (apps de una sola empresa).
 - **Cuenta demo** (revisores de Google): variables `DEMO_USUARIO` y `DEMO_CLAVE`
   en Vercel. Su token lleva `demo: true` y `get_db()` le da una base SQLite
   aparte en el directorio temporal, armada con `api/demo_semilla.py` (empresa,
@@ -139,3 +152,8 @@ misma API; los permisos salen de `ROLE_VIEWS` → `allowedViews`.
 - `package:intl` también exporta `TextDirection`: importar `show DateFormat`
   donde se dibuja texto con `TextPainter`.
 - No correr `dart format` sobre todo `lib/` (reformatea archivos ajenos al cambio).
+- `flutter build ios/ipa` falla con "resource fork, Finder information, or
+  similar detritus not allowed" porque el repo vive en `~/Documents` (iCloud le
+  pone `com.apple.FinderInfo` a las carpetas y `codesign` lo rechaza). En el Mac
+  del usuario `mobile/build` es un enlace a `~/Library/Caches/buscontrol-ios-build`
+  y así compila; desde Xcode (Archive) nunca falla, porque usa DerivedData.

@@ -1750,13 +1750,20 @@ def _mensaje_error_ia(e):
 def app_version():
     """Público (la app lo consulta antes del login). `minima` es el número de
     compilación más antiguo que puede seguir usándose: si el celular tiene uno
-    menor, la app pide actualizar desde la Play Store. Se fija con la variable
-    APP_VERSION_MINIMA en Vercel; sin ella (0) no se obliga a nadie."""
+    menor, la app pide actualizar desde su tienda. Se fija con la variable
+    APP_VERSION_MINIMA en Vercel; sin ella (0) no se obliga a nadie.
+
+    La app manda `?plataforma=ios` o `android`, porque Google Play y la App
+    Store numeran las compilaciones por su lado: en iPhone manda
+    APP_VERSION_MINIMA_IOS y, si no existe, no se obliga a nadie (0), para no
+    bloquear la app con el mínimo de Android."""
+    plataforma = (request.args.get("plataforma") or "").strip().lower()
+    variable = "APP_VERSION_MINIMA_IOS" if plataforma == "ios" else "APP_VERSION_MINIMA"
     try:
-        minima = int(os.environ.get("APP_VERSION_MINIMA", "0") or 0)
+        minima = int(os.environ.get(variable, "0") or 0)
     except ValueError:
         minima = 0
-    return jsonify({"minima": minima})
+    return jsonify({"minima": minima, "plataforma": plataforma or "android"})
 
 
 # ──────────────────────────────────────────
