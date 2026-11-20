@@ -27,6 +27,14 @@ misma API; los permisos salen de `ROLE_VIEWS` → `allowedViews`.
 
 ## Decisiones de la app móvil
 
+- **Versiones (20/11/2026):** Flutter 3.50.1 / Dart 3.14.0, fijado igual en el
+  Mac y en `.github/workflows/mobile.yml`. Flutter 3.50 dejó obsoletas las
+  librerías de diseño del SDK: la app usa `package:material_ui/material_ui.dart`
+  (paquete `material_ui`), no `package:flutter/material.dart`, y los delegados
+  de idioma son `GlobalMaterialLocalizations.delegates` de ese mismo paquete.
+  Al crear una pantalla nueva, importar material_ui; si no, `flutter analyze`
+  falla por el aviso de obsolescencia. Para migrar código viejo pegado de otro
+  lado: `dart fix --apply --code=migrate_design_widgets`.
 - **Diseño:** login y apertura con estilo "Cabina Neón" (`widgets/marca.dart`);
   Mis Buses, Detalle del bus y Reportes con "Aurora Clara" (`widgets/aurora.dart`,
   paleta en `core/theme.dart`, que aplica a toda la app). Fuentes: Sora/DM Sans
@@ -152,6 +160,15 @@ misma API; los permisos salen de `ROLE_VIEWS` → `allowedViews`.
 - `package:intl` también exporta `TextDirection`: importar `show DateFormat`
   donde se dibuja texto con `TextPainter`.
 - No correr `dart format` sobre todo `lib/` (reformatea archivos ajenos al cambio).
+- El Android Lint que empaquetan AGP 9.3.0 y 9.3.1 llama a `List.removeLast()`,
+  una API de JDK 21, y el workflow compila con JDK 17: el APK se cae con
+  `NoSuchMethodError: JavaDocParser.parseDataItem` en
+  `lintVitalAnalyzeRelease`, y el error aparece en un plugin ajeno (mapas), no
+  en nuestro código. Google lo arregló en AGP 9.3.2; el proyecto usa 9.3.3.
+  Flutter 3.50.1 da por bueno el JDK 17, así que no hace falta mover el JDK.
+- Flutter 3.50 subió los mínimos de Android a error duro: AGP < 9.1.1 y Kotlin
+  < 2.4.10 no compilan (está en `DependencyVersionChecker.kt` del SDK, junto
+  con los umbrales de aviso: AGP 9.3.1, Kotlin 2.4.20, Gradle 9.5.0).
 - `flutter build ios/ipa` falla con "resource fork, Finder information, or
   similar detritus not allowed" porque el repo vive en `~/Documents` (iCloud le
   pone `com.apple.FinderInfo` a las carpetas y `codesign` lo rechaza). En el Mac
