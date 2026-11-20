@@ -10,6 +10,10 @@ Siete capturas en dos tamaños:
   la ficha; las de 6,9" las rechaza ahí por dimensiones. Salen de las otras con
   `sips -z 2622 1206`.
 
+- `capturas-ipad/` — **2064 × 2752 px**, iPad de 13" (iPad Pro 13"). Apple las
+  exige mientras el `Info.plist` declare compatibilidad con iPad, y las usa
+  para todos los tamaños de iPad. Se tomaron en el simulador del iPad Pro 13".
+
 Se pueden subir hasta 10 por tamaño.
 
 | Archivo | Pantalla | Para qué sirve |
