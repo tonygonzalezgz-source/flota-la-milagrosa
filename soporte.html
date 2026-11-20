@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Soporte — BusControl</title>
+  <meta name="description" content="Ayuda y contacto de soporte de BusControl (web y app móvil): cómo entrar, recuperar la contraseña, reportar un problema y eliminar tu cuenta.">
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <style>
+    :root {
+      --bg:#f4f4f6; --hoja:#fff; --txt:#1a1a24; --txt2:#55556a; --borde:#e5e5eb;
+      --acento:#1e3a6e; --suave:#eef2fa;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg:#0b0f19; --hoja:#121828; --txt:#e8eaf2; --txt2:#a3a9bd; --borde:#26304a;
+        --acento:#8fb3ff; --suave:#1a2238;
+      }
+    }
+    * { box-sizing:border-box; }
+    body {
+      margin:0; background:var(--bg); color:var(--txt);
+      font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+      font-size:16px; line-height:1.6;
+    }
+    main { max-width:760px; margin:0 auto; padding:32px 16px 64px; }
+    .hoja { background:var(--hoja); border:1px solid var(--borde); border-radius:14px; padding:28px 24px; }
+    header { display:flex; align-items:center; gap:14px; margin-bottom:8px; }
+    header img { width:52px; height:52px; border-radius:12px; background:#fff; }
+    h1 { font-size:26px; line-height:1.2; margin:0; }
+    .vigencia { color:var(--txt2); font-size:14px; margin:4px 0 20px; }
+    h2 { font-size:18px; margin:28px 0 8px; color:var(--acento); }
+    h3 { font-size:16px; margin:18px 0 4px; }
+    p, li { color:var(--txt); }
+    ul { padding-left:22px; margin:8px 0; }
+    li { margin:4px 0; }
+    .nota { background:var(--suave); border-radius:10px; padding:12px 14px; font-size:15px; }
+    .contacto { background:var(--suave); border-radius:10px; padding:16px 18px; margin:14px 0; }
+    .contacto a { font-size:18px; font-weight:600; }
+    a { color:var(--acento); }
+    footer { color:var(--txt2); font-size:13px; text-align:center; margin-top:20px; }
+  </style>
+</head>
+<body>
+<main>
+  <div class="hoja">
+    <header>
+      <img src="/favicon.png" alt="">
+      <div>
+        <h1>Soporte</h1>
+        <div class="vigencia">BusControl · web (buscontrol.net) y app móvil</div>
+      </div>
+    </header>
+
+    <p>BusControl es una plataforma para que las empresas de transporte público gestionen su flota: despacho,
+      alistamiento, mantenimiento, recaudo, gastos y monitoreo de los buses. En esta página encuentras cómo
+      pedir ayuda y las respuestas a las dudas más comunes.</p>
+
+    <h2>Contacto</h2>
+    <div class="contacto">
+      <p style="margin:0 0 4px">Escríbenos a:</p>
+      <a href="mailto:buscontrol.net@gmail.com">buscontrol.net@gmail.com</a>
+      <p style="margin:8px 0 0; color:var(--txt2); font-size:15px">
+        Atendemos de lunes a viernes, de 8:00 a.m. a 6:00 p.m. (hora de Colombia, UTC−5).
+        Respondemos dentro de los dos días hábiles siguientes.</p>
+    </div>
+    <p>Para que podamos ayudarte más rápido, cuéntanos tu <strong>nombre</strong>, el <strong>usuario</strong> con
+      el que entras, la <strong>empresa</strong> en la que trabajas y qué estabas haciendo cuando apareció el
+      problema. Si puedes, adjunta una captura de pantalla.</p>
+
+    <h2>Preguntas frecuentes</h2>
+
+    <h3>No puedo entrar / no tengo usuario</h3>
+    <p>Las cuentas de BusControl no se crean desde la app: las crea el administrador de la empresa de transporte
+      para la que trabajas. Si no tienes usuario, o el tuyo dejó de funcionar, pídeselo a esa empresa.</p>
+
+    <h3>Olvidé mi contraseña</h3>
+    <p>El administrador de tu empresa puede asignarte una nueva desde el módulo de usuarios. Por seguridad, la
+      contraseña se guarda cifrada y nadie puede verla, ni siquiera nosotros.</p>
+
+    <h3>La cuenta se bloqueó</h3>
+    <p>Después de varios intentos fallidos la cuenta se bloquea un rato por seguridad. Espera los minutos que
+      indica el mensaje y vuelve a intentarlo; si sigue bloqueada, escríbenos.</p>
+
+    <h3>La app me pide actualizar</h3>
+    <p>Quiere decir que la versión instalada ya no es compatible con el servidor. Actualízala desde la tienda de
+      tu celular (App Store o Google Play) y vuelve a entrar.</p>
+
+    <h3>No veo algún módulo</h3>
+    <p>Cada usuario ve solo las pantallas de su rol y de los permisos que le dio su empresa. Si necesitas una
+      pantalla que no te aparece, pídele el permiso al administrador de tu empresa.</p>
+
+    <h3>El mapa no carga o mi bus no aparece</h3>
+    <p>El mapa en vivo muestra los buses despachados del día y necesita conexión a internet. Si el bus no aparece,
+      revisa que tenga despacho del día; si persiste, escríbenos con el número del bus y la hora.</p>
+
+    <h3>El asistente respondió algo incorrecto</h3>
+    <p>En la app, el asistente tiene un botón <strong>Reportar</strong> debajo de cada respuesta. Lo revisamos
+      nosotros; úsalo sin miedo, nos ayuda a mejorarlo.</p>
+
+    <h2>Eliminar tu cuenta y tus datos</h2>
+    <p>Puedes pedir que se elimine tu cuenta y los datos personales asociados escribiendo a la empresa de
+      transporte con la que trabajas o a
+      <a href="mailto:buscontrol.net@gmail.com">buscontrol.net@gmail.com</a>, indicando tu nombre y tu usuario.
+      Algunos registros de operación deben conservarse por obligaciones legales, contables y de transporte; eso
+      está explicado en la <a href="/privacidad">política de privacidad</a>.</p>
+
+    <h2>Privacidad</h2>
+    <p class="nota">Qué datos tratamos, para qué y cuáles son tus derechos está en la
+      <a href="/privacidad">política de privacidad</a>, conforme a la Ley 1581 de 2012 de Colombia.</p>
+  </div>
+  <footer>BusControl · buscontrol.net</footer>
+</main>
+</body>
+</html>

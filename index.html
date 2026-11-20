@@ -1102,7 +1102,7 @@
     <div class="pv-body">
       <p>En cumplimiento de la <strong>Ley Estatutaria 1581 de 2012</strong> y el
       <strong>Decreto 1377 de 2013</strong> de la República de Colombia,
-      <strong>Flota La Milagrosa</strong>, responsable del tratamiento, le informa
+      <strong class="pv-empresa">la empresa de transporte para la que trabaja</strong>, responsable del tratamiento, le informa
       que los datos personales que suministra a la plataforma <strong>BusControl</strong>
       serán tratados con las finalidades, alcances y garantías que se describen a
       continuación.</p>
@@ -1133,12 +1133,12 @@
 
       <h4>Canales de atención</h4>
       <p>Para consultas, reclamos o para ejercer sus derechos como titular, puede
-      contactarnos a través de los canales oficiales de <strong>Flota La Milagrosa</strong>.
+      contactarnos a través de los canales oficiales de <strong class="pv-empresa">la empresa de transporte para la que trabaja</strong>.
       Su solicitud será atendida en los términos de la Ley 1581 de 2012.</p>
 
       <p style="color: var(--txt-muted); font-size: 12px; margin-top: 14px;">
         Al aceptar, usted declara que ha leído y comprendido este aviso y autoriza
-        expresamente a Flota La Milagrosa para el tratamiento de sus datos
+        expresamente a <span class="pv-empresa">la empresa de transporte para la que trabaja</span> para el tratamiento de sus datos
         personales conforme a lo aquí descrito. Su autorización queda registrada
         con fecha y hora en el sistema.
       </p>
@@ -2109,6 +2109,7 @@
         color:        me.color,
         allowedViews: me.allowedViews,
         soloLectura:  me.soloLectura || [],
+        empresa:      me.empresa || currentUser.empresa || '',
         nombre:       me.nombre,
         rol:          me.rol,
         iniciales:    me.iniciales,
@@ -2196,6 +2197,9 @@
         color:        data.color,
         allowedViews: data.allowedViews,
         soloLectura:  data.soloLectura || [],
+        // Empresa dueña de los datos: la manda el servidor (BusControl es
+        // multicliente), y es la responsable en el aviso de la Ley 1581.
+        empresa:      data.empresa || '',
         // campos en español que usan los dashboards internos
         nombre:       data.nombre,
         rol:          data.rol,
@@ -2379,6 +2383,12 @@
   function showPrivacyNotice() {
     const modal = document.getElementById('privacyModal');
     if (!modal) return;
+    // Responsable del tratamiento: la empresa que manda el servidor. Sin ella
+    // queda el texto genérico del HTML, sin nombrar a nadie.
+    const empresa = (currentUser && currentUser.empresa || '').trim();
+    if (empresa) {
+      modal.querySelectorAll('.pv-empresa').forEach(el => { el.textContent = empresa; });
+    }
     const chk   = document.getElementById('pvAccept');
     const btn   = document.getElementById('pvAcceptBtn');
     if (chk) chk.checked = false;
