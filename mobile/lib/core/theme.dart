@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Paleta "Aurora Clara" (propuesta C elegida para la app): azul noche en
 /// cabeceras, fondo gris azulado claro, tarjetas blancas y azul eléctrico.

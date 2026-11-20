@@ -37,6 +37,9 @@ dependencies:
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
   dio: ^5.11.1
+  # Material de Flutter como paquete aparte: desde Flutter 3.50 las librerias
+  # de diseno del SDK (package:flutter/material.dart) quedaron obsoletas.
+  material_ui: ^1.11.1
   flutter_riverpod: ^3.4.3
   go_router: ^18.0.2
   flutter_secure_storage: ^11.2.0
