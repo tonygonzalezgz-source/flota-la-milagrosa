@@ -25,8 +25,12 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      # Versión fija, la misma del Mac del equipo: con "channel: stable" cada
+      # Flutter nuevo puede romper la compilación sola (en nov/2026, el aviso
+      # de que package:flutter/material.dart quedó obsoleto tumbó el analyze).
       - uses: subosito/flutter-action@v2
         with:
+          flutter-version: 3.47.6
           channel: stable
           cache: true
 
