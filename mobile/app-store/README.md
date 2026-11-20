@@ -2,9 +2,15 @@
 
 ## Capturas (`capturas/`)
 
-Siete capturas de **1320 × 2868 px**, que es el tamaño de iPhone 6,9"
-(iPhone 17 Pro Max) y el único obligatorio hoy en App Store Connect: Apple
-las adapta sola a las pantallas más pequeñas. Se pueden subir hasta 10.
+Siete capturas en dos tamaños:
+
+- `capturas/` — **1320 × 2868 px**, iPhone 6,9" (iPhone 17 Pro Max).
+- `capturas-6-3/` — **1206 × 2622 px**, iPhone 6,3" (iPhone 16 Pro), que es el
+  tamaño que pide el espacio "iPhone con Dynamic Island (pantalla mediana)" de
+  la ficha; las de 6,9" las rechaza ahí por dimensiones. Salen de las otras con
+  `sips -z 2622 1206`.
+
+Se pueden subir hasta 10 por tamaño.
 
 | Archivo | Pantalla | Para qué sirve |
 |---|---|---|
